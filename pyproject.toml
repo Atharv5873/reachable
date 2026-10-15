@@ -11,6 +11,7 @@ dependencies = [
     "reachable-api",
     "reachable-graph",
     "reachable-mcp",
+    "reachable-agents",
 ]
 
 # uv workspace: each folder below is its own installable package, so the API
@@ -23,6 +24,7 @@ members = [
     "packages/orggen",
     "packages/graph",
     "apps/api",
+    "packages/agents",
     "apps/mcp",
 ]
 
@@ -33,6 +35,7 @@ reachable-orggen = { workspace = true }
 reachable-api = { workspace = true }
 reachable-graph = { workspace = true }
 reachable-mcp = { workspace = true }
+reachable-agents = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -63,4 +66,5 @@ known-first-party = [
     "reachable_graph",
     "reachable_api",
     "reachable_mcp",
+    "reachable_agents",
 ]

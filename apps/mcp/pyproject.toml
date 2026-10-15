@@ -6,7 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "reachable-core",
     "reachable-graph",
-    "mcp>=1.9",
+    "mcp>=2.3",  # MCPServer / mcp.Client are the 2.x API
     "uvicorn[standard]>=0.32",
 ]
 

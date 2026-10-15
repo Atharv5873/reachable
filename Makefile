@@ -8,7 +8,7 @@ INTEL   = $(PY) -m reachable_intel
 ORGGEN  = $(PY) -m reachable_orggen
 GRAPH   = $(PY) -m reachable_graph
 
-.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a
+.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage
 
 # Create .env from the example on first run (never overwrites an existing one).
 .env:
@@ -77,6 +77,14 @@ mcp-smoke: .env
 ## Gate A: no-LLM evaluation of the tools against the oracle labels.
 gate-a: .env
 	$(PY) evals/gate_a.py
+
+## Run the four agents on one scan; writes the run to the org graph and
+## runs/<run_id>.md + .json. Needs GEMINI_API_KEY and/or GROQ_API_KEY in .env,
+## or FAKE=1 for the deterministic stub model. AS_OF=YYYY-MM-DD overrides the clock.
+ORG  ?= org_a
+SCAN ?= v1
+triage: .env
+	$(PY) -m reachable_agents triage --org $(ORG) --scan $(SCAN) $(if $(FAKE),--fake) $(if $(AS_OF),--as-of $(AS_OF))
 
 logs:
 	docker compose logs -f --tail=100

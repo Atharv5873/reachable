@@ -20,6 +20,9 @@ data/orgs/*
 # data/threatintel/snapshot/ and IS tracked; the raw dumps are not.
 data/threatintel/raw/
 
+# Agent run dumps (the run itself lives in the org graph; `replay` re-renders it).
+runs/
+
 # Editors / OS
 .vscode/
 .idea/
