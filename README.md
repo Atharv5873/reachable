@@ -41,6 +41,8 @@ make seed                     # generate + load the 3 orgs, write labels, derive
 make test                     # unit + integration tests
 make gate-a                   # no-LLM evaluation of the graph tools -> evals/results/
 make mcp-smoke                # MCP server: list tools, call three
+make triage FAKE=1            # the four agents with a stub model (no keys, no network)
+make triage ORG=org_a SCAN=v1 # the four agents with real LLMs (GEMINI/GROQ keys in .env)
 ```
 
 Then open the FalkorDB Browser at <http://localhost:3001> and try the queries in
@@ -64,12 +66,14 @@ reachable/
   packages/orggen/     synthetic org generator, planters, networkx oracle, loaders
   packages/graph/      ATTACK_STEP derivation (derive.py), typed read-only tools (tools.py,
                        company_tools.py) and the agent memory repositories (memory.py)
+  packages/agents/     LiteLLM router, MCP -> LLM tools, LangGraph agents, CLI (S4)
   evals/               Gate A (no-LLM tool evaluation) + results/
   scripts/             mcp_smoke.py
   data/threatintel/    committed filtered snapshot + ATTRIBUTION.md
   data/orgs/           generated (gitignored except a tiny sample)
   tests/               pytest (unit + integration + property)
-  learning/            teaching notes (S01.md, S02.md, S03.md)
+  learning/            teaching notes (S01.md ... S04.md)
+  runs/                agent run dumps (gitignored; the run itself lives in the graph)
 ```
 
 ## How it fits together
@@ -111,6 +115,8 @@ reachable/
    | `decision_trail` | the ADRs that changed an asset (approver, date) + its live exposure |
    | `company_query` | fixed intents: who_owns / who_is_on_call / why_exposed / who_approved / fix_history |
    | `triage_memory` | live vs expired risk acceptances, past verdicts, patterns reaching the findings |
+   | `scan_findings` | the scan (version, time), crown jewels, open findings ranked by what they enable |
+   | `playbooks` | the versioned playbook in force per ATT&CK technique at `as_of` |
 
    A derivation query, for flavour (`exploit_remote_service`, T1210):
 
@@ -139,6 +145,26 @@ reachable/
    oracle (each cut proven by `simulate_fix`), evidence validity, latency. See
    [`evals/results/gate_a.md`](evals/results/gate_a.md).
 
+8. **Agents** (S4, `packages/agents`): Triage -> Pathfinder -> Fixer -> Reporter as
+   a LangGraph StateGraph. Each agent is an LLM shown the MCP tool schemas; it
+   **chooses** the tools, every call goes over MCP, and the model's answer is
+   grounded against the real tool results (made-up ids, claims and numbers are
+   dropped). Agents hand off through the graph: each writes its output on the
+   `Run` node and the next reads it back; every tool and model call is an
+   `AgentStep` carrying the Cypher it ran. A run reasons at the scan's time
+   (`as_of`, from the `Scan` node), never the wall clock. LiteLLM routes Gemini
+   Flash -> Groq -> an optional paid reserve, with per-run budgets and a cache.
+
+   ```bash
+   python -m reachable_agents check                 # probe each configured model
+   make triage ORG=org_a SCAN=v1 [AS_OF=2023-12-01] # writes runs/<run_id>.md + .json
+   python -m reachable_agents replay --org org_a --run-id <id>   # re-render from the graph
+   ```
+
+   Free tiers are tight (Gemini: 20 requests/day per model; a run is ~12): set
+   `LLM_RESERVE_MODEL` + `LLM_RESERVE_API_KEY` for demos. See
+   [`learning/S04.md`](learning/S04.md).
+
 ## MCP server
 
 ```bash
@@ -150,8 +176,8 @@ make mcp-smoke URL=http://localhost:8002/mcp
 
 HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is open.
 
-See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md)
-and [`learning/S03.md`](learning/S03.md) for the concepts, the Cypher, the
+See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md),
+[`learning/S03.md`](learning/S03.md) and [`learning/S04.md`](learning/S04.md) for the concepts, the Cypher, the
 max-flow / min-cut idea, the company brain and agent memory, and Browser
 queries to run now.
 
