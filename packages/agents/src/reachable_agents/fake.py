@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import uuid
 
+from reachable_graph.tools import describe_fix
+
 from .llm import LLMReply, ToolCall
 from .runtime import INJECTION_NOTE
 
@@ -34,11 +36,16 @@ class FakeLLM:
         act = getattr(self, f"_{agent}")(ctx, results)
         if tool_choice == "none" or isinstance(act, dict):
             final = act if isinstance(act, dict) else getattr(self, f"_{agent}_final")(ctx, results)
-            return self._reply(json.dumps(final), [], messages)
-        return self._reply(None, act, messages)
+            return self._reply(json.dumps(final), [], messages, tools)
+        return self._reply(None, act, messages, tools)
 
-    def _reply(self, content: str | None, calls: list[ToolCall], messages: list[dict]) -> LLMReply:
+    def _reply(
+        self, content: str | None, calls: list[ToolCall], messages: list[dict], tools: list[dict]
+    ) -> LLMReply:
+        # ~4 chars per token over everything a provider bills as input: the
+        # messages AND the tool schemas, which are re-sent on every turn.
         chars = sum(len(str(m.get("content") or "")) for m in messages)
+        chars += len(json.dumps(tools)) if tools else 0
         return LLMReply(
             content=content,
             tool_calls=calls,
@@ -52,31 +59,25 @@ class FakeLLM:
 
     # ------------------------------------------------------------ triage
     def _triage(self, ctx, res):
-        sf = res.get("scan_findings")
-        if not sf:
-            return [_call("scan_findings", limit=30)]
-        if "triage_memory" not in res:
-            d = sf["data"]
-            ids = [f["finding"] for f in _dicts(d["findings"])]
-            ids += [f["finding"] for f in _dicts(d["critical_without_attack_step"])]
-            ids += [f["finding"] for f in _dicts(d["previously_decided"])]
-            techs = sorted({t for f in _dicts(d["findings"]) for t in f["techniques"]})
-            return [_call("triage_memory", finding_ids=ids), _call("playbooks", techniques=techs)]
+        if "triage_memory" not in res:  # the scan digest is already in CONTEXT
+            d = ctx["scan"]
+            ids = [f["finding"] for f in d["candidates"]]
+            ids += [f["finding"] for f in d["critical_without_attack_step"]]
+            ids += list(d["previously_decided"])
+            techs = sorted({t for f in d["candidates"] for t in f["techniques"]})
+            calls = [_call("triage_memory", finding_ids=list(dict.fromkeys(ids)))]
+            return calls + ([_call("playbooks", techniques=techs)] if techs else [])
         return self._triage_final(ctx, res)
 
     def _triage_final(self, ctx, res):
-        sf = (res.get("scan_findings") or {}).get("data", {})
+        d = ctx["scan"]
         tm = (res.get("triage_memory") or {}).get("data", {})
         sup = {f["finding"]: f for f in _dicts(tm.get("findings", [])) if f["suppressed"]}
         return {
-            "investigate": [
-                f["finding"]
-                for f in _dicts(sf.get("findings", []))
-                if (f["on_crown_path"] or f["from_internet"]) and f["finding"] not in sup
-            ],
+            "investigate": [f["finding"] for f in d["candidates"] if f["finding"] not in sup],
             "deprioritised": [
                 {"finding": f["finding"], "reason": "critical, but enables no attack step"}
-                for f in _dicts(sf.get("critical_without_attack_step", []))
+                for f in d["critical_without_attack_step"]
             ],
             "suppressed": [
                 {"finding": f, "acceptance": (s["live_acceptances"] or [None])[0]}
@@ -88,22 +89,17 @@ class FakeLLM:
 
     # -------------------------------------------------------- pathfinder
     def _pathfinder(self, ctx, res):
-        if "attack_paths" not in res:
-            return [
-                _call("attack_paths", target_id=c["id"], k=10) for c in ctx.get("crown_jewels", [])
-            ] or [_call("attack_paths", k=10)]
-        if "why_step" not in res:
-            paths = _dicts(res["attack_paths"]["data"]["paths"])
+        if "why_step" not in res:  # the paths are already in CONTEXT
+            paths = _ctx_paths(ctx)
             if paths and paths[0]["steps"]:
                 return [_call("why_step", edge_key=paths[0]["steps"][0]["key"])]
         return self._pathfinder_final(ctx, res)
 
     def _pathfinder_final(self, ctx, res):
         ranked, keys = [], []
-        paths = _dicts((res.get("attack_paths") or {}).get("data", {}).get("paths", []))
-        for i, p in enumerate(paths):
+        for i, p in enumerate(_ctx_paths(ctx)):
             for s in _dicts(p["steps"]):
-                tok = s["fix_token"]
+                tok = s["key"].split("|")[1]  # rule|fix_token|from|to
                 if ":finding:" in tok and tok not in [r["finding"] for r in ranked]:
                     ranked.append({"finding": tok, "why": f"On path #{i + 1} to {p['target']}."})
         if "why_step" in res:
@@ -112,34 +108,25 @@ class FakeLLM:
 
     # ------------------------------------------------------------- fixer
     def _fixer(self, ctx, res):
-        if "min_cut" not in res:
-            return [_call("min_cut", mode="fewest"), _call("min_cut", mode="cheapest")]
-        fewest = _fewest(res)
-        if "owners" not in res and fewest:
-            assets = []
-            for f in _dicts(fewest["fixes"]):
-                a = f.get("asset") or (f.get("from") if ":asset:" in str(f.get("from")) else None)
-                if a and a not in assets:
-                    assets.append(a)
-            calls = [_call("owners", asset_id=a) for a in assets[:6]]
-            entry = next((f["asset"] for f in _dicts(fewest["fixes"]) if f.get("asset")), None)
-            if entry:
-                calls.append(_call("decision_trail", asset_id=entry))
-            if calls:
-                return calls
+        fewest = _fewest(ctx)  # both cuts and the routes are already in CONTEXT
         if "simulate_fix" not in res and fewest:
-            return [_call("simulate_fix", fix_tokens=fewest["fix_tokens"])]
+            fixes = _dicts(fewest["fixes"])
+            return [_call("simulate_fix", fix_tokens=[f["token"] for f in fixes])]
         return self._fixer_final(ctx, res)
 
     def _fixer_final(self, ctx, res):
-        fewest = _fewest(res) or {"fix_tokens": [], "fixes": []}
+        fixes = _dicts((_fewest(ctx) or {}).get("fixes", []))
         return {
             "chosen": "fewest",
-            "fix_tokens": fewest["fix_tokens"],
+            "fix_tokens": [f["token"] for f in fixes],
             "rationale": "Stub: the fewest-fixes cut, verified once with simulate_fix.",
             "tickets": [
-                {"token": f["token"], "title": f"Fix: {f['action']}", "body": f["action"] + "."}
-                for f in _dicts(fewest["fixes"])
+                {
+                    "token": f["token"],
+                    "title": f"Fix: {describe_fix(f['token'])['action']}",
+                    "body": describe_fix(f["token"])["action"] + ".",
+                }
+                for f in fixes
             ],
         }
 
@@ -207,5 +194,15 @@ def _results(messages: list[dict]) -> dict[str, dict]:
     return out
 
 
-def _fewest(res: dict) -> dict | None:
-    return (res.get("min_cut:fewest") or {}).get("data")
+def _fewest(ctx: dict) -> dict | None:
+    return ((ctx.get("min_cuts") or {}).get("fewest") or {}).get("data")
+
+
+def _ctx_paths(ctx: dict) -> list[dict]:
+    """The attack paths the run put in the Pathfinder's CONTEXT (one result per crown jewel)."""
+    return [
+        p
+        for r in ctx.get("paths", [])
+        if isinstance(r, dict)
+        for p in _dicts((r.get("data") or {}).get("paths", []))
+    ]

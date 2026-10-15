@@ -91,14 +91,18 @@ class McpToolbox:
     def takes(self, tool: str, arg: str) -> bool:
         return arg in self.tools[tool].schema.get("properties", {})
 
-    def llm_schemas(self, names: list[str] | tuple[str, ...]) -> list[dict]:
-        """OpenAI-style function schemas for these tools, as the LLM sees them."""
+    def llm_schemas(self, names: list[str] | tuple[str, ...], *, brief: bool = True) -> list[dict]:
+        """OpenAI-style function schemas for these tools, as the LLM sees them.
+        brief: only the "what it answers" part of each description (see
+        brief_description); the schemas are re-sent on every turn."""
         return [
             {
                 "type": "function",
                 "function": {
                     "name": n,
-                    "description": self.tools[n].description,
+                    "description": brief_description(self.tools[n].description)
+                    if brief
+                    else self.tools[n].description,
                     "parameters": llm_parameters(self.tools[n].schema),
                 },
             }
@@ -116,6 +120,24 @@ class McpToolbox:
             text = " ".join(getattr(c, "text", "") for c in r.content) or "tool error"
             return CallOutcome(False, None, text, _ms(t))
         return CallOutcome(True, r.structured_content, None, _ms(t))
+
+
+BRIEF_CHARS = 320
+
+
+def brief_description(text: str) -> str:
+    """A tool description up to its "USE ..." / "Do NOT ..." guidance.
+
+    The MCP server's descriptions are written for a host that picks among all 15
+    tools, so each says when to use the tool and when not to. Our agents get 2-4
+    tools each and a job that names them; the guidance is then repeated cost
+    (the schemas are re-sent every turn), so they get what the tool answers."""
+    for cut in (" USE ", " Do NOT "):
+        i = text.find(cut)
+        if i > 0:
+            text = text[:i]
+    text = text.strip()
+    return text if len(text) <= BRIEF_CHARS else text[: BRIEF_CHARS - 3].rstrip() + "..."
 
 
 def llm_parameters(schema: dict) -> dict:

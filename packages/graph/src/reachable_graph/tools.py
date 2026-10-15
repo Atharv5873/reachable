@@ -34,7 +34,7 @@ from reachable_core.attack_rules import (
     exploit_likelihood,
 )
 from reachable_core.db import connect
-from reachable_core.schema import THREATINTEL_GRAPH
+from reachable_core.schema import THREATINTEL_GRAPH, severity_band
 from reachable_core.settings import get_settings
 
 from . import memory
@@ -64,6 +64,9 @@ from .models import (
 log = logging.getLogger("reachable.tools")
 
 SCRATCH_PREFIX = "scratch__"
+# scan_findings(view="triage"): Internet-facing findings OFF any crown path get a
+# count and this many rows, no more (they are what triage deprioritises).
+TRIAGE_OTHERS = 5
 
 # Our node ids look like "<org>:<kind>:<n>"; the kind tells us the label, which
 # lets every lookup be an index seek on (:Label {id}) instead of a full scan.
@@ -1056,7 +1059,7 @@ class GraphTools(CompanyToolsMixin):
         )
 
     # ========================================================= scan_findings
-    def scan_findings(self, org: str, limit: int = 30) -> ToolResult:
+    def scan_findings(self, org: str, limit: int = 30, view: str = "ranked") -> ToolResult:
         """The scan at a glance: which scan and when, the crown jewels, and the open
         findings ranked by what they enable in the ATTACK_STEP layer.
 
@@ -1064,8 +1067,13 @@ class GraphTools(CompanyToolsMixin):
         ATTACK_STEP. So rank: on a crown-jewel path (both step endpoints are
         :CrownPath), then reachable straight from the Internet, then KEV, step
         likelihood, CVSS. Separately list the most severe open findings that
-        enable NO step: high scores, no way in (the classic false alarm)."""
-        inp = ScanFindingsInput(org=org, limit=limit)
+        enable NO step: high scores, no way in (the classic false alarm).
+
+        view="triage" is the lean form Triage starts from (S5): the aggregates
+        (counts by technique, severity band and exposure) and per-finding detail
+        ONLY for the candidates, the findings that enable a step straight from the
+        Internet. Everything else is a count, not a row."""
+        inp = ScanFindingsInput(org=org, limit=limit, view=view)
         g, qlog = self._org(inp.org), []
         scan = self._q(
             g, "MATCH (s:Scan) RETURN s.id, s.version, s.ts ORDER BY s.ts DESC", {}, qlog
@@ -1120,6 +1128,13 @@ class GraphTools(CompanyToolsMixin):
             for tok, n, techs, lk, cp, inet, kev, cvss in enabling
         }
         ranked = sorted(steps, key=lambda t: steps[t]["_rank"])
+        aggregates = _scan_aggregates(signals, steps)
+        triage = inp.view == "triage"
+        other_inet: list[str] = []
+        if triage:  # candidates: a way in straight from the Internet, crown path first
+            inet = [t for t in ranked if steps[t]["from_internet"]]
+            ranked = [t for t in inet if steps[t]["on_crown_path"]]
+            other_inet = [t for t in inet if not steps[t]["on_crown_path"]]
         truncated = len(ranked) > inp.limit
         # The most severe open findings that enable nothing: the top criticals,
         # minus any that do enable a step.
@@ -1163,12 +1178,18 @@ class GraphTools(CompanyToolsMixin):
         for p in decided:
             p["enables_attack_step"] = p["finding"] in steps
             p.pop("last")
-        details = self._finding_details(g, [*ranked[: inp.limit], *severe], qlog)
-        findings = [
-            {"finding": f, **details[f], **{k: v for k, v in steps[f].items() if k != "_rank"}}
-            for f in ranked[: inp.limit]
-            if f in details
-        ]
+        others = other_inet[:TRIAGE_OTHERS]
+        details = self._finding_details(g, [*ranked[: inp.limit], *others, *severe], qlog)
+
+        def row(f: str) -> dict:
+            return {
+                "finding": f,
+                **details[f],
+                **{k: v for k, v in steps[f].items() if k != "_rank"},
+            }
+
+        findings = [row(f) for f in ranked[: inp.limit] if f in details]
+        others_rows = [row(f) for f in others if f in details]
         unreachable = [
             {"finding": f, **details[f], "attack_steps": 0} for f in severe if f in details
         ]
@@ -1176,11 +1197,22 @@ class GraphTools(CompanyToolsMixin):
             node_ids=[
                 *(s[0] for s in scan[:1]),
                 *(c[0] for c in crown),
-                *(x for f in findings + unreachable for x in (f["finding"], f["asset"])),
+                *(
+                    x
+                    for f in findings + others_rows + unreachable
+                    for x in (f["finding"], f["asset"])
+                ),
                 *(p["finding"] for p in decided),
             ]
         )
         ev.node_ids = list(dict.fromkeys(ev.node_ids))
+        if triage:  # the same facts, minus what triage never reads
+            for f in findings + others_rows:
+                for k in ("epss", "from_internet", "attack_steps"):
+                    f.pop(k, None)
+            for f in unreachable:
+                for k in ("asset", "epss", "attack_steps"):
+                    f.pop(k, None)
         on_crown = sum(1 for s in steps.values() if s["on_crown_path"])
         sid, version, ts = scan[0] if scan else (None, None, None)
         summary = (
@@ -1189,25 +1221,33 @@ class GraphTools(CompanyToolsMixin):
             f"{len(unreachable)} critical finding(s) enable no step at all; "
             f"{len(prior)} carry an earlier decision (check triage_memory). "
             f"Crown jewels: {[c[0] for c in crown]}."
+            + (
+                f" Triage view: {len(findings)} Internet-facing candidate(s) on a crown-jewel "
+                f"path, {len(other_inet)} more Internet-facing off any crown path."
+                if triage
+                else ""
+            )
         )
-        return ToolResult(
-            summary=summary,
-            data={
-                "scan": {"id": sid, "version": version, "ts": ts, "date": _day(ts)},
-                "counts": {
-                    "open": status.get("open", 0),
-                    "fixed": status.get("fixed", 0),
-                    "enabling_attack_steps": len(steps),
-                    "on_crown_path": on_crown,
-                },
-                "crown_jewels": [{"id": i, "kind": k, "sensitivity": s} for i, k, s in crown],
-                "findings": findings,
-                "critical_without_attack_step": unreachable,
-                "previously_decided": decided,
+        data = {
+            "scan": {"id": sid, "version": version, "ts": ts, "date": _day(ts)},
+            "counts": {
+                "open": status.get("open", 0),
+                "fixed": status.get("fixed", 0),
+                "enabling_attack_steps": len(steps),
+                "on_crown_path": on_crown,
             },
-            evidence=ev,
-            queries=qlog,
-            truncated=truncated,
+            "crown_jewels": [{"id": i, "kind": k, "sensitivity": s} for i, k, s in crown],
+            "view": inp.view,
+            "aggregates": aggregates,
+            "findings": findings,
+            "critical_without_attack_step": unreachable,
+            "previously_decided": decided,
+        }
+        if triage:
+            data["other_internet_facing"] = {"count": len(other_inet), "top": others_rows}
+            data["previously_decided"] = [p["finding"] for p in decided]
+        return ToolResult(
+            summary=summary, data=data, evidence=ev, queries=qlog, truncated=truncated
         )
 
     # ============================================================= playbooks
@@ -1273,6 +1313,32 @@ class GraphTools(CompanyToolsMixin):
 
 
 # ---------------------------------------------------------------- helpers
+def _scan_aggregates(signals: dict[str, tuple[bool, float]], steps: dict[str, dict]) -> dict:
+    """Counts a triager reasons from before looking at any single finding: open
+    findings by CVSS band (and how many of each enable an attack step), by the
+    ATT&CK technique they enable, and by exposure."""
+    by_sev: dict[str, dict[str, int]] = {}
+    for fid, (_, cvss) in signals.items():
+        b = by_sev.setdefault(severity_band(cvss), {"open": 0, "enable_steps": 0})
+        b["open"] += 1
+        b["enable_steps"] += fid in steps
+    by_tech: dict[str, int] = {}
+    for s in steps.values():
+        for t in s["techniques"]:
+            by_tech[t] = by_tech.get(t, 0) + 1
+    inet = sum(1 for s in steps.values() if s["from_internet"])
+    return {
+        "by_severity": dict(sorted(by_sev.items())),
+        "by_technique": dict(sorted(by_tech.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "by_exposure": {
+            "from_internet": inet,
+            "on_crown_path": sum(1 for s in steps.values() if s["on_crown_path"]),
+            "internal_steps_only": len(steps) - inet,
+            "no_attack_step": len(signals) - len(steps),
+        },
+    }
+
+
 def residual_min_cut(
     steps: list[dict],
     flows: dict[tuple[str, str], float],

@@ -61,6 +61,11 @@ class ScanFindingsInput(OrgInput):
     limit: int = Field(
         30, ge=1, le=MAX_ROWS, description="Max findings to list (attack-step findings first)."
     )
+    view: Literal["ranked", "triage"] = Field(
+        "ranked",
+        description="ranked: the top findings by what they enable. triage: aggregates (by "
+        "technique, severity, exposure) plus only the Internet-facing candidates, compact.",
+    )
 
 
 class ExposureInput(OrgInput):

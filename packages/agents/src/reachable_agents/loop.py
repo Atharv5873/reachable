@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -59,6 +60,9 @@ class AgentSpec:
     max_turns: int
     role: str
     schema: str
+    # A protocol check on the answer: returns a correction to send back once (e.g.
+    # "you verified a different set than you chose"), or None if the answer is fine.
+    check: Callable[[RunCtx, dict], str | None] | None = None
 
 
 @dataclass
@@ -87,7 +91,7 @@ async def run_agent(spec: AgentSpec, ctx: RunCtx, context: dict) -> LoopOutcome:
         },
     ]
     tools = ctx.toolbox.llm_schemas(spec.tools)
-    nudged = repaired = False
+    nudged = repaired = checked = False
     for turn in range(1, spec.max_turns + 1):
         if not ctx.budget.take_llm():
             return LoopOutcome(None, "llm_budget", turn - 1)
@@ -128,6 +132,14 @@ async def run_agent(spec: AgentSpec, ctx: RunCtx, context: dict) -> LoopOutcome:
                     "content": f"Before you finish you must call {missing}. Call them now, "
                     "then answer with the JSON.",
                 },
+            ]
+            continue
+        problem = spec.check(ctx, final) if final is not None and spec.check else None
+        if problem and not checked and ctx.budget.exhausted is None and not last:
+            checked = True
+            messages += [
+                {"role": "assistant", "content": reply.content or ""},
+                {"role": "user", "content": problem},
             ]
             continue
         if final is None and not repaired and not last:

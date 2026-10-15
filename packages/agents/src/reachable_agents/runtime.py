@@ -31,8 +31,9 @@ from .llm import ChatModel, LLMReply
 from .mcp_tools import McpToolbox
 
 # A tool may be called this many times per run, at most (others: run cap only).
-# simulate_fix copies the whole graph (~1 s): verify the candidate set once.
-PER_TOOL_CAPS = {"simulate_fix": 1}
+# simulate_fix copies the whole graph (~1 s): verify the chosen set once, plus one
+# re-verification if the Fixer's answer names a different set than it simulated.
+PER_TOOL_CAPS = {"simulate_fix": 2}
 
 # Tool results are data. If one ever contains text shaped like an instruction to
 # the model, we say so in front of it (and flag the step) rather than pass it on bare.
@@ -51,6 +52,7 @@ _DROP_FOR_LLM = {"queries", "evidence", "labels", "cost"}
 # ~1.5k tokens per tool result. The whole conversation is re-sent every turn, and
 # the free fallback (Groq) allows 8k tokens per MINUTE: results must stay small.
 MAX_RESULT_CHARS = 6_000
+SUMMARY_CHARS = 160  # a viewed tool's one-line summary; its data holds the detail
 
 
 @dataclass
@@ -139,6 +141,7 @@ class RunCtx:
         self.llm_failures = 0
         self.tokens_in = self.tokens_out = 0
         self.called: set[tuple[str, str]] = set()  # (agent, tool) actually answered
+        self._by: str | None = None  # "run" while the run (not the model) calls a tool
 
     # ------------------------------------------------------------- tools
     async def call_tool(self, agent: str, allowed: tuple[str, ...], name: str, args: Any) -> str:
@@ -179,7 +182,7 @@ class RunCtx:
         body = json.dumps(result, sort_keys=True, default=str)
         sha = hashlib.sha256(body.encode()).hexdigest()
         flagged = bool(_INSTRUCTION_LIKE.search(body))
-        text = (INJECTION_NOTE if flagged else "") + for_llm(result)
+        text = (INJECTION_NOTE if flagged else "") + for_llm(result, tool=name)
         output = {
             "tool": name,
             "sha": sha,
@@ -220,6 +223,24 @@ class RunCtx:
         )
         return json.dumps({"error": reason})
 
+    async def preload(self, agent: str, name: str, args: dict) -> tuple[dict | None, Any]:
+        """A tool call the RUN makes on an agent's behalf (not the model's choice),
+        through the same path as any call: MCP, cache, budget, trace. The step is
+        marked by="run". Used for the calls every run makes identically (the scan
+        digest, the paths to each crown jewel, both min cuts), so no LLM turn is
+        spent asking for them. Returns (the full result, what the model is shown)."""
+        self._by = "run"
+        try:
+            text = await self.call_tool(agent, (name,), name, args)
+        finally:
+            self._by = None
+        rec = [r for r in self.results_of(name, agent) if r.args.items() >= args.items()]
+        try:
+            shown = json.loads(text)
+        except ValueError:  # flagged as instruction-like: keep the warning in front
+            shown = text
+        return (rec[-1].result if rec else None), shown
+
     def _step(self, agent: str, tool: str, args: dict, **props):
         output = props.pop("output", None)
         return self.repo.append_agent_step(
@@ -227,6 +248,7 @@ class RunCtx:
             self.run_id,
             {
                 "kind": "tool",
+                "by": self._by,
                 "agent": agent,
                 "tool": tool,
                 "input": args,
@@ -290,12 +312,176 @@ class RunCtx:
 
 
 # ---------------------------------------------------------- result trimming
-def for_llm(result: dict, max_chars: int = MAX_RESULT_CHARS) -> str:
-    """The part of a ToolResult the model needs, as compact JSON: summary, data,
-    truncated. Long lists are cut (with a '... N more' marker) until it fits."""
+def _day(ts) -> str | None:
+    from .loop import day
+
+    return day(ts) if ts else None
+
+
+def _person(p: dict | None) -> str | None:
+    return f"{p.get('name')} ({p.get('role')})" if p else None
+
+
+def _view_owners(d: dict) -> dict:
+    return {
+        "asset": {k: (d.get("asset") or {}).get(k) for k in ("id", "name")},
+        "teams": [
+            {
+                "id": t.get("id"),
+                "name": t.get("name"),
+                "on_call": {k: (t.get("on_call") or {}).get(k) for k in ("person", "name", "role")},
+            }
+            for t in d.get("teams", [])
+        ],
+    }
+
+
+def _view_decision_trail(d: dict) -> dict:
+    return {
+        "asset": d.get("asset"),
+        "hostname": d.get("hostname"),
+        "exposed_ports": d.get("exposed_ports"),
+        "decisions": [
+            {
+                "adr": x.get("adr"),
+                "title": x.get("title"),
+                "date": x.get("date"),
+                "approved_by": _person(x.get("approved_by")),
+            }
+            for x in d.get("decisions", [])
+        ],
+    }
+
+
+def _view_min_cut(d: dict) -> dict:
+    keep = ("token", "kind", "asset", "hostname", "cve", "cvss", "kev", "effort")
+    return {
+        **{k: d.get(k) for k in ("mode", "max_flow", "total_effort", "targets")},
+        "fixes": [
+            {
+                **{k: f[k] for k in keep if f.get(k) is not None},
+                **({"action": f["action"]} if f.get("kind") != "finding" else {}),
+            }
+            for f in d.get("fixes", [])
+        ],
+    }
+
+
+def _view_triage_memory(d: dict) -> dict:
+    latest: dict[str, dict] = {}
+    for v in d.get("verdicts", []):  # newest first
+        latest.setdefault(v["finding"], v)
+
+    def ra(r: dict) -> dict:
+        return {
+            "id": r["id"],
+            "findings": r.get("findings"),
+            "reason": str(r.get("reason") or "")[:100],
+            "approved_by": r.get("approver_name") or r.get("approved_by"),
+            "expires": _day(r.get("expires")),
+        }
+
+    keys = ("live_acceptances", "expired_acceptances", "patterns")
+    found = d.get("findings", [])
+    return {
+        # findings with an acceptance or a pattern, in full
+        "findings": [
+            {
+                **{k: f[k] for k in ("finding", "suppressed")},
+                **{k: f[k] for k in keys if f[k]},
+                **(
+                    {"latest_verdict": latest[f["finding"]]["decision"]}
+                    if f["finding"] in latest
+                    else {}
+                ),
+            }
+            for f in found
+            if any(f[k] for k in keys)
+        ],
+        # findings whose only memory is past verdicts: id -> latest decision (count)
+        "verdicts_only": {
+            f["finding"]: f"{latest[f['finding']]['decision']} ({len(f['verdicts'])})"
+            for f in found
+            if f["verdicts"] and not any(f[k] for k in keys) and f["finding"] in latest
+        },
+        "no_memory": [
+            f["finding"] for f in found if not f["verdicts"] and not any(f[k] for k in keys)
+        ],
+        "live_risk_acceptances": [ra(r) for r in d.get("live_risk_acceptances", [])],
+        "expired_risk_acceptances": [ra(r) for r in d.get("expired_risk_acceptances", [])],
+        "patterns": [
+            {"id": p["id"], "kind": p.get("kind"), "description": str(p["description"])[:240]}
+            for p in d.get("patterns", [])
+        ],
+        "unknown_findings": d.get("unknown_findings"),
+    }
+
+
+def _view_attack_paths(d: dict) -> dict:
+    return {
+        "paths": [
+            {
+                "target": p["target"],
+                "likelihood": p["likelihood"],
+                "hosts": [n.get("name") or n["id"] for n in p["nodes"]],
+                # rule|fix_token|from|to: the key names every id the step touches
+                "steps": [{"key": s["key"], "likelihood": s["likelihood"]} for s in p["steps"]],
+            }
+            for p in d.get("paths", [])
+        ]
+    }
+
+
+def _view_why_step(d: dict) -> dict:
+    t = d.get("technique") or {}
+    return {
+        **{k: d.get(k) for k in ("key", "rule", "likelihood", "rule_text")},
+        "technique": f"{t.get('id')} {t.get('name')}",
+        "fix": (d.get("fix") or {}).get("action"),
+        "from": (d.get("src") or {}).get("id"),
+        "to": {k: ((d.get("dst") or {}).get("props") or {}).get(k) for k in ("id", "hostname")},
+        "because": [
+            {
+                "id": b["id"],
+                **{
+                    k: b["props"][k]
+                    for k in ("cve", "cvss", "kev", "cpe", "kind")
+                    if k in (b.get("props") or {})
+                },
+            }
+            for b in d.get("because", [])
+        ],
+    }
+
+
+# What the model is shown of each tool's data: the decision-relevant fields only.
+# The full result is in the graph (the step's ToolOutput) and in the run's
+# records the finalisers read; only the PROMPT gets the view. Measured on org_a v1:
+# owners 840 -> ~260 chars, decision_trail 1.27k -> ~330, min_cut 2.6k -> ~1.2k.
+LLM_VIEWS = {
+    "owners": _view_owners,
+    "decision_trail": _view_decision_trail,
+    "min_cut": _view_min_cut,
+    "triage_memory": _view_triage_memory,
+    "attack_paths": _view_attack_paths,
+    "why_step": _view_why_step,
+}
+
+
+def for_llm(result: dict, max_chars: int = MAX_RESULT_CHARS, tool: str | None = None) -> str:
+    """The part of a ToolResult the model needs, as compact JSON: summary, data
+    (through the tool's LLM view, if it has one), truncated. Long lists are cut
+    (with a '... N more' marker) until it fits."""
+    data, summary = result.get("data"), result.get("summary")
+    if tool in LLM_VIEWS and isinstance(data, dict):
+        try:
+            data = LLM_VIEWS[tool](data)
+            summary = str(summary or "")[:SUMMARY_CHARS]  # the view carries the detail
+        except (KeyError, TypeError, AttributeError):
+            pass  # an unexpected shape: show the data as is rather than nothing
     view = {
-        "summary": result.get("summary"),
-        "data": result.get("data"),
+        "summary": summary,
+        "data": data,
         "truncated": result.get("truncated", False),
     }
     # Shrink list length and string length together; always valid JSON.

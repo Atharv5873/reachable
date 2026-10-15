@@ -352,8 +352,12 @@ def triage_memory(
         "paths themselves (attack_paths) or what memory says about a finding (triage_memory)."
     ),
 )
-def scan_findings(org: Org, limit: arg(M.ScanFindingsInput, "limit", int) = 30) -> ToolResult:
-    return _call(_tools().scan_findings, org, limit=limit)
+def scan_findings(
+    org: Org,
+    limit: arg(M.ScanFindingsInput, "limit", int) = 30,
+    view: arg(M.ScanFindingsInput, "view", Literal["ranked", "triage"]) = "ranked",
+) -> ToolResult:
+    return _call(_tools().scan_findings, org, limit=limit, view=view)
 
 
 @server.tool(

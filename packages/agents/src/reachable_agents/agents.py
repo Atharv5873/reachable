@@ -46,24 +46,22 @@ def _note(outcome: LoopOutcome) -> dict:
 # ====================================================================== Triage
 TRIAGE = AgentSpec(
     name="triage",
-    tools=("scan_findings", "triage_memory", "playbooks", "vuln_intel"),
-    required=("scan_findings", "triage_memory"),
-    max_turns=5,
+    tools=("triage_memory", "playbooks"),
+    required=("triage_memory",),
+    max_turns=3,
     role="""\
-Decide which of this scan's open findings deserve attack-path investigation.
-1. scan_findings: what the scan holds, ranked by what each finding enables in the attack \
-layer (on a crown-jewel path, from the Internet, KEV, likelihood, CVSS), plus the critical \
-findings that enable no attack step at all, and the findings someone already decided \
-about (previously_decided). limit 30 is plenty.
-2. triage_memory on your candidates: the findings on attack paths, the critical ones with \
-no step, AND every previously_decided one. A LIVE risk acceptance suppresses a finding: \
-do not investigate it again, \
-name the acceptance. An EXPIRED one does NOT suppress anything. Past verdicts and patterns \
-explain recurring problems.
-3. playbooks for the ATT&CK techniques your candidates enable.
-Investigate findings on a crown-jewel path or reachable from the Internet unless a live \
-acceptance suppresses them. Deprioritise critical findings that enable no attack step, \
-and say why (high score, no way in).""",
+Decide which of this scan's open findings deserve attack-path investigation. CONTEXT.scan \
+is the scan digest: counts by severity band, ATT&CK technique and exposure; the CANDIDATES \
+(Internet-facing findings on a crown-jewel path, with detail); a count and sample of the \
+other Internet-facing findings; the critical findings that enable no attack step at all; \
+and the ids of findings someone already decided about (previously_decided).
+1. In ONE turn, in parallel: triage_memory on the candidates, the critical no-step findings \
+AND every previously_decided id; playbooks for the techniques the candidates enable.
+2. A LIVE risk acceptance suppresses a finding: do not investigate it, name the acceptance. \
+An EXPIRED one does NOT suppress anything. Past verdicts and patterns explain recurring \
+problems.
+Investigate the candidates unless a live acceptance suppresses them. Deprioritise critical \
+findings that enable no attack step, and say why (high score, no way in).""",
     schema="""{"investigate": ["<finding id>", "... most urgent first"],
  "deprioritised": [{"finding": "<finding id>", "reason": "<short>"}],
  "suppressed": [{"finding": "<finding id>", "acceptance": "<risk acceptance id>"}],
@@ -73,11 +71,13 @@ and say why (high score, no way in).""",
 
 
 async def triage_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
+    # Every triage starts from the same question, so the run asks it (one traced
+    # MCP call, by="run") instead of spending an LLM turn on "call scan_findings".
+    sf, _ = await ctx.preload("triage", "scan_findings", {"view": "triage", "limit": 30})
     context = {
         "org": state["org"],
-        "scan": state.get("scan_info"),
-        "as_of": ctx.as_of,
         "as_of_date": day(ctx.as_of),
+        "scan": scan_digest((sf or {}).get("data") or {}),
     }
     outcome = await run_agent(TRIAGE, ctx, context)
     payload = finalise_triage(ctx, outcome)
@@ -105,11 +105,51 @@ async def triage_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
     return oid, summary
 
 
+def scan_digest(sf: dict) -> dict:
+    """What Triage's model reads: scan_findings(view="triage") minus what it never
+    uses (asset ids, flags that are true for every row)."""
+    cand = ("finding", "hostname", "cve", "cvss", "kev", "techniques", "best_likelihood")
+    other = sf.get("other_internet_facing") or {}
+    return {
+        "scan": sf.get("scan"),
+        "counts": sf.get("counts"),
+        "aggregates": sf.get("aggregates"),
+        "crown_jewels": sf.get("crown_jewels"),
+        "candidates": [{k: f.get(k) for k in cand} for f in sf.get("findings", [])],
+        "other_internet_facing": {
+            "count": other.get("count", 0),
+            "sample": [
+                {k: f.get(k) for k in ("finding", "hostname", "cvss", "best_likelihood")}
+                for f in other.get("top", [])
+            ],
+        },
+        "critical_without_attack_step": [
+            {k: f.get(k) for k in ("finding", "hostname", "cve", "cvss", "kev")}
+            for f in sf.get("critical_without_attack_step", [])
+        ],
+        "previously_decided": sf.get("previously_decided", []),
+    }
+
+
+def _scan_rows(sf: dict) -> dict[str, dict]:
+    """Every finding row scan_findings returned, by id. The triage view lists only
+    Internet-facing rows (and drops the flag), so it is set back here."""
+    rows = list(sf.get("findings", [])) + list(
+        (sf.get("other_internet_facing") or {}).get("top", [])
+    )
+    triage = sf.get("view") == "triage"
+    return {
+        f["finding"]: {**f, "from_internet": True} if triage else f
+        for f in rows
+        if isinstance(f, dict)
+    }
+
+
 def finalise_triage(ctx: RunCtx, outcome: LoopOutcome) -> dict:
     ans = outcome.final or {}
     sf = ctx.results_of("scan_findings")
-    sf = sf[-1].result["data"] if sf else {}
-    on_steps = {f["finding"]: f for f in sf.get("findings", [])}
+    sf = sf[0].result["data"] if sf else {}  # the run's own (preloaded) call
+    on_steps = _scan_rows(sf)
     no_step = {f["finding"]: f for f in sf.get("critical_without_attack_step", [])}
 
     # Memory, merged over every triage_memory call: the tool computed "live"
@@ -162,11 +202,9 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome) -> dict:
             dropped.append(fid)  # not a finding any tool showed: never investigate it
             continue
         investigate_ids.append(fid)
-    if not outcome.final:  # no answer: everything on an attack path, not suppressed
+    if not outcome.final:  # no answer: the candidates (way in AND on a crown path)
         investigate_ids = [
-            f
-            for f, x in on_steps.items()
-            if (x["on_crown_path"] or x["from_internet"]) and f not in sup_ids
+            f for f, x in on_steps.items() if x.get("on_crown_path") and f not in sup_ids
         ]
     investigate_ids = list(dict.fromkeys(investigate_ids))[:MAX_INVESTIGATE]
 
@@ -244,16 +282,17 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome) -> dict:
 # ================================================================== Pathfinder
 PATHFINDER = AgentSpec(
     name="pathfinder",
-    tools=("attack_paths", "blast_radius", "why_step", "exposure_surface", "choke_points"),
-    required=("attack_paths",),
-    max_turns=4,
+    tools=("why_step", "blast_radius", "attack_paths"),
+    required=(),
+    max_turns=2,
     role="""\
-Find the real Internet -> crown-jewel attack paths and rank the triaged findings by them.
-- For EACH crown jewel in CONTEXT call attack_paths with target_id set to it (in parallel), \
-k=10.
-- why_step on AT MOST 3 hops, the ones that matter most (the entry exploit, any credential or role \
-hop) so each claim is grounded; blast_radius on the entry asset of the most likely path \
-if it helps. exposure_surface / choke_points only if they add something.
+Rank the triaged findings by the real Internet -> crown-jewel attack paths. CONTEXT.paths \
+already holds attack_paths (k=10) for every crown jewel; a step key reads \
+rule|fix_token|from|to.
+- ALL IN ONE TURN: why_step on AT MOST 3 hops, the ones that matter most (the entry \
+exploit, any credential or role hop) so each claim is grounded; blast_radius on the entry \
+asset of the most likely path only if it adds something. attack_paths again only for a \
+source or target CONTEXT does not cover.
 - Rank findings (fix_tokens that are Finding ids) by: on a path to a crown jewel, path \
 likelihood, the target's sensitivity. A finding on no path does not rank, whatever its CVSS.""",
     schema="""{"ranked": [{"finding": "<finding id on a path>",
@@ -266,6 +305,12 @@ likelihood, the target's sensitivity. A finding on no path does not rank, whatev
 async def pathfinder_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
     triage = ctx.repo.read_output(ctx.graph, ctx.run_id, "Triage")
     tp = triage["payload"] if triage else {}
+    crown = [c["id"] for c in tp.get("crown_jewels", [])]
+    paths = []
+    for target in crown or [None]:  # every run asks this first: the run asks it
+        args = {"k": 10, **({"target_id": target} if target else {})}
+        _, shown = await ctx.preload("pathfinder", "attack_paths", args)
+        paths.append(shown)
     context = {
         "crown_jewels": tp.get("crown_jewels", []),
         "investigate": [
@@ -274,6 +319,7 @@ async def pathfinder_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
         ],
         "suppressed_by_live_acceptance": [s["finding"] for s in tp.get("suppressed", [])],
         "as_of_date": day(ctx.as_of),
+        "paths": paths,
     }
     outcome = await run_agent(PATHFINDER, ctx, context)
     payload = finalise_paths(ctx, outcome, tp)
@@ -404,32 +450,54 @@ def finalise_paths(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
 # ======================================================================= Fixer
 FIXER = AgentSpec(
     name="fixer",
-    tools=("min_cut", "owners", "decision_trail", "simulate_fix"),
-    required=("min_cut", "simulate_fix"),
-    max_turns=5,
+    tools=("simulate_fix", "owners", "decision_trail"),
+    required=("simulate_fix",),
     role="""\
-Turn the attack paths into a fix plan people can act on.
-1. min_cut twice, in parallel: mode="fewest" and mode="cheapest". Compare: fewer fixes vs \
-less total effort.
-2. Choose ONE of the two sets. If both have the same number of fixes, take the cheaper \
-one (same work count, less effort); otherwise weigh fewer fixes against less effort.
-3. Then, ALL IN ONE TURN (parallel calls): simulate_fix ONCE on exactly the chosen set (it \
-copies the graph: one call, never one per fix); owners for each fix's asset id (the owning \
-team and on-call person); decision_trail on the internet-facing entry assets (the ADR that \
-exposed them and who approved it).
+Turn the attack paths into a fix plan people can act on. CONTEXT.min_cuts holds min_cut in \
+both modes ("fewest" and "cheapest"); CONTEXT.routes holds, per fix asset, the owning team, \
+the on-call person and the ADR that exposed it (looked up for you, or remembered from an \
+earlier run).
+1. Compare fewer fixes vs less total effort and choose ONE of the two sets. If both have \
+the same number of fixes, take the cheaper one (same work count, less effort).
+2. simulate_fix ONCE on exactly the chosen set (it copies the graph: one call, never one \
+per fix). owners / decision_trail only for an asset CONTEXT.routes lacks.
 Write a ticket per fix: a title and a 2-4 sentence body naming the asset, the attack step it \
 removes, the owner, and the ADR if there is one.""",
     schema="""{"chosen": "fewest" | "cheapest", "fix_tokens": ["<fix token>"],
  "rationale": "<2-4 sentences>",
  "tickets": [{"token": "<fix token>", "title": "<title>", "body": "<2-4 sentences>"}]}""",
+    check=lambda ctx, final: verify_mismatch(ctx, final),
+    max_turns=4,  # verify, answer; +1 turn each only if the answer needs re-verifying
 )
+
+
+def verify_mismatch(ctx: RunCtx, final: dict) -> str | None:
+    """The Fixer must answer with the set it proved. Seen for real: it simulated
+    the "fewest" set, answered "cheapest", and wrote that the simulation passed."""
+    want = sorted({t for t in final.get("fix_tokens", []) if isinstance(t, str)})
+    sims = [sorted(r.result["data"]["fix_tokens"]) for r in ctx.results_of("simulate_fix")]
+    if not want or want in sims:
+        return None
+    return (
+        f"Your answer names fix set {want}, but simulate_fix ran on {sims}: that set is NOT "
+        "verified. Call simulate_fix on exactly the set you chose, then answer with the JSON."
+    )
 
 
 async def fixer_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
     triage = ctx.repo.read_output(ctx.graph, ctx.run_id, "Triage")
     pa = ctx.repo.read_output(ctx.graph, ctx.run_id, "PathAnalysis")
     tp, pp = (triage or {}).get("payload", {}), (pa or {}).get("payload", {})
+    cuts, fixes = {}, {}
+    for mode in ("fewest", "cheapest"):  # every Fixer starts by asking both: the run does
+        res, cuts[mode] = await ctx.preload("fixer", "min_cut", {"mode": mode})
+        for f in ((res or {}).get("data") or {}).get("fixes", []):
+            fixes.setdefault(f["token"], f)
+    entry = {f["asset"] for f in tp.get("investigate", []) if f.get("asset")}
+    routes = await lookup_routes(ctx, list(fixes.values()), entry, state.get("known_routes"))
     context = {
+        "min_cuts": cuts,
+        "routes": {a: _route_view(r) for a, r in routes.items()},
         "crown_jewels": pp.get("crown_jewels", []),
         "ranked_findings": [
             {k: r.get(k) for k in ("rank", "finding", "score", "targets", "step_key")}
@@ -440,7 +508,7 @@ async def fixer_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
         "as_of_date": day(ctx.as_of),
     }
     outcome = await run_agent(FIXER, ctx, context)
-    payload = finalise_fixes(ctx, outcome, tp)
+    payload = finalise_fixes(ctx, outcome, tp, routes)
     v = payload["verified"]
     summary = (
         f"{payload['chosen'] or 'no'} fix set: {len(payload['fix_tokens'])} fix(es), effort "
@@ -471,7 +539,65 @@ def _route_asset(fix: dict) -> str | None:
     return None
 
 
-def finalise_fixes(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
+async def lookup_routes(
+    ctx: RunCtx, fixes: list[dict], entry_assets: set[str], known: dict | None = None
+) -> dict[str, dict]:
+    """Who gets each fix: per fix asset, the owning team + on-call person (owners)
+    and, for an Internet-facing entry asset, the ADR that exposed it
+    (decision_trail). Deterministic plumbing, so the run does it (by="run"):
+    the model's job is choosing and proving the set, not paging through owners.
+
+    `known` = routes remembered from an earlier run whose on-call slot still covers
+    this run's clock (episodic memory): those assets are not looked up again."""
+    routes: dict[str, dict] = {}
+    for f in fixes:
+        asset = _route_asset(f)
+        if not asset or asset in routes:
+            continue
+        if known and asset in known:
+            routes[asset] = {**known[asset], "source": known[asset].get("source", "memory")}
+            continue
+        own, _ = await ctx.preload("fixer", "owners", {"asset_id": asset})
+        team = (((own or {}).get("data") or {}).get("teams") or [None])[0]
+        adrs = []
+        if asset in entry_assets:
+            trail, _ = await ctx.preload("fixer", "decision_trail", {"asset_id": asset})
+            adrs = [
+                {
+                    "adr": d["adr"],
+                    "title": d["title"],
+                    "date": d["date"],
+                    "approved_by": d["approved_by"]["name"],
+                    "role": d["approved_by"]["role"],
+                }
+                for d in ((trail or {}).get("data") or {}).get("decisions", [])
+            ]
+        routes[asset] = {
+            "asset": asset,
+            "team": {"id": team["id"], "name": team["name"]} if team else None,
+            "on_call": team.get("on_call") if team else None,
+            "adrs": adrs,
+            "source": "lookup",
+        }
+    return routes
+
+
+def _route_view(r: dict) -> dict:
+    oc = r.get("on_call") or {}
+    return {
+        "team": (r.get("team") or {}).get("name"),
+        "on_call": f"{oc.get('name')} ({oc.get('role')})" if oc else None,
+        "adrs": [
+            f"{a['adr']} {a['title']} ({a['date']}, approved by {a['approved_by']})"
+            for a in r.get("adrs", [])
+        ],
+        **({"remembered_from": r["source"]} if r.get("source", "lookup") != "lookup" else {}),
+    }
+
+
+def finalise_fixes(
+    ctx: RunCtx, outcome: LoopOutcome, tp: dict, routes: dict[str, dict] | None = None
+) -> dict:
     ans = outcome.final or {}
     options: dict[str, dict] = {}
     fix_info: dict[str, dict] = {}
@@ -511,8 +637,18 @@ def finalise_fixes(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
     other_sim = [r.result["data"]["fix_tokens"] for r in ctx.results_of("simulate_fix")]
     verified = sim["all_crown_jewels_disconnected"] if sim else None
 
-    owners = {r.args["asset_id"]: r.result["data"] for r in ctx.results_of("owners")}
-    trails = {r.result["data"]["asset"]: r.result["data"] for r in ctx.results_of("decision_trail")}
+    # Routing: the run's lookups/memory, plus any owners / decision_trail the model
+    # asked for itself (an asset the routes lacked).
+    routes = dict(routes or {})
+    for r in ctx.results_of("owners", "fixer"):
+        if r.args["asset_id"] not in routes:
+            team = (r.result["data"].get("teams") or [None])[0]
+            routes[r.args["asset_id"]] = {
+                "team": {"id": team["id"], "name": team["name"]} if team else None,
+                "on_call": team.get("on_call") if team else None,
+                "adrs": [],
+                "source": "lookup",
+            }
     sup = {s["finding"]: s for s in tp.get("suppressed", [])}
     tickets = {
         t.get("token"): t for t in ans.get("tickets", []) if isinstance(t, dict) and t.get("token")
@@ -521,9 +657,7 @@ def finalise_fixes(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
     for tok in tokens:
         f = fix_info.get(tok, {"token": tok})
         asset = _route_asset(f)
-        own = owners.get(asset, {})
-        team = (own.get("teams") or [None])[0]
-        trail = trails.get(asset, {})
+        route = routes.get(asset) or {}
         t = tickets.get(tok) or {}
         fixes.append(
             {
@@ -534,18 +668,10 @@ def finalise_fixes(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
                 "asset": asset,
                 "hostname": f.get("hostname"),
                 "cve": f.get("cve"),
-                "team": {"id": team["id"], "name": team["name"]} if team else None,
-                "on_call": team.get("on_call") if team else None,
-                "adrs": [
-                    {
-                        "adr": d["adr"],
-                        "title": d["title"],
-                        "date": d["date"],
-                        "approved_by": d["approved_by"]["name"],
-                        "role": d["approved_by"]["role"],
-                    }
-                    for d in trail.get("decisions", [])
-                ],
+                "team": route.get("team"),
+                "on_call": route.get("on_call"),
+                "adrs": route.get("adrs", []),
+                "routed_by": route.get("source"),
                 "accepted_risk": sup.get(tok),
                 "ticket": {
                     "title": str(t.get("title") or f"Remove attack step: {f.get('action', tok)}")[
