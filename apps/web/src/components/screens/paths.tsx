@@ -2,7 +2,8 @@
 
 import { ArrowRight, MousePointerClick } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 
 import { Seg, shortId } from "@/components/bits";
 import { WhyStepPanel } from "@/components/evidence";
@@ -101,27 +102,32 @@ function PathList({
 
 export function PathsScreen() {
   const ws = useWorkspace();
+  // A new run or a new selected finding starts a fresh view of the graph.
+  return <PathsView key={`${ws.runId}|${ws.finding}`} />;
+}
+
+function PathsView() {
+  const ws = useWorkspace();
   const board = useBoard();
-  const [scope, setScope] = useState<"finding" | "all">(ws.finding ? "finding" : "all");
+  const [scope, setScopeState] = useState<"finding" | "all">(ws.finding ? "finding" : "all");
   const [context, setContext] = useState(false);
   const [focus, setFocus] = useState<number | null>(null);
   const [edge, setEdge] = useState<string | null>(null);
   const finding = scope === "finding" ? ws.finding : null;
   const sub = useSubgraph({ finding, context });
 
-  useEffect(() => {
-    if (ws.finding) setScope("finding");
-  }, [ws.finding]);
-  useEffect(() => {
+  const setScope = (s: "finding" | "all") => {
+    setScopeState(s);
     setFocus(null);
     setEdge(null);
-  }, [finding, ws.runId]);
+  };
 
   const row = ws.finding ? board.data?.findings[ws.finding] : undefined;
+  const node = useSearchParams().get("node"); // from the company brain: an asset to point at
   const crown = board.data?.crown_jewels.map((c) => c.name).join(", ") ?? "crown jewel";
   const view = useMemo(
-    () => ({ focusPaths: focus === null ? null : [focus], selectedEdge: edge, focusNode: row?.asset ?? null }),
-    [focus, edge, row?.asset],
+    () => ({ focusPaths: focus === null ? null : [focus], selectedEdge: edge, focusNode: node ?? row?.asset ?? null }),
+    [focus, edge, row?.asset, node],
   );
 
   if (!ws.runId) return ws.orgs ? <NoRun /> : <LoadingRows label="Loading the workspace" />;

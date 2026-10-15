@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { Seg, day, shortId, shortRun } from "@/components/bits";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ORG_LABEL, type Scan, useWorkspace } from "@/lib/workspace";
+import { ORG_LABEL, type Scan, isStub, useWorkspace } from "@/lib/workspace";
 
 const NAV = [
   { href: "/findings", n: "01", label: "Findings", sub: "re-ranked", icon: ListOrdered },
@@ -123,7 +123,8 @@ function RunPicker() {
       >
         {ws.runs.map((r) => (
           <option key={r.id} value={r.id}>
-            {shortRun(r.id)} · {r.status} · scan {day(r.as_of)}
+            {shortRun(r.id)} · {r.status}
+            {isStub(r) ? " · stub model" : ""} · scan {day(r.as_of)}
           </option>
         ))}
       </select>

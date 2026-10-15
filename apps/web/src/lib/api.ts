@@ -69,7 +69,6 @@ export function useApi<T>(p: string | null): Loadable<T> {
   useEffect(() => {
     if (!p) return;
     let cancelled = false;
-    setState((s) => (s.key === p ? s : { key: p, data: cache.get(p) as T | undefined }));
     api<T>(p)
       .then((data) => {
         cache.set(p, data);

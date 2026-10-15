@@ -26,7 +26,14 @@ export const ORG_LABEL: Record<string, string> = {
   org_c: "Hybrid",
 };
 
-type Patch = Partial<{ org: string; scan: Scan; run: string | null; f: string | null; mode: Mode }>;
+type Patch = Partial<{
+  org: string;
+  scan: Scan;
+  run: string | null;
+  f: string | null;
+  mode: Mode;
+  watch: "1" | null; // Investigation: stream this run live
+}>;
 
 type Workspace = {
   org: string;
@@ -46,6 +53,10 @@ type Workspace = {
 
 const Ctx = createContext<Workspace | null>(null);
 
+export function isStub(r: RunHead): boolean {
+  return !!r.models?.some((m) => m.includes("fake"));
+}
+
 export function useWorkspace(): Workspace {
   const ws = useContext(Ctx);
   if (!ws) throw new Error("useWorkspace outside <WorkspaceProvider>");
@@ -58,6 +69,7 @@ function nextParams(current: URLSearchParams, patch: Patch): URLSearchParams {
     // A different scan graph: its runs and findings are different ones.
     p.delete("run");
     p.delete("f");
+    p.delete("watch");
   }
   for (const [k, v] of Object.entries(patch)) {
     if (v === null || v === undefined || v === "") p.delete(k);
@@ -85,7 +97,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [scanInfo],
   );
   const explicit = sp.get("run");
-  const runId = explicit || runs.find((r) => r.status === "complete")?.id || null;
+  // Replay defaults to the newest finished run made with a real model; a
+  // stub-model test run never silently becomes what the demo shows.
+  const finished = runs.filter((r) => r.status === "complete");
+  const runId = explicit || (finished.find((r) => !isStub(r)) ?? finished[0])?.id || null;
 
   const href = useCallback(
     (path: string, patch: Patch = {}) => {

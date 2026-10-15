@@ -7,6 +7,7 @@ export type RunHead = {
   status: string;
   started?: number;
   as_of?: number;
+  models?: string[] | null;
 };
 
 export type ScanInfo = {

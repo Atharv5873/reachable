@@ -500,7 +500,8 @@ RETURN properties(s) ORDER BY s.seq LIMIT $limit
 """
 READ_RECENT_RUNS = """
 MATCH (r:Run) WHERE r.kind IN ['agent_triage', 'sentinel'] AND r.carried_from IS NULL
-RETURN r.id, r.kind, r.scan, r.status, r.started, r.as_of ORDER BY r.started DESC LIMIT $limit
+RETURN r.id, r.kind, r.scan, r.status, r.started, r.as_of, r.models
+ORDER BY r.started DESC LIMIT $limit
 """
 READ_ALERTS = """
 MATCH (r:Run)-[:RAISED]->(a:Alert)
@@ -968,7 +969,7 @@ class MemoryRepo:
         return [_decode(dict(r[0])) for r in rows]
 
     def recent_runs(self, org: str, limit: int = 10) -> list[dict]:
-        keys = ("id", "kind", "scan", "status", "started", "as_of")
+        keys = ("id", "kind", "scan", "status", "started", "as_of", "models")
         return [
             dict(zip(keys, r, strict=True))
             for r in self._r(org, READ_RECENT_RUNS, {"limit": limit})

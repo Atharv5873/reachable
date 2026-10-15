@@ -252,10 +252,13 @@ export function AttackGraph({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const [ready, setReady] = useState(false);
+  // "ready" belongs to one graph: a new graph is not ready until it is drawn.
+  const [readyFor, setReadyFor] = useState<unknown>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const handlers = useRef({ onEdge, onNode });
-  handlers.current = { onEdge, onNode };
+  useEffect(() => {
+    handlers.current = { onEdge, onNode };
+  }, [onEdge, onNode]);
 
   const { nodes, edges, clipped } = useMemo(() => {
     const keep = graph.nodes.slice(0, CLIENT_MAX_NODES);
@@ -266,12 +269,12 @@ export function AttackGraph({
       clipped: graph.nodes.length > keep.length,
     };
   }, [graph]);
+  const ready = readyFor === nodes;
 
   // Build (or rebuild) when the graph itself changes.
   useEffect(() => {
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    setReady(false);
     loadCytoscape()
       .then((cytoscape) => {
         if (cancelled || !box.current) return;
@@ -344,11 +347,11 @@ export function AttackGraph({
             setTimeout(() => {
               if (cancelled) return;
               cy.elements().removeClass("hidden-init");
-              setReady(true);
+              setReadyFor(nodes);
             }, 160 + (max + 1) * STEP),
           );
         } else {
-          setReady(true);
+          setReadyFor(nodes);
         }
       })
       .catch((err) => !cancelled && setFailed(String(err)));
@@ -382,7 +385,7 @@ export function AttackGraph({
         const d = n.data() as GNode;
         const inFocus = !focus || d.paths.some((p) => focus.has(p));
         if (d.context) n.addClass("context");
-        else if (inFocus && d.paths.length) n.addClass(focus ? "onpath hot" : "onpath");
+        else if (inFocus && d.paths.length && !severed) n.addClass(focus ? "onpath hot" : "onpath");
         if (focus && !inFocus && !d.context && d.kind !== "internet" && !d.crown) n.addClass("dim");
         if (d.crown) n.addClass("crown");
         if (d.crown && severed) n.addClass("safe");
