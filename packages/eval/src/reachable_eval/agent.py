@@ -22,7 +22,9 @@ not add Run/AgentStep nodes the demo's replay would pick up.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import time
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -30,7 +32,7 @@ from typing import Any
 
 import litellm
 
-from reachable_agents.llm import Deployment, RouterLLM, deployments
+from reachable_agents.llm import Deployment, Pacer, RouterLLM, deployments
 from reachable_agents.loop import AgentSpec, run_agent
 from reachable_agents.mcp_tools import CallOutcome
 from reachable_agents.runtime import Budget, RunCtx
@@ -134,11 +136,36 @@ class TraceRepo:
         return SimpleNamespace(id=f"{run_id}:step:{len(self.steps):04d}", seq=len(self.steps))
 
 
-def eval_llm(seed: int, settings: Settings | None = None) -> RouterLLM:
+# One pacer for every run in the process: the matrix runs 4 jobs at once, and
+# the key's Gemini quota is per minute per model (free tier: 15). Per-run pacers
+# (RouterLLM's own) would each allow the full rate. EVAL_RPM=0 turns it off.
+EVAL_RPM = int(os.environ.get("EVAL_RPM", "12"))
+_PACER = Pacer(EVAL_RPM, max_wait=600.0)
+_PACER_LOCK: dict[int, asyncio.Lock] = {}  # one lock per event loop
+
+
+class PacedLLM:
+    """RouterLLM behind the shared pacer, counting the seconds a run spent waiting
+    (pacing, 429 back-off) so latency is reported without them."""
+
+    def __init__(self, inner: RouterLLM) -> None:
+        self.inner, self.models, self.waited_s = inner, inner.models, 0.0
+
+    async def chat(self, messages, tools, *, agent, tool_choice="auto"):
+        t = time.perf_counter()
+        lock = _PACER_LOCK.setdefault(id(asyncio.get_running_loop()), asyncio.Lock())
+        async with lock:  # waiters queue in order; the slot is taken under the lock
+            await _PACER.slot()
+        reply = await self.inner.chat(messages, tools, agent=agent, tool_choice=tool_choice)
+        self.waited_s += max(0.0, time.perf_counter() - t - reply.ms / 1000)
+        return reply
+
+
+def eval_llm(seed: int, settings: Settings | None = None) -> PacedLLM:
     """The primary deployment ONLY: a fallback would swap the model mid-matrix."""
     s = settings or get_settings()
     primary: list[Deployment] = [d for d in deployments(s) if d.name == "primary"]
-    return RouterLLM(s, deps=primary, seed=seed)
+    return PacedLLM(RouterLLM(s, deps=primary, seed=seed))
 
 
 def usd(model: str, tokens_in: int, tokens_out: int) -> float | None:
@@ -192,6 +219,8 @@ class LLMPrioritiser:
         model = next(iter(llm.models.values()), "?") if hasattr(llm, "models") else llm.model
         st = ctx.stats()
         cost = usd(model, st["tokens_in"], st["tokens_out"])
+        wall = round(time.perf_counter() - t0, 1)
+        waited = round(getattr(llm, "waited_s", 0.0), 1)
         if cost is not None and extra.get("embed_usd"):
             cost = round(cost + extra["embed_usd"], 6)
         return Ranking(
@@ -221,7 +250,9 @@ class LLMPrioritiser:
                 "tokens_in": st["tokens_in"],
                 "tokens_out": st["tokens_out"],
                 "usd": cost,
-                "wall_s": round(time.perf_counter() - t0, 1),
+                "wall_s": wall,
+                "waited_s": waited,  # rate-limit pacing / back-off inside wall_s
+                "active_s": round(wall - waited, 1),
                 "fix_tokens_dropped": fix_dropped,
                 **extra,
             },

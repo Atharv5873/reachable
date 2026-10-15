@@ -138,7 +138,7 @@ function Comparison({ d }: { d: any }) {
       num(mean(o.fix_paths_per_fix)),
       num(mean(c.llm_calls), 1),
       mean(c.usd) != null ? `$${mean(c.usd).toFixed(4)}` : "-",
-      `${num(mean(c.wall_s), 1)} s`,
+      `${num(mean(c.active_s ?? c.wall_s), 1)} s`,
     ];
   });
   rows.push([
@@ -159,7 +159,7 @@ function Comparison({ d }: { d: any }) {
       sub={`${(agg.scans ?? []).length} scans (${held} held out) · ${d.model} · seeds ${(d.seeds ?? []).join(", ")} · K = ${d.k} · ${d.generated}`}
     >
       <Table
-        head={["prioritiser", "NDCG@10", "P@10", "path recall@10", "decoys@10", "paths cut / fix", "LLM calls / run", "$ / run", "wall / run"]}
+        head={["prioritiser", "NDCG@10", "P@10", "path recall@10", "decoys@10", "paths cut / fix", "LLM calls / run", "$ / run", "active s / run"]}
         rows={rows}
       />
       <div className="border-t border-line px-5 py-4 text-xs text-fg-2">

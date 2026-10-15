@@ -30,7 +30,7 @@ HEADLINE = (
     ("decoy_rate@10", "decoys@10", False),
     ("fix_paths_per_fix", "paths cut / fix", True),
 )
-COST = ("llm_calls", "tool_calls", "tokens_in", "tokens_out", "usd", "wall_s")
+COST = ("llm_calls", "tool_calls", "tokens_in", "tokens_out", "usd", "wall_s", "active_s")
 SPLITS = {"all": ("v1", "v2"), "v1": ("v1",), "v2": ("v2",)}
 
 
@@ -70,6 +70,8 @@ def aggregate(scored: list[dict]) -> dict:
     totals = defaultdict(float)
     for p in prioritisers:
         runs = [s["meta"] for s in scored if s["prioritiser"] == p]
+        for m in runs:  # raw files from before wait accounting: active = wall
+            m.setdefault("active_s", m.get("wall_s"))
         cost[p] = {k: spread([float(m.get(k) or 0) for m in runs]) for k in COST}
         cost[p]["runs"] = len(runs)
         cost[p]["invalid_ids_per_run"] = spread(
@@ -176,7 +178,7 @@ def comparison_md(doc: dict) -> str:
                 "LLM calls / run",
                 "tokens in+out / run",
                 "$ / run",
-                "wall s / run",
+                "s / run (active)",
             ]
         ),
         _row(["---"] * 10),
@@ -197,7 +199,7 @@ def comparison_md(doc: dict) -> str:
                     _fmt(c["llm_calls"], n=1),
                     f"{tok:,.0f}",
                     _fmt(c["usd"], money=True),
-                    _fmt(c["wall_s"], n=1),
+                    _fmt(c["active_s"], n=1),
                 ]
             )
         )
@@ -220,6 +222,8 @@ def comparison_md(doc: dict) -> str:
     )
     L += [
         "",
+        "*s / run (active)* is wall time minus the seconds spent waiting on the Gemini "
+        "key's rate limit (raw files keep both). "
         "P@10's ceiling is below 100% where a scan has fewer than 10 relevant findings "
         "(org_b: 7). *paths cut / fix* uses the prioritiser's own fix set when it gave one, "
         "else its top M findings with M = the oracle min-cut size; the ceiling row is the "
@@ -409,7 +413,15 @@ def build_ablation(scored: list[dict], **meta) -> dict:
     def block(runs):
         fl = [flat(r["score"]) for r in runs]
         out = {m: spread([f[m] for f in fl]) for m in ABL_METRICS}
-        for k in ("llm_calls", "tool_calls", "tokens_in", "tokens_out", "usd", "wall_s"):
+        for k in (
+            "llm_calls",
+            "tool_calls",
+            "tokens_in",
+            "tokens_out",
+            "usd",
+            "wall_s",
+            "active_s",
+        ):
             out[k] = spread([float(r["meta"].get(k) or 0) for r in runs])
         out["runs"] = len(runs)
         out["answered"] = sum(bool(r["meta"].get("llm_answered")) for r in runs)

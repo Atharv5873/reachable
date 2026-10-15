@@ -210,6 +210,11 @@ async def run_jobs(
             t = time.perf_counter()
             r = await make(p).rank(data[ref.key], seed=seed)
             r.meta.setdefault("wall_s", round(time.perf_counter() - t, 2))
+            r.meta.setdefault("active_s", r.meta["wall_s"])
+            if r.meta.get("llm_failures"):
+                # The model was unavailable (a quota, an outage): this is not the
+                # prioritiser's answer. Keep nothing; a rerun retries the job.
+                raise RuntimeError(f"model unavailable during the run ({r.meta.get('stop')})")
             raw = to_raw(r, data[ref.key], seed)
             write_json(path, raw)
             out.append(raw)
