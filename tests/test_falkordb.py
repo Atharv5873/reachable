@@ -33,6 +33,11 @@ def test_falkordb_counts_match_generator(db):
             + len(ds.datastores)
             + len(ds.controls)
             + len(ds.zones)
+            + len(ds.persons)
+            + len(ds.teams)
+            + len(ds.oncalls)
+            + len(ds.adrs)
+            + len(ds.tickets)
             + 1  # +1 Internet
         )
         assert stats["nodes"] == node_total

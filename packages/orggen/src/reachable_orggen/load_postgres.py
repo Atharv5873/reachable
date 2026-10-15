@@ -28,6 +28,13 @@ _NODE_TABLES = {
     "secrets": lambda ds: [(s.id, s.kind, s.requires_priv) for s in ds.secrets],
     "datastores": lambda ds: [(d.id, d.kind, d.crown_jewel, d.sensitivity) for d in ds.datastores],
     "controls": lambda ds: [(c.id, c.kind) for c in ds.controls],
+    "persons": lambda ds: [(p.id, p.name, p.role) for p in ds.persons],
+    "teams": lambda ds: [(t.id, t.name, t.change_effort) for t in ds.teams],
+    "oncalls": lambda ds: [(o.id, o.window, o.start, o.end, o.current) for o in ds.oncalls],
+    "adrs": lambda ds: [
+        (a.id, a.title, a.decision, a.date, a.status, a.port, a.cidr) for a in ds.adrs
+    ],
+    "tickets": lambda ds: [(t.id, t.title, t.status, t.opened, t.closed) for t in ds.tickets],
 }
 
 _DDL = {
@@ -43,6 +50,16 @@ _DDL = {
     "secrets": "id text primary key, kind text, requires_priv bool",
     "datastores": "id text primary key, kind text, crown_jewel bool, sensitivity text",
     "controls": "id text primary key, kind text",
+    "persons": "id text primary key, name text, role text",
+    "teams": "id text primary key, name text, change_effort int",
+    "oncalls": (
+        "id text primary key, time_window text, start_ts bigint, end_ts bigint, current bool"
+    ),
+    "adrs": (
+        "id text primary key, title text, decision text, date bigint, status text, "
+        "port int, cidr text"
+    ),
+    "tickets": "id text primary key, title text, status text, opened bigint, closed bigint",
 }
 
 _COLS = {
@@ -55,6 +72,11 @@ _COLS = {
     "secrets": "(id, kind, requires_priv)",
     "datastores": "(id, kind, crown_jewel, sensitivity)",
     "controls": "(id, kind)",
+    "persons": "(id, name, role)",
+    "teams": "(id, name, change_effort)",
+    "oncalls": "(id, time_window, start_ts, end_ts, current)",
+    "adrs": "(id, title, decision, date, status, port, cidr)",
+    "tickets": "(id, title, status, opened, closed)",
 }
 
 

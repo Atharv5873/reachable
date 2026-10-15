@@ -15,6 +15,7 @@ import random
 from dataclasses import dataclass
 
 from .catalog import Catalog
+from .company import plant_company
 from .generate import GenConfig, generate_background
 from .ground_truth import GroundTruth, PlantedPath
 from .model import Dataset
@@ -41,6 +42,7 @@ def generate_org(org: str, seed: int, cfg: GenConfig) -> OrgBuild:
     catalog = Catalog()
     b = generate_background(org, seed, cfg, catalog)
     gt = plant_org(b, catalog)
+    plant_company(b, gt)
     res = _finalise(b.ds, gt)
     return OrgBuild(dataset=b.ds, ground_truth=gt, oracle=res)
 
@@ -54,6 +56,7 @@ def drift_org(org: str, seed: int, cfg: GenConfig) -> tuple[OrgBuild, PlantedPat
     b = generate_background(org, seed, cfg, catalog)
     bg_software = list(b.ds.software)  # before planting: never touch a planted spine
     gt = plant_org(b, catalog)
+    plant_company(b, gt)
 
     drng = random.Random(f"{org}:{seed}:drift")
 
@@ -121,6 +124,11 @@ def dataset_hash(ds: Dataset) -> str:
         "secrets": sorted((s.id, s.kind, s.requires_priv) for s in ds.secrets),
         "datastores": sorted((d.id, d.kind, d.crown_jewel, d.sensitivity) for d in ds.datastores),
         "controls": sorted((c.id, c.kind) for c in ds.controls),
+        "persons": sorted((p.id, p.name, p.role) for p in ds.persons),
+        "teams": sorted((t.id, t.name, t.change_effort) for t in ds.teams),
+        "oncalls": sorted((o.id, o.window, o.current) for o in ds.oncalls),
+        "adrs": sorted((a.id, a.title, a.decision, a.date) for a in ds.adrs),
+        "tickets": sorted((t.id, t.title, t.status, t.opened) for t in ds.tickets),
         "edges": sorted(
             (e.src, e.dst, e.type, json.dumps(e.props, sort_keys=True)) for e in ds.edges
         ),

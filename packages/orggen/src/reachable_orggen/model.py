@@ -104,6 +104,57 @@ class Zone:
     trust: int  # 0 (internet) .. higher = more trusted/internal
 
 
+# --- Company layer (Track 03): who owns what, who decided what ------------
+@dataclass
+class Person:
+    id: str
+    name: str  # invented, see names.person_name
+    role: str  # job title, e.g. "Engineering Manager"
+
+
+@dataclass
+class Team:
+    id: str
+    name: str
+    # 0 normally, 1 for a team under a change freeze / heavy change process.
+    # Feeds the effort estimate of fixes on assets the team owns.
+    change_effort: int = 0
+
+
+@dataclass
+class OnCall:
+    """One slot of a team's on-call rotation. `current` marks the live slot, so
+    "who is on call now" does not depend on the reader's wall clock."""
+
+    id: str
+    window: str  # "2023-12-25/2024-01-01"
+    start: int  # epoch seconds
+    end: int
+    current: bool
+
+
+@dataclass
+class ADR:
+    """Architecture Decision Record: why something is the way it is."""
+
+    id: str
+    title: str
+    decision: str
+    date: int  # epoch seconds
+    status: str = "accepted"
+    port: int | None = None  # the exposure it decided, when it is about one
+    cidr: str | None = None
+
+
+@dataclass
+class Ticket:
+    id: str
+    title: str
+    status: str  # open | closed
+    opened: int  # epoch seconds
+    closed: int | None = None
+
+
 # --- Edges (typed tuples of ids + a small property dict) -------------------
 @dataclass
 class Edge:
@@ -148,6 +199,12 @@ class Dataset:
     reach_rules: list[ReachRule] = field(default_factory=list)
     edges: list[Edge] = field(default_factory=list)
     internet_id: str = "internet"
+    # Company layer
+    persons: list[Person] = field(default_factory=list)
+    teams: list[Team] = field(default_factory=list)
+    oncalls: list[OnCall] = field(default_factory=list)
+    adrs: list[ADR] = field(default_factory=list)
+    tickets: list[Ticket] = field(default_factory=list)
 
     def add_edge(self, src: str, dst: str, type: str, **props) -> None:
         self.edges.append(Edge(src, dst, type, props))

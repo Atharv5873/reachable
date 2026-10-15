@@ -179,7 +179,7 @@ def test_force_limit():
 
 
 def test_stubs_are_typed_todos(tools):
-    for fn in (tools.owners, tools.triage_memory):
+    for fn in (tools.triage_memory,):
         with pytest.raises(NotImplementedError):
             fn(T.ORG, "x")
     with pytest.raises(NotImplementedError):

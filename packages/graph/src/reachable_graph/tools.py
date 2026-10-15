@@ -37,6 +37,7 @@ from reachable_core.db import connect
 from reachable_core.schema import THREATINTEL_GRAPH
 from reachable_core.settings import get_settings
 
+from .company_tools import CompanyToolsMixin
 from .models import (
     MAX_BFS_NODES,
     MAX_ROWS,
@@ -72,6 +73,20 @@ _KIND_LABEL = {
     "ds": "DataStore",
     "control": "Control",
     "zone": "Zone",
+    # company layer
+    "person": "Person",
+    "team": "Team",
+    "oncall": "OnCall",
+    "adr": "ADR",
+    "ticket": "Ticket",
+    # memory layer
+    "run": "Run",
+    "step": "AgentStep",
+    "triage": "Triage",
+    "verdict": "Verdict",
+    "riskacc": "RiskAcceptance",
+    "pattern": "Pattern",
+    "playbook": "Playbook",
 }
 # Labels the attack layer runs between (helper labels are hidden from output).
 ATTACK_LABELS = {"Internet", "Asset", "Identity", "Secret", "DataStore"}
@@ -130,8 +145,11 @@ _PATH_PROJECTION = """
 """
 
 
-class GraphTools:
-    """The tool library, bound to one FalkorDB connection and an org allowlist."""
+class GraphTools(CompanyToolsMixin):
+    """The tool library, bound to one FalkorDB connection and an org allowlist.
+
+    The company-layer tools (owners, decision_trail, company_query) live in
+    company_tools.py and share this class's read-only query path."""
 
     def __init__(
         self,
@@ -983,10 +1001,6 @@ class GraphTools:
         )
 
     # ======================================================== S3/S4 stubs
-    def owners(self, org: str, asset_id: str) -> ToolResult:
-        """TODO(S3): who owns an asset (team / on-call) once the company layer exists."""
-        raise NotImplementedError("owners arrives with the S3 company layer")
-
     def triage_memory(self, org: str, finding_id: str) -> ToolResult:
         """TODO(S3/S4): prior triage decisions for a finding (agent memory)."""
         raise NotImplementedError("triage_memory arrives with S3/S4 agent memory")
@@ -1113,4 +1127,8 @@ TOOL_NAMES = [
     "vuln_intel",
     "simulate_fix",
     "run_cypher_readonly",
+    # company layer (S3)
+    "owners",
+    "decision_trail",
+    "company_query",
 ]

@@ -45,6 +45,12 @@ step:* token that removes it if fixed).
 Typical flow: exposure_surface -> attack_paths -> why_step on surprising hops ->
 min_cut for the smallest fix set -> simulate_fix to PROVE it before proposing.
 vuln_intel explains a CVE. run_cypher_readonly is a last resort.
+
+The same graphs hold the company layer (teams, people, on-call, ADRs, tickets):
+owners routes a fix to a team and tonight's on-call person; decision_trail and
+company_query answer "why is this exposed and who approved it?" with the ADR as
+the source. triage_memory recalls prior verdicts, live risk acceptances and
+recurring patterns for findings before you triage them again.
 Every result carries `evidence` (ids that exist in the graph): cite them.
 """
 
@@ -72,7 +78,7 @@ def _call(fn, *args, **kwargs) -> ToolResult:
 
 Org = arg(M.OrgInput, "org", str)
 
-server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.2.0")
+server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.3.0")
 
 
 @server.tool(
@@ -225,8 +231,10 @@ def simulate_fix(
         "LAST RESORT escape hatch: run a read-only openCypher query (FalkorDB dialect) on an org "
         "graph. Writes are rejected by the server (GRAPH.RO_QUERY), a LIMIT is forced, a timeout "
         "applies, and the call is logged. Labels: Internet, Asset, Software, Vuln, Finding, "
-        "Identity, Secret, DataStore, Control, Zone; attack layer: ATTACK_STEP {key, rule, "
-        "technique, likelihood, cost, fix_token, because}. USE only when no typed tool answers "
+        "Identity, Secret, DataStore, Control, Zone; company: Team, Person, OnCall, ADR, Ticket; "
+        "memory: Run, AgentStep, Triage, Verdict, RiskAcceptance, Pattern, Playbook; attack "
+        "layer: ATTACK_STEP {key, rule, technique, likelihood, cost, fix_token, because}. "
+        "USE only when no typed tool answers "
         "the question. Do NOT use for paths, cuts or blast radius: the typed tools are capped, "
         "faster and return evidence."
     ),
@@ -238,6 +246,61 @@ def run_cypher_readonly(
     limit: arg(M.RunCypherInput, "limit", int) = 50,
 ) -> ToolResult:
     return _call(_tools().run_cypher_readonly, org, query, params or {}, limit=limit)
+
+
+# ------------------------------------------------------------ company layer
+@server.tool(
+    name="owners",
+    description=(
+        "Who owns an asset or data store: the owning team(s), every member with their role, and "
+        "the person on call RIGHT NOW for each team. USE to route a fix or an incident to a "
+        "human ('who do I page about this host?'). Do NOT use to explain why something is "
+        "configured the way it is (decision_trail) or what an attacker can do (attack_paths)."
+    ),
+)
+def owners(org: Org, asset_id: arg(M.OwnersInput, "asset_id", str)) -> ToolResult:
+    return _call(_tools().owners, org, asset_id)
+
+
+@server.tool(
+    name="decision_trail",
+    description=(
+        "The decision trail behind an asset's configuration: every ADR (architecture decision "
+        "record) that changed it, optionally only those about one port, each with title, "
+        "decision text, date and the approver (name, role, team), next to the asset's live "
+        "Internet exposure and its exploitable Internet attack steps. Name the asset by asset_id "
+        "OR hostname. USE for 'why is port X open on Y?' and 'who signed off on this?'; cite the "
+        "ADR id as the source. An empty trail means an UNDOCUMENTED change, worth flagging. Do "
+        "NOT use for ownership or on-call (owners)."
+    ),
+)
+def decision_trail(
+    org: Org,
+    asset_id: arg(M.DecisionTrailInput, "asset_id", str | None) = None,
+    hostname: arg(M.DecisionTrailInput, "hostname", str | None) = None,
+    port: arg(M.DecisionTrailInput, "port", int | None) = None,
+) -> ToolResult:
+    return _call(_tools().decision_trail, org, asset_id=asset_id, hostname=hostname, port=port)
+
+
+@server.tool(
+    name="company_query",
+    description=(
+        "Company-brain questions as a FIXED set of parameterised intents (never free text): "
+        "who_owns {asset_id}; who_is_on_call {team_id | asset_id}; why_exposed {asset_id | "
+        "hostname, port?}; who_approved {asset_id | hostname, port?}; fix_history {asset_id} "
+        "(tickets that fixed or are fixing findings on the asset). Returns a one-line `answer` "
+        "plus evidence (ADR / ticket / person ids). USE when a person asks a who/why question "
+        "about the org; map their words onto one intent. Do NOT pass Cypher or prose in params: "
+        "unknown keys are rejected."
+    ),
+)
+def company_query(
+    org: Org,
+    question_kind: arg(M.CompanyQueryInput, "question_kind", M.CompanyIntent),
+    params: arg(M.CompanyQueryInput, "params", dict[str, Any] | None) = None,
+) -> ToolResult:
+    return _call(_tools().company_query, org, question_kind, params or {})
 
 
 # --------------------------------------------------------------------- HTTP

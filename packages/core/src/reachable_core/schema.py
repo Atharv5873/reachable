@@ -33,6 +33,25 @@ ORG_INDEXES: dict[str, str] = {
     "Control": "id",
     "Zone": "id",
     "Internet": "id",
+    # Company layer (Track 03)
+    "Person": "id",
+    "Team": "id",
+    "OnCall": "id",
+    "ADR": "id",
+    "Ticket": "id",
+}
+
+# Memory layer (Track 02): agent memory lives in the org graph too, written only
+# by reachable_graph.memory. Indexed so every repository lookup is a seek.
+MEMORY_INDEXES: dict[str, str] = {
+    "Run": "id",
+    "AgentStep": "id",
+    "Triage": "id",
+    "Verdict": "id",
+    "RiskAcceptance": "id",
+    "Pattern": "id",
+    "Playbook": "id",
+    "Technique": "id",
 }
 
 # Identity sub-labels (an Identity node also carries exactly one of these).

@@ -160,6 +160,9 @@ def test_every_tool_is_read_only_on_the_org_graph(rec):
         "vuln_intel": lambda: tools.vuln_intel("CVE-2021-44228", org=T.ORG),
         "simulate_fix": lambda: tools.simulate_fix(T.ORG, [T.F4]),
         "run_cypher_readonly": lambda: tools.run_cypher_readonly(T.ORG, "MATCH (n) RETURN n"),
+        "owners": lambda: tools.owners(T.ORG, T.WEB1),
+        "decision_trail": lambda: tools.decision_trail(T.ORG, asset_id=T.WEB1, port=443),
+        "company_query": lambda: tools.company_query(T.ORG, "who_owns", {"asset_id": T.WEB1}),
     }
     assert set(calls) == set(TOOL_NAMES)
     if "threatintel" not in r.list_graphs():  # vuln_intel reads the threatintel graph

@@ -30,6 +30,11 @@ _NODE_LABEL = {
     "DataStore": lambda ds: ds.datastores,
     "Control": lambda ds: ds.controls,
     "Zone": lambda ds: ds.zones,
+    "Person": lambda ds: ds.persons,
+    "Team": lambda ds: ds.teams,
+    "OnCall": lambda ds: ds.oncalls,
+    "ADR": lambda ds: ds.adrs,
+    "Ticket": lambda ds: ds.tickets,
 }
 
 
@@ -48,6 +53,8 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
 
     for label, prop in ORG_INDEXES.items():
         create_range_index(g, label, prop)
+    # decision_trail / company_query accept a hostname ("why is gw-01 exposed?").
+    create_range_index(g, "Asset", "hostname")
 
     # --- Internet (one node) ---
     g.query("MERGE (:Internet {id: $id})", {"id": ds.internet_id})
@@ -145,6 +152,15 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
         "UNWIND $rows AS r MERGE (c:Control {id: r.id}) SET c.kind = r.kind",
         [vars(c) for c in ds.controls],
     )
+
+    # --- Company layer: people, teams, rotations, decisions, tickets ---
+    # Plain property bags, loaded the same way: `SET n += r` copies every field.
+    # A None field (an ADR without a port, an open ticket's `closed`) is simply
+    # not stored, because FalkorDB drops properties set to null.
+    for label in ("Person", "Team", "OnCall", "ADR", "Ticket"):
+        rows = [vars(o) for o in _NODE_LABEL[label](ds)]
+        if rows:
+            run_batched(g, f"UNWIND $rows AS r MERGE (n:{label} {{id: r.id}}) SET n += r", rows)
 
     # --- Edges, grouped by (type, src label, dst label) for index-backed MATCH ---
     label = _label_map(ds)

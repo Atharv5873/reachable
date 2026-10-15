@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from reachable_core.attack_rules import HOP_CAP
 
@@ -27,6 +27,7 @@ _ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_:.\-]{0,127}$")
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_:.\-]{0,255}$")
 _CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$")
 _PARAM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_HOST_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}$")
 
 
 def _match(rx: re.Pattern, what: str):
@@ -42,6 +43,8 @@ NodeId = Annotated[str, AfterValidator(_match(_ID_RE, "node id"))]
 FixToken = Annotated[str, AfterValidator(_match(_TOKEN_RE, "fix token"))]
 CveId = Annotated[str, AfterValidator(_match(_CVE_RE, "CVE id"))]
 OrgName = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")]
+Hostname = Annotated[str, AfterValidator(_match(_HOST_RE, "hostname"))]
+Port = Annotated[int, Field(ge=1, le=65535)]
 
 
 # --- Inputs -----------------------------------------------------------------
@@ -119,6 +122,93 @@ class RunCypherInput(OrgInput):
         bad = [k for k in self.params if not _PARAM_RE.match(k)]
         if bad:
             raise ValueError(f"invalid parameter names: {bad}")
+
+
+# --- Company layer (Track 03) ------------------------------------------------
+class OwnersInput(OrgInput):
+    asset_id: NodeId = Field(description="An Asset or DataStore id.")
+
+
+class _Exposure(BaseModel):
+    """An exposure, named by asset id OR hostname, optionally narrowed to a port."""
+
+    model_config = ConfigDict(extra="forbid")
+    asset_id: NodeId | None = Field(None, description="Asset id (or give hostname).")
+    hostname: Hostname | None = Field(None, description="Asset hostname (or give asset_id).")
+    port: Port | None = Field(None, description="Only decisions about this port.")
+
+    @model_validator(mode="after")
+    def _one_of(self):
+        if (self.asset_id is None) == (self.hostname is None):
+            raise ValueError("give exactly one of asset_id or hostname")
+        return self
+
+
+class DecisionTrailInput(OrgInput, _Exposure):
+    pass
+
+
+# company_query: a FIXED set of intents, each with its own parameter model.
+# Never free text to Cypher: the agent maps a question onto one of these.
+class WhoOwnsParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    asset_id: NodeId
+
+
+class WhoIsOnCallParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    team_id: NodeId | None = None
+    asset_id: NodeId | None = None
+
+    @model_validator(mode="after")
+    def _one_of(self):
+        if (self.team_id is None) == (self.asset_id is None):
+            raise ValueError("give exactly one of team_id or asset_id")
+        return self
+
+
+class WhyExposedParams(_Exposure):
+    pass
+
+
+class WhoApprovedParams(_Exposure):
+    pass
+
+
+class FixHistoryParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    asset_id: NodeId
+
+
+COMPANY_INTENTS: dict[str, type[BaseModel]] = {
+    "who_owns": WhoOwnsParams,
+    "who_is_on_call": WhoIsOnCallParams,
+    "why_exposed": WhyExposedParams,
+    "who_approved": WhoApprovedParams,
+    "fix_history": FixHistoryParams,
+}
+CompanyIntent = Literal["who_owns", "who_is_on_call", "why_exposed", "who_approved", "fix_history"]
+
+
+class CompanyQueryInput(OrgInput):
+    question_kind: CompanyIntent = Field(
+        description="who_owns {asset_id} | who_is_on_call {team_id|asset_id} | "
+        "why_exposed {asset_id|hostname, port?} | who_approved {asset_id|hostname, port?} | "
+        "fix_history {asset_id}"
+    )
+    params: dict[str, Any] = Field(
+        default_factory=dict, description="Parameters for the chosen question_kind."
+    )
+
+    def typed_params(self) -> BaseModel:
+        return COMPANY_INTENTS[self.question_kind].model_validate(self.params)
+
+
+# --- Memory layer (Track 02) -------------------------------------------------
+class TriageMemoryInput(OrgInput):
+    finding_ids: list[NodeId] = Field(
+        min_length=1, max_length=MAX_ROWS, description="Finding ids to recall memory for."
+    )
 
 
 # --- Output -----------------------------------------------------------------
