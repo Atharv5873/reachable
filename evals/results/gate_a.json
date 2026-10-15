@@ -1,0 +1,538 @@
+{
+  "generated": "2026-10-15 15:09:21",
+  "reps": 20,
+  "orgs": {
+    "org_a": {
+      "org": "org_a",
+      "returned_paths": 6,
+      "recall_by_difficulty": {
+        "easy": {
+          "planted": 1,
+          "found": 1,
+          "found_from_seeds": 1,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        },
+        "medium": {
+          "planted": 1,
+          "found": 1,
+          "found_from_seeds": 1,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        },
+        "hard": {
+          "planted": 4,
+          "found": 4,
+          "found_from_seeds": 4,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        }
+      },
+      "precision_vs_planted": 1.0,
+      "decoy_precision": 1.0,
+      "decoys_in_top_paths": 0,
+      "min_cut": {
+        "entry": {
+          "size": 6,
+          "max_flow": 6,
+          "oracle_size": 6,
+          "size_le_oracle": true,
+          "equals_oracle_set": false,
+          "disconnects_all_crown_jewels": true,
+          "fix_tokens": [
+            "org_a:finding:06846",
+            "org_a:finding:06848",
+            "org_a:finding:06850",
+            "org_a:finding:06851",
+            "org_a:finding:06853",
+            "org_a:finding:06855"
+          ]
+        },
+        "crown": {
+          "size": 6,
+          "max_flow": 6,
+          "oracle_size": 6,
+          "size_le_oracle": true,
+          "equals_oracle_set": true,
+          "disconnects_all_crown_jewels": true,
+          "fix_tokens": [
+            "step:db:org_a:secret:00001:org_a:ds:00001",
+            "step:db:org_a:secret:00002:org_a:ds:00001",
+            "step:db:org_a:secret:00004:org_a:ds:00001",
+            "step:db:org_a:secret:00006:org_a:ds:00001",
+            "step:read:org_a:ident:00003:org_a:ds:00001",
+            "step:read:org_a:ident:00005:org_a:ds:00001"
+          ]
+        }
+      },
+      "oracle_cut": [
+        "step:db:org_a:secret:00001:org_a:ds:00001",
+        "step:db:org_a:secret:00002:org_a:ds:00001",
+        "step:db:org_a:secret:00004:org_a:ds:00001",
+        "step:db:org_a:secret:00006:org_a:ds:00001",
+        "step:read:org_a:ident:00003:org_a:ds:00001",
+        "step:read:org_a:ident:00005:org_a:ds:00001"
+      ],
+      "evidence": {
+        "nodes_checked": 328,
+        "edges_checked": 225,
+        "missing_nodes": [],
+        "missing_edges": [],
+        "validity": 1.0
+      },
+      "latency": {
+        "attack_paths": {
+          "n": 20,
+          "p50_ms": 16.48,
+          "p95_ms": 17.49
+        },
+        "attack_paths (from a seed asset)": {
+          "n": 37,
+          "p50_ms": 0.57,
+          "p95_ms": 0.78
+        },
+        "blast_radius": {
+          "n": 20,
+          "p50_ms": 2.79,
+          "p95_ms": 3.61
+        },
+        "choke_points": {
+          "n": 20,
+          "p50_ms": 4.82,
+          "p95_ms": 5.59
+        },
+        "exposure_surface": {
+          "n": 20,
+          "p50_ms": 5.05,
+          "p95_ms": 11.75
+        },
+        "min_cut": {
+          "n": 21,
+          "p50_ms": 21.37,
+          "p95_ms": 24.72
+        },
+        "run_cypher_readonly": {
+          "n": 19,
+          "p50_ms": 0.85,
+          "p95_ms": 1.1
+        },
+        "simulate_fix": {
+          "n": 6,
+          "p50_ms": 358.86,
+          "p95_ms": 382.1
+        },
+        "vuln_intel": {
+          "n": 20,
+          "p50_ms": 3.9,
+          "p95_ms": 5.4
+        },
+        "why_step": {
+          "n": 24,
+          "p50_ms": 8.18,
+          "p95_ms": 11.58
+        }
+      },
+      "seeds": 37,
+      "top_path": [
+        "internet",
+        "org_a:asset:01745",
+        "org_a:secret:00003",
+        "org_a:asset:01746",
+        "org_a:secret:00004",
+        "org_a:ds:00001"
+      ],
+      "memory_mb": 39
+    },
+    "org_b": {
+      "org": "org_b",
+      "returned_paths": 4,
+      "recall_by_difficulty": {
+        "easy": {
+          "planted": 1,
+          "found": 1,
+          "found_from_seeds": 1,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        },
+        "medium": {
+          "planted": 1,
+          "found": 1,
+          "found_from_seeds": 1,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        },
+        "hard": {
+          "planted": 2,
+          "found": 2,
+          "found_from_seeds": 2,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        }
+      },
+      "precision_vs_planted": 1.0,
+      "decoy_precision": 1.0,
+      "decoys_in_top_paths": 0,
+      "min_cut": {
+        "entry": {
+          "size": 4,
+          "max_flow": 4,
+          "oracle_size": 4,
+          "size_le_oracle": true,
+          "equals_oracle_set": false,
+          "disconnects_all_crown_jewels": true,
+          "fix_tokens": [
+            "org_b:finding:06519",
+            "org_b:finding:06521",
+            "org_b:finding:06523",
+            "org_b:finding:06524"
+          ]
+        },
+        "crown": {
+          "size": 4,
+          "max_flow": 4,
+          "oracle_size": 4,
+          "size_le_oracle": true,
+          "equals_oracle_set": true,
+          "disconnects_all_crown_jewels": true,
+          "fix_tokens": [
+            "step:db:org_b:secret:00001:org_b:ds:00001",
+            "step:db:org_b:secret:00002:org_b:ds:00001",
+            "step:db:org_b:secret:00004:org_b:ds:00001",
+            "step:db:org_b:secret:00006:org_b:ds:00001"
+          ]
+        }
+      },
+      "oracle_cut": [
+        "step:db:org_b:secret:00001:org_b:ds:00001",
+        "step:db:org_b:secret:00002:org_b:ds:00001",
+        "step:db:org_b:secret:00004:org_b:ds:00001",
+        "step:db:org_b:secret:00006:org_b:ds:00001"
+      ],
+      "evidence": {
+        "nodes_checked": 423,
+        "edges_checked": 299,
+        "missing_nodes": [],
+        "missing_edges": [],
+        "validity": 1.0
+      },
+      "latency": {
+        "attack_paths": {
+          "n": 20,
+          "p50_ms": 47.21,
+          "p95_ms": 49.76
+        },
+        "attack_paths (from a seed asset)": {
+          "n": 41,
+          "p50_ms": 1.0,
+          "p95_ms": 1.29
+        },
+        "blast_radius": {
+          "n": 20,
+          "p50_ms": 5.5,
+          "p95_ms": 8.96
+        },
+        "choke_points": {
+          "n": 20,
+          "p50_ms": 4.08,
+          "p95_ms": 5.45
+        },
+        "exposure_surface": {
+          "n": 20,
+          "p50_ms": 6.63,
+          "p95_ms": 9.25
+        },
+        "min_cut": {
+          "n": 21,
+          "p50_ms": 17.74,
+          "p95_ms": 25.4
+        },
+        "run_cypher_readonly": {
+          "n": 19,
+          "p50_ms": 0.99,
+          "p95_ms": 1.32
+        },
+        "simulate_fix": {
+          "n": 6,
+          "p50_ms": 210.03,
+          "p95_ms": 225.75
+        },
+        "vuln_intel": {
+          "n": 20,
+          "p50_ms": 4.45,
+          "p95_ms": 6.79
+        },
+        "why_step": {
+          "n": 24,
+          "p50_ms": 9.1,
+          "p95_ms": 11.55
+        }
+      },
+      "seeds": 41,
+      "top_path": [
+        "internet",
+        "org_b:asset:01627",
+        "org_b:secret:00005",
+        "org_b:asset:01628",
+        "org_b:secret:00006",
+        "org_b:ds:00001"
+      ],
+      "memory_mb": 22
+    },
+    "org_c": {
+      "org": "org_c",
+      "returned_paths": 4,
+      "recall_by_difficulty": {
+        "easy": {
+          "planted": 1,
+          "found": 1,
+          "found_from_seeds": 1,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        },
+        "medium": {
+          "planted": 1,
+          "found": 1,
+          "found_from_seeds": 1,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        },
+        "hard": {
+          "planted": 2,
+          "found": 2,
+          "found_from_seeds": 2,
+          "missed": [],
+          "recall": 1.0,
+          "recall_from_seeds": 1.0
+        }
+      },
+      "precision_vs_planted": 1.0,
+      "decoy_precision": 1.0,
+      "decoys_in_top_paths": 0,
+      "min_cut": {
+        "entry": {
+          "size": 4,
+          "max_flow": 4,
+          "oracle_size": 4,
+          "size_le_oracle": true,
+          "equals_oracle_set": false,
+          "disconnects_all_crown_jewels": true,
+          "fix_tokens": [
+            "org_c:finding:06374",
+            "org_c:finding:06376",
+            "org_c:finding:06378",
+            "org_c:finding:06379"
+          ]
+        },
+        "crown": {
+          "size": 4,
+          "max_flow": 4,
+          "oracle_size": 4,
+          "size_le_oracle": true,
+          "equals_oracle_set": true,
+          "disconnects_all_crown_jewels": true,
+          "fix_tokens": [
+            "step:db:org_c:secret:00001:org_c:ds:00001",
+            "step:db:org_c:secret:00002:org_c:ds:00001",
+            "step:db:org_c:secret:00004:org_c:ds:00001",
+            "step:db:org_c:secret:00006:org_c:ds:00001"
+          ]
+        }
+      },
+      "oracle_cut": [
+        "step:db:org_c:secret:00001:org_c:ds:00001",
+        "step:db:org_c:secret:00002:org_c:ds:00001",
+        "step:db:org_c:secret:00004:org_c:ds:00001",
+        "step:db:org_c:secret:00006:org_c:ds:00001"
+      ],
+      "evidence": {
+        "nodes_checked": 194,
+        "edges_checked": 177,
+        "missing_nodes": [],
+        "missing_edges": [],
+        "validity": 1.0
+      },
+      "latency": {
+        "attack_paths": {
+          "n": 20,
+          "p50_ms": 68.05,
+          "p95_ms": 71.75
+        },
+        "attack_paths (from a seed asset)": {
+          "n": 11,
+          "p50_ms": 1.76,
+          "p95_ms": 3.01
+        },
+        "blast_radius": {
+          "n": 20,
+          "p50_ms": 6.81,
+          "p95_ms": 9.4
+        },
+        "choke_points": {
+          "n": 20,
+          "p50_ms": 3.9,
+          "p95_ms": 5.19
+        },
+        "exposure_surface": {
+          "n": 20,
+          "p50_ms": 2.44,
+          "p95_ms": 3.61
+        },
+        "min_cut": {
+          "n": 21,
+          "p50_ms": 16.81,
+          "p95_ms": 20.8
+        },
+        "run_cypher_readonly": {
+          "n": 19,
+          "p50_ms": 0.76,
+          "p95_ms": 1.22
+        },
+        "simulate_fix": {
+          "n": 6,
+          "p50_ms": 229.36,
+          "p95_ms": 236.53
+        },
+        "vuln_intel": {
+          "n": 20,
+          "p50_ms": 3.57,
+          "p95_ms": 4.67
+        },
+        "why_step": {
+          "n": 24,
+          "p50_ms": 8.82,
+          "p95_ms": 10.34
+        }
+      },
+      "seeds": 11,
+      "top_path": [
+        "internet",
+        "org_c:asset:01607",
+        "org_c:secret:00005",
+        "org_c:asset:01608",
+        "org_c:secret:00006",
+        "org_c:ds:00001"
+      ],
+      "memory_mb": 24
+    }
+  },
+  "pass": {
+    "org_a": {
+      "recall_easy_medium_1.0": true,
+      "min_cut_disconnects": true,
+      "min_cut_le_oracle": true,
+      "evidence_100": true,
+      "no_decoy_in_top_paths": true
+    },
+    "org_b": {
+      "recall_easy_medium_1.0": true,
+      "min_cut_disconnects": true,
+      "min_cut_le_oracle": true,
+      "evidence_100": true,
+      "no_decoy_in_top_paths": true
+    },
+    "org_c": {
+      "recall_easy_medium_1.0": true,
+      "min_cut_disconnects": true,
+      "min_cut_le_oracle": true,
+      "evidence_100": true,
+      "no_decoy_in_top_paths": true
+    }
+  },
+  "overall_pass": true,
+  "scale": {
+    "graph": "scale_org_a",
+    "scale": 3.0,
+    "assets": 5234,
+    "nodes": 55833,
+    "edges_before_derive": 145841,
+    "attack_steps": 91201,
+    "fix_tokens": 8012,
+    "generate_s": 1.3,
+    "load_s": 5.5,
+    "derive_s": 1.77,
+    "memory_mb": 130,
+    "min_cut_size": 6,
+    "min_cut_disconnects": true,
+    "paths_found": 6,
+    "latency": {
+      "attack_paths": {
+        "n": 10,
+        "p50_ms": 46.88,
+        "p95_ms": 50.78
+      },
+      "attack_paths (from a seed asset)": {
+        "n": 97,
+        "p50_ms": 0.79,
+        "p95_ms": 1.32
+      },
+      "blast_radius": {
+        "n": 10,
+        "p50_ms": 5.07,
+        "p95_ms": 5.81
+      },
+      "choke_points": {
+        "n": 10,
+        "p50_ms": 9.04,
+        "p95_ms": 11.76
+      },
+      "exposure_surface": {
+        "n": 10,
+        "p50_ms": 17.56,
+        "p95_ms": 110.26
+      },
+      "min_cut": {
+        "n": 11,
+        "p50_ms": 43.89,
+        "p95_ms": 55.3
+      },
+      "run_cypher_readonly": {
+        "n": 9,
+        "p50_ms": 1.17,
+        "p95_ms": 1.82
+      },
+      "simulate_fix": {
+        "n": 3,
+        "p50_ms": 995.39,
+        "p95_ms": 1060.84
+      },
+      "vuln_intel": {
+        "n": 10,
+        "p50_ms": 7.46,
+        "p95_ms": 28.66
+      },
+      "why_step": {
+        "n": 14,
+        "p50_ms": 9.86,
+        "p95_ms": 12.14
+      }
+    },
+    "slowest_3": [
+      {
+        "tool": "simulate_fix",
+        "n": 3,
+        "p50_ms": 995.39,
+        "p95_ms": 1060.84
+      },
+      {
+        "tool": "exposure_surface",
+        "n": 10,
+        "p50_ms": 17.56,
+        "p95_ms": 110.26
+      },
+      {
+        "tool": "min_cut",
+        "n": 11,
+        "p50_ms": 43.89,
+        "p95_ms": 55.3
+      }
+    ]
+  }
+}

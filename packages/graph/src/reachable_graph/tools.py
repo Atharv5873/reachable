@@ -185,7 +185,12 @@ class GraphTools:
         return {"id": node_id, "labels": _clean_labels(rows[0][0]), "props": dict(rows[0][1])}
 
     def _nodes(self, graph: str, ids: list[str], qlog: list[QueryLog]) -> dict[str, dict]:
-        """Resolve many ids, one index-backed UNWIND per label."""
+        """Resolve many ids, one index-backed lookup per label.
+
+        FalkorDB gotcha: `UNWIND $ids AS x MATCH (n:L {id: x})` is NOT an index
+        seek (the planner scans and filters). `MATCH (n:L) WHERE n.id IN $ids`
+        is an index scan, ~10x faster here. Every id-list lookup uses that form.
+        """
         by_label: dict[str, list[str]] = {}
         for i in dict.fromkeys(ids):
             lbl = label_of(i)
@@ -195,7 +200,7 @@ class GraphTools:
         for lbl, chunk in by_label.items():
             rows = self._q(
                 graph,
-                f"UNWIND $ids AS x MATCH (n:{lbl} {{id: x}}) RETURN n.id, labels(n), properties(n)",
+                f"MATCH (n:{lbl}) WHERE n.id IN $ids RETURN n.id, labels(n), properties(n)",
                 {"ids": chunk},
                 qlog,
             )
@@ -535,7 +540,7 @@ class GraphTools:
                 raise ToolError(f"targets must be DataStore ids: {bad}")
             rows = self._q(
                 graph,
-                "UNWIND $ids AS x MATCH (d:DataStore {id: x}) RETURN d.id",
+                "MATCH (d:DataStore) WHERE d.id IN $ids RETURN d.id",
                 {"ids": target_ids},
                 qlog,
             )
@@ -550,7 +555,7 @@ class GraphTools:
 
     def _ancestor_steps(self, graph: str, targets: list[str], qlog) -> list[dict]:
         """Every ATTACK_STEP on which some target depends: reverse BFS from the
-        targets, one index-backed UNWIND per label per round."""
+        targets, one index-backed lookup per label per round."""
         seen = set(targets)
         frontier = list(targets)
         steps: dict[str, dict] = {}
@@ -564,8 +569,8 @@ class GraphTools:
                 rows = self._q(
                     graph,
                     f"""
-                    UNWIND $ids AS x
-                    MATCH (u)-[e:ATTACK_STEP]->(v:{label} {{id: x}})
+                    MATCH (v:{label}) WHERE v.id IN $ids
+                    MATCH (u)-[e:ATTACK_STEP]->(v)
                     RETURN u.id, v.id, e.key, e.fix_token
                     """,
                     {"ids": ids},
@@ -585,8 +590,8 @@ class GraphTools:
         rows = self._q(
             graph,
             """
-            UNWIND $ids AS x
-            MATCH (f:Finding {id: x})-[:ON]->(a:Asset), (f)-[:OF]->(v:Vuln)
+            MATCH (f:Finding) WHERE f.id IN $ids
+            MATCH (f)-[:ON]->(a:Asset), (f)-[:OF]->(v:Vuln)
             RETURN f.id, a.id, a.hostname, v.cve, v.cvss, v.epss, v.kev
             """,
             {"ids": finding_ids},
@@ -636,9 +641,9 @@ class GraphTools:
         into = self._q(
             g,
             """
-            UNWIND $ids AS x
-            MATCH (u:CrownPath)-[e:ATTACK_STEP]->(n:CrownPath {id: x})
-            RETURN x, collect({src: u.id, key: e.key, rule: e.rule, fix_token: e.fix_token})
+            MATCH (n:CrownPath) WHERE n.id IN $ids
+            MATCH (u:CrownPath)-[e:ATTACK_STEP]->(n)
+            RETURN n.id, collect({src: u.id, key: e.key, rule: e.rule, fix_token: e.fix_token})
             """,
             {"ids": ids},
             qlog,
@@ -704,8 +709,8 @@ class GraphTools:
             struct += self._q(
                 g,
                 f"""
-                UNWIND $chunk AS x
-                MATCH (p:{label} {{id: x}})-[r]->(q)
+                MATCH (p:{label}) WHERE p.id IN $chunk
+                MATCH (p)-[r]->(q)
                 WHERE q.id IN $ids AND NOT type(r) IN ['ATTACK_STEP', 'FLOW']
                 RETURN p.id, type(r), q.id, properties(r)
                 """,
@@ -869,9 +874,9 @@ class GraphTools:
             for r in self._q(
                 g,
                 """
-                UNWIND $tokens AS t
-                MATCH ()-[e:ATTACK_STEP {fix_token: t}]->()
-                RETURN DISTINCT t
+                MATCH ()-[e:ATTACK_STEP]->()
+                WHERE e.fix_token IN $tokens
+                RETURN DISTINCT e.fix_token
                 """,
                 {"tokens": tokens},
                 qlog,
