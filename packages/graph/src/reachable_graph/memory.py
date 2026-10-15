@@ -28,6 +28,7 @@ force while now < expires; the current Playbook is the one nothing supersedes;
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import time
@@ -201,10 +202,84 @@ MATCH (n:Playbook {id: $new}), (o:Playbook {id: $old})
 MERGE (n)-[:SUPERSEDES]->(o)
 """
 
+# --- agent runs (S4) ----------------------------------------------------------
+# A Run of the agent graph carries the scan it reasoned about and the clock it
+# used (as_of), separate from `started`, the wall-clock time it executed.
+START_AGENT_RUN = """
+MERGE (r:Run {id: $id})
+ON CREATE SET r.started = $started, r.kind = $kind, r.scan = $scan, r.as_of = $as_of,
+              r.status = 'running', r.budget = $budget
+RETURN r.id
+"""
+FINISH_RUN = """
+MATCH (r:Run {id: $id})
+SET r.status = $status, r.finished = $finished, r.stats = $stats, r.models = $models
+RETURN r.id
+"""
+# Like APPEND_STEP, but the step carries the whole trace record as properties
+# (agent, kind tool|llm, input JSON, the Cypher the tool ran, timing, ...).
+APPEND_AGENT_STEP = """
+MATCH (r:Run {id: $run})
+OPTIONAL MATCH (r)-[:HAS_STEP]->(prev:AgentStep)
+WITH r, prev ORDER BY prev.seq DESC LIMIT 1
+CREATE (r)-[:HAS_STEP]->(s:AgentStep {id: $id, seq: coalesce(prev.seq, -1) + 1})
+SET s += $props
+FOREACH (p IN CASE WHEN prev IS NULL THEN [] ELSE [prev] END | CREATE (p)-[:NEXT]->(s))
+RETURN s.seq
+"""
+# A tool result, stored once per run per distinct content (id = run + sha), so
+# a cache hit points at the very node the first call produced.
+WRITE_TOOL_OUTPUT = """
+MERGE (o:ToolOutput {id: $id})
+ON CREATE SET o.tool = $tool, o.sha = $sha, o.summary = $summary, o.body = $body
+RETURN o.id
+"""
+LINK_STEP_RESULT = """
+MATCH (s:AgentStep {id: $step}), (o:ToolOutput {id: $output})
+MERGE (s)-[:RESULT]->(o)
+"""
+# Each agent's handoff output, one label per agent. Labels come from this
+# fixed tuple, never from input.
+OUTPUT_LABELS = ("Triage", "PathAnalysis", "FixPlan", "Report")
+WRITE_OUTPUT = {
+    label: f"""
+MATCH (r:Run {{id: $run}})
+CREATE (r)-[:HAS_OUTPUT {{agent: $agent}}]->(o:{label} {{id: $id}})
+SET o.agent = $agent, o.ts = $ts, o.as_of = $as_of, o.summary = $summary, o.payload = $payload
+RETURN o.id
+"""
+    for label in OUTPUT_LABELS
+}
+LINK_OUTPUT_CITES = {
+    label: f"""
+MATCH (o:{label} {{id: $id}})
+MATCH (f:Finding) WHERE f.id IN $findings
+MERGE (o)-[:CITES]->(f)
+RETURN count(f)
+"""
+    for label in OUTPUT_LABELS
+}
+# The handoff chain: each output was built on the previous agent's output.
+LINK_BUILT_ON = {
+    (new, old): f"""
+MATCH (n:{new} {{id: $new}}), (o:{old} {{id: $old}})
+MERGE (n)-[:BUILT_ON]->(o)
+"""
+    for new, old in zip(OUTPUT_LABELS[1:], OUTPUT_LABELS[:-1], strict=True)
+}
+
 WRITE_QUERIES = frozenset(
     {
         CREATE_RUN,
         APPEND_STEP,
+        START_AGENT_RUN,
+        FINISH_RUN,
+        APPEND_AGENT_STEP,
+        WRITE_TOOL_OUTPUT,
+        LINK_STEP_RESULT,
+        *WRITE_OUTPUT.values(),
+        *LINK_OUTPUT_CITES.values(),
+        *LINK_BUILT_ON.values(),
         CREATE_TRIAGE,
         LINK_TRIAGE_TO_RUN,
         CREATE_VERDICT,
@@ -289,6 +364,24 @@ RETURN p.id, p.technique, p.version, p.body, p.ts, o.id
 ORDER BY p.version DESC
 """
 
+# agent runs (S4)
+READ_SCAN = "MATCH (s:Scan) RETURN s.id, s.version, s.ts ORDER BY s.ts DESC LIMIT 1"
+READ_RUN_PROPS = "MATCH (r:Run {id: $id}) RETURN properties(r)"
+READ_AGENT_STEPS = """
+MATCH (r:Run {id: $id})-[:HAS_STEP]->(s:AgentStep)
+OPTIONAL MATCH (s)-[:RESULT]->(o:ToolOutput)
+RETURN properties(s), o.id, o.body ORDER BY s.seq
+"""
+READ_OUTPUT = {
+    label: f"""
+MATCH (:Run {{id: $run}})-[:HAS_OUTPUT]->(o:{label})
+RETURN o.id, o.agent, o.ts, o.summary, o.payload ORDER BY o.ts DESC LIMIT 1
+"""
+    for label in OUTPUT_LABELS
+}
+# Step / run properties stored as JSON text (FalkorDB holds primitives and flat arrays).
+_JSON_PROPS = {"input", "queries", "tool_calls", "budget", "stats"}
+
 
 def _playbook(row) -> PlaybookRec:
     pid, tech, version, body, ts, old = row
@@ -303,7 +396,7 @@ class MemoryRepo:
         self, db=None, *, allowed_orgs: list[str] | None = None, timeout_ms: int = QUERY_TIMEOUT_MS
     ) -> None:
         self.db = db or connect()
-        self.allowed = set(allowed_orgs or get_settings().orgs)
+        self.allowed = set(allowed_orgs or get_settings().graphs)
         self.timeout_ms = timeout_ms
 
     # --- plumbing -----------------------------------------------------------
@@ -589,11 +682,178 @@ class MemoryRepo:
         live = [p for p in self.playbook_history(org, technique) if p.ts <= ts]
         return max(live, key=lambda p: p.version) if live else None
 
+    # --- agent runs (S4): the handoff record ---------------------------------
+    def scan_info(self, org: str) -> dict | None:
+        """The scan this graph holds and when it ran: the agents' clock."""
+        rows = self._r(org, READ_SCAN)
+        return {"id": rows[0][0], "version": rows[0][1], "ts": rows[0][2]} if rows else None
+
+    def start_agent_run(
+        self,
+        org: str,
+        *,
+        kind: str,
+        scan: str,
+        as_of: int,
+        budget: dict,
+        run_id: str | None = None,
+        started: int | None = None,
+    ) -> str:
+        rid = run_id or self._new_id(org, "run")
+        self._w(
+            org,
+            START_AGENT_RUN,
+            {
+                "id": rid,
+                "kind": kind,
+                "scan": scan,
+                "as_of": as_of,
+                "budget": json.dumps(budget, sort_keys=True),
+                "started": started or now_ts(),
+            },
+        )
+        return rid
+
+    def append_agent_step(
+        self, org: str, run_id: str, props: dict[str, Any], *, output: dict | None = None
+    ) -> AgentStepRec:
+        """Append one traced step (a tool call or an LLM call). Dict/list values are
+        stored as JSON text. `output` = {tool, sha, summary, body}: the result,
+        stored once per (run, sha) and linked with RESULT."""
+        sid = self._new_id(org, "step")
+        flat = {
+            k: (json.dumps(v, sort_keys=True, default=str) if isinstance(v, dict | list) else v)
+            for k, v in props.items()
+            if v is not None
+        }
+        flat.setdefault("ts", now_ts())
+        flat.setdefault("input_hash", input_hash(props.get("input")))
+        res = self._w(org, APPEND_AGENT_STEP, {"run": run_id, "id": sid, "props": flat})
+        if not res.result_set:
+            raise MemoryError_(f"no Run {run_id!r} in {org}")
+        if output is not None:
+            oid = f"{run_id}:out:{output['sha'][:16]}"
+            self._w(org, WRITE_TOOL_OUTPUT, {"id": oid, **output})
+            self._w(org, LINK_STEP_RESULT, {"step": sid, "output": oid})
+        return AgentStepRec(
+            id=sid,
+            tool=flat.get("tool", ""),
+            input_hash=flat.get("input_hash", ""),
+            ts=flat["ts"],
+            seq=res.result_set[0][0],
+        )
+
+    def write_output(
+        self,
+        org: str,
+        run_id: str,
+        label: str,
+        *,
+        agent: str,
+        payload: dict,
+        summary: str,
+        as_of: int,
+        cites: list[str] | None = None,
+        built_on: str | None = None,
+        ts: int | None = None,
+    ) -> str:
+        """Write one agent's handoff output; the next agent reads it back with
+        read_output. CITES links it to the findings it talks about, BUILT_ON to
+        the output it was built from."""
+        if label not in OUTPUT_LABELS:
+            raise MemoryError_(f"unknown output label {label!r}")
+        oid = self._new_id(org, label.lower())
+        self._w(
+            org,
+            WRITE_OUTPUT[label],
+            {
+                "run": run_id,
+                "id": oid,
+                "agent": agent,
+                "ts": ts or now_ts(),
+                "as_of": as_of,
+                "summary": summary,
+                "payload": json.dumps(payload, sort_keys=True, default=str),
+            },
+        )
+        if label == "Triage":  # also the S3 shape: Run -[:HAS_TRIAGE]-> Triage
+            self._w(org, LINK_TRIAGE_TO_RUN, {"run": run_id, "triage": oid})
+        if cites:
+            self._w(org, LINK_OUTPUT_CITES[label], {"id": oid, "findings": sorted(set(cites))})
+        if built_on:
+            prev = OUTPUT_LABELS[OUTPUT_LABELS.index(label) - 1]
+            self._w(org, LINK_BUILT_ON[(label, prev)], {"new": oid, "old": built_on})
+        return oid
+
+    def read_output(self, org: str, run_id: str, label: str) -> dict | None:
+        """The latest output of this kind in the run, payload decoded."""
+        if label not in OUTPUT_LABELS:
+            raise MemoryError_(f"unknown output label {label!r}")
+        rows = self._r(org, READ_OUTPUT[label], {"run": run_id})
+        if not rows:
+            return None
+        oid, agent, ts, summary, payload = rows[0]
+        return {
+            "id": oid,
+            "agent": agent,
+            "ts": ts,
+            "summary": summary,
+            "payload": json.loads(payload),
+        }
+
+    def finish_run(
+        self, org: str, run_id: str, *, status: str, stats: dict, models: list[str]
+    ) -> None:
+        self._w(
+            org,
+            FINISH_RUN,
+            {
+                "id": run_id,
+                "status": status,
+                "finished": now_ts(),
+                "stats": json.dumps(stats, sort_keys=True),
+                "models": models,
+            },
+        )
+
+    def agent_run(self, org: str, run_id: str) -> dict:
+        """The whole run read back from the graph: run properties, every step in
+        seq order (with its stored result), every agent output. Enough to replay
+        or re-render the run without the process that produced it."""
+        head = self._r(org, READ_RUN_PROPS, {"id": run_id})
+        if not head:
+            raise MemoryError_(f"no Run {run_id!r} in {org}")
+        run = _decode(dict(head[0][0]))
+        steps = []
+        for props, oid, body in self._r(org, READ_AGENT_STEPS, {"id": run_id}):
+            s = _decode(dict(props))
+            s["result_ref"] = oid
+            s["result"] = json.loads(body) if body else None
+            steps.append(s)
+        outputs = {}
+        for label in OUTPUT_LABELS:
+            out = self.read_output(org, run_id, label)
+            if out:
+                outputs[label] = out
+        return {
+            "run": run,
+            "steps": steps,
+            "outputs": outputs,
+            "chain_ok": self.get_run(org, run_id).chain_ok,
+        }
+
     # --- triage memory -------------------------------------------------------
     def triage_memory(
         self, org: str, finding_ids: list[str], *, now: int | None = None
     ) -> ToolResult:
         return triage_memory(lambda c, p: self._r(org, c, p), org, finding_ids, now=now)
+
+
+def _decode(props: dict) -> dict:
+    for k in _JSON_PROPS & set(props):
+        with contextlib.suppress(TypeError, ValueError):
+            props[k] = json.loads(props[k])
+    return props
 
 
 # ------------------------------------------------------- triage memory (shared)
