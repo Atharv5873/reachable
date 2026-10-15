@@ -2,7 +2,8 @@
 
 Subcommands:
   seed   Generate all orgs, load FalkorDB (+ Postgres mirror), write labels
-         (v1 and v2). Scan v2 is loaded as graph `<org>_v2` (FalkorDB only).
+         (v1 and v2). Scan v2 is loaded as graph `<org>_v2` and, for the S7
+         baselines' held-out scan, as Postgres schema `<org>_v2`.
          Skips Postgres with --no-postgres.
   reset  Drop every org graph + Postgres schema (Makefile reloads afterwards).
   sample Write a tiny committed sample under data/orgs/sample/.
@@ -51,6 +52,8 @@ def _seed(seed: int, scale: float, postgres: bool) -> None:
         write_labels(out_dir, v2, scan="v2", new_path=new_path)
         v2.dataset.org = settings.scan_graph(org, "v2")
         stats["v2_nodes"] = load_org(db, v2.dataset)["nodes"]
+        if postgres:
+            load_org_postgres(v2.dataset, settings)
 
         stats["load_seconds"] = round(time.time() - t0, 1)
         stats["planted_paths"] = len(ob.ground_truth.paths)
@@ -66,6 +69,7 @@ def _reset(seed: int, scale: float) -> None:
         drop_graph(db, f"{org}_v2")
         try:
             drop_org_postgres(org, settings)
+            drop_org_postgres(f"{org}_v2", settings)
         except Exception as exc:  # noqa: BLE001 - Postgres may be down; FalkorDB is primary
             print(f"(postgres drop skipped for {org}: {exc})")
     print("dropped org graphs + schemas")

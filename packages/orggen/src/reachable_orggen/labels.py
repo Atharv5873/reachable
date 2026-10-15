@@ -9,13 +9,24 @@ from .build import OrgBuild
 from .ground_truth import GroundTruth, PlantedPath
 
 
-def _path_dict(p: PlantedPath) -> dict:
+def _path_dict(p: PlantedPath, g=None) -> dict:
+    """`fix` on each hop is the oracle's fix token for that attack edge (a Finding
+    id for an exploit step, a step:* token otherwise): what a defender remediates
+    to remove the hop. Graders use it to ask "is this path represented by a
+    finding in someone's top K?" without rebuilding the oracle."""
+
+    def fix(h) -> str | None:
+        return (
+            g.edges[h.src, h.dst].get("fix") if g is not None and g.has_edge(h.src, h.dst) else None
+        )
+
     return {
         "name": p.name,
         "difficulty": p.difficulty,
         "target": p.target,
         "hops": [
-            {"rule": h.rule, "technique": h.technique, "from": h.src, "to": h.dst} for h in p.hops
+            {"rule": h.rule, "technique": h.technique, "from": h.src, "to": h.dst, "fix": fix(h)}
+            for h in p.hops
         ],
         "nodes": p.node_sequence(),
     }
@@ -26,14 +37,15 @@ def labels_payload(ob: OrgBuild, *, scan: str = "v1", new_path: PlantedPath | No
     # Only findings with nonzero priority are worth listing in full; the rest
     # are implicitly ~0. Keep the whole map, though, so graders can diff.
     priorities = ob.oracle.finding_priority
+    g = ob.oracle.attack_graph
     return {
         "org": gt.org,
         "seed": gt.seed,
         "scale": gt.scale,
         "scan": scan,
         "crown_jewels": gt.crown_jewels,
-        "paths": [_path_dict(p) for p in gt.paths],
-        "new_path_v2": _path_dict(new_path) if new_path else None,
+        "paths": [_path_dict(p, g) for p in gt.paths],
+        "new_path_v2": _path_dict(new_path, g) if new_path else None,
         "fixed_findings_v2": gt.fixed_findings,
         "removed_paths_v2": gt.removed_paths,
         "decoys": [
