@@ -207,7 +207,7 @@ def comparison_md(doc: dict) -> str:
     L.append(
         _row(
             [
-                "*oracle ceiling*",
+                "*oracle order*",
                 f"{statistics.fmean(c['ndcg@10'] for c in ceil):.2f}",
                 f"{statistics.fmean(c['p@10'] for c in ceil) * 100:.0f}%",
                 f"{statistics.fmean(c['path_recall@10'] for c in ceil) * 100:.0f}%",
@@ -222,11 +222,14 @@ def comparison_md(doc: dict) -> str:
     )
     L += [
         "",
+        "*oracle order* ranks by the oracle's own priority: the ceiling for NDCG and P@10 "
+        "(P@10's is below 100% where a scan has fewer than 10 relevant findings: org_b has 7), "
+        "but not for path recall, which a list can max out without following priority "
+        "order (priority ties leave org_a's top 10 one path short). "
         "*s / run (active)* is wall time minus the seconds spent waiting on the Gemini "
         "key's rate limit (raw files keep both). "
-        "P@10's ceiling is below 100% where a scan has fewer than 10 relevant findings "
-        "(org_b: 7). *paths cut / fix* uses the prioritiser's own fix set when it gave one, "
-        "else its top M findings with M = the oracle min-cut size; the ceiling row is the "
+        "*paths cut / fix* uses the prioritiser's own fix set when it gave one, "
+        "else its top M findings with M = the oracle min-cut size; the oracle row uses the "
         "oracle's min cut.",
         "",
         "## Development scans (v1) vs held-out scans (v2)",
@@ -300,7 +303,7 @@ def comparison_md(doc: dict) -> str:
             _row(
                 [
                     gid,
-                    "*ceiling*",
+                    "*oracle order*",
                     f"{c['ndcg@10']:.2f}",
                     f"{c['p@10'] * 100:.0f}%",
                     f"{c['path_recall@10'] * 100:.0f}%",

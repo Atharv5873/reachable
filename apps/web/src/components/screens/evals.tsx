@@ -142,7 +142,7 @@ function Comparison({ d }: { d: any }) {
     ];
   });
   rows.push([
-    <span key="ceil" className="text-fg-3 italic">oracle ceiling</span>,
+    <span key="ceil" className="text-fg-3 italic">oracle order</span>,
     num(avg("ndcg@10")),
     pct(avg("p@10")),
     pct(avg("path_recall@10")),
