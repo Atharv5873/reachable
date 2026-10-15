@@ -1,7 +1,5 @@
 "use client";
 
-import { Hourglass } from "lucide-react";
-
 import { EmptyState, ErrorState, LoadingRows } from "@/components/states";
 import { useApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -105,16 +103,110 @@ function GateB({ d }: { d: any }) {
   );
 }
 
-function Pending() {
-  const rows = [
-    ["Attack-path recall vs a vector-search baseline (Postgres + pgvector)", "S7"],
-    ["Triage precision@k: Reachable order vs CVSS order vs EPSS order", "S7"],
-    ["Answer groundedness: claims backed by graph evidence", "S7"],
-    ["Cost and latency per run, graph vs baseline", "S7"],
-  ];
+const num = (v: unknown, n = 2) => (typeof v === "number" ? v.toFixed(n) : "-");
+const mean = (s: any) => (s && typeof s.mean === "number" ? s.mean : undefined);
+const sdNote = (s: any, f: (v: number) => string) =>
+  s && s.n > 1 && s.sd > 0 ? <span className="text-fg-3"> ±{f(s.sd)}</span> : null;
+const pctSd = (s: any) => (
+  <>
+    {pct(mean(s))}
+    {sdNote(s, (v) => `${Math.round(v * 100)}`)}
+  </>
+);
+const numSd = (s: any) => (
+  <>
+    {num(mean(s))}
+    {sdNote(s, (v) => v.toFixed(2))}
+  </>
+);
+
+function Comparison({ d }: { d: any }) {
+  const agg = d.aggregate ?? {};
+  const ps: string[] = agg.prioritisers ?? [];
+  const ceil = Object.values(agg.ceiling ?? {}) as any[];
+  const avg = (k: string) => (ceil.length ? ceil.reduce((a, c) => a + (c[k] ?? 0), 0) / ceil.length : undefined);
+  const lost: any[] = d.losses ?? [];
+  const rows: React.ReactNode[][] = ps.map((p) => {
+    const o = agg.overall?.[p]?.all ?? {};
+    const c = agg.cost?.[p] ?? {};
+    return [
+      <span key={p} className={cn(p === "reachable" && "font-medium text-fg")}>{p}</span>,
+      numSd(o["ndcg@10"]),
+      pctSd(o["p@10"]),
+      pctSd(o["path_recall@10"]),
+      pctSd(o["decoy_rate@10"]),
+      num(mean(o.fix_paths_per_fix)),
+      num(mean(c.llm_calls), 1),
+      mean(c.usd) != null ? `$${mean(c.usd).toFixed(4)}` : "-",
+      `${num(mean(c.wall_s), 1)} s`,
+    ];
+  });
+  rows.push([
+    <span key="ceil" className="text-fg-3 italic">oracle ceiling</span>,
+    num(avg("ndcg@10")),
+    pct(avg("p@10")),
+    pct(avg("path_recall@10")),
+    pct(avg("decoy_rate@10")),
+    num(avg("fix_paths_per_fix")),
+    "-",
+    "-",
+    "-",
+  ]);
+  const held = (agg.scans ?? []).filter((s: any) => s.scan === "v2").length;
   return (
-    <Section title="Coming in S7" sub="The comparison harness fills these rows; the table is wired to evals/results/*.json.">
-      <Table head={["evaluation", "status"]} rows={rows.map(([e, s]) => [e, <span key={e} className="inline-flex items-center gap-1.5 text-fg-3"><Hourglass className="size-3" /> pending {s}</span>])} />
+    <Section
+      title="Comparison: five prioritisers, one oracle"
+      sub={`${(agg.scans ?? []).length} scans (${held} held out) · ${d.model} · seeds ${(d.seeds ?? []).join(", ")} · K = ${d.k} · ${d.generated}`}
+    >
+      <Table
+        head={["prioritiser", "NDCG@10", "P@10", "path recall@10", "decoys@10", "paths cut / fix", "LLM calls / run", "$ / run", "wall / run"]}
+        rows={rows}
+      />
+      <div className="border-t border-line px-5 py-4 text-xs text-fg-2">
+        <p className="eyebrow mb-2">Where reachable does not win ({lost.length})</p>
+        {lost.length ? (
+          <ul className="space-y-1">
+            {lost.slice(0, 8).map((x, i) => (
+              <li key={i} className="mono">
+                {x.where} · {x.metric}: {x.winner} {num(x.winner_value, 3)} vs reachable {num(x.reachable_value, 3)}
+              </li>
+            ))}
+            {lost.length > 8 && <li className="text-fg-3">… {lost.length - 8} more in evals/results/comparison.md</li>}
+          </ul>
+        ) : (
+          <p>No headline metric, on any scan or split. (Cost and latency: the deterministic two are free and instant.)</p>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function Ablation({ d }: { d: any }) {
+  const on = d.graph_on ?? {};
+  const off = d.graph_off ?? {};
+  const drop = d.drop ?? {};
+  const pts = (v: unknown) => (typeof v === "number" ? `${v >= 0 ? "+" : ""}${Math.round(v * 100)} pts` : "-");
+  return (
+    <Section
+      title="Ablation: the same agent, FalkorDB tools on vs off"
+      sub={`${d.org} ${d.scan} · ${d.model} · seeds ${(d.seeds ?? []).join(", ")} · graph off = every tool answers "unavailable"`}
+      pass={d.pass}
+    >
+      <Table
+        head={["", "path recall@10", "NDCG@10", "P@10", "decoys@10", "fix set cuts"]}
+        rows={[
+          ["graph on", pctSd(on["path_recall@10"]), numSd(on["ndcg@10"]), pctSd(on["p@10"]), pctSd(on["decoy_rate@10"]), pctSd(on.fix_cut_share)],
+          ["graph off", pctSd(off["path_recall@10"]), numSd(off["ndcg@10"]), pctSd(off["p@10"]), pctSd(off["decoy_rate@10"]), pctSd(off.fix_cut_share)],
+          [
+            <span key="drop" className="font-medium text-fg">drop</span>,
+            pts(drop["path_recall@10"]),
+            typeof drop["ndcg@10"] === "number" ? `${drop["ndcg@10"] >= 0 ? "+" : ""}${drop["ndcg@10"].toFixed(2)}` : "-",
+            pts(drop["p@10"]),
+            pts(drop["decoy_rate@10"]),
+            pts(drop.fix_cut_share),
+          ],
+        ]}
+      />
     </Section>
   );
 }
@@ -155,12 +247,13 @@ export function EvalsScreen() {
           <>
             {q.data.results.gate_a && <GateA d={q.data.results.gate_a} />}
             {q.data.results.memory_lift && <GateB d={q.data.results.memory_lift} />}
+            {q.data.results.comparison && <Comparison d={q.data.results.comparison} />}
+            {q.data.results.ablation && <Ablation d={q.data.results.ablation} />}
             {Object.entries(q.data.results)
-              .filter(([k]) => k !== "gate_a" && k !== "memory_lift")
+              .filter(([k]) => !["gate_a", "memory_lift", "comparison", "ablation"].includes(k))
               .map(([k, v]) => (
                 <Generic key={k} name={k} d={v} />
               ))}
-            <Pending />
           </>
         )}
       </div>
