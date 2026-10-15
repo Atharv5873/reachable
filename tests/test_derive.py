@@ -21,6 +21,7 @@ from reachable_graph.tools import GraphTools
 from reachable_orggen.build import drift_org, generate_org
 from reachable_orggen.generate import GenConfig
 from reachable_orggen.load_falkordb import load_org
+from reachable_orggen.oracle import fix_efforts, min_cut_fixes
 
 pytestmark = pytest.mark.integration
 
@@ -137,6 +138,57 @@ def test_min_cut_matches_oracle_on_shared_infra(db, derived_small, org):
             ).result_set
         )
         assert shared_tokens & set(entry["fix_tokens"]), f"{org}: shared hop not in entry cut"
+
+
+def test_gate_effort_matches_oracle(derived_small):
+    """derive stamps the same effort per fix token as the oracle recomputes in Python."""
+    for org in ORGS:
+        ob, g, _ = derived_small[org]
+        want = fix_efforts(ob.oracle.attack_graph, ob.dataset)
+        got = dict(
+            g.ro_query("MATCH (fi:FixIn)-[x:FLOW]->(:FixOut) RETURN fi.token, x.effort").result_set
+        )
+        # The token sets differ off-path: the oracle keeps one (best) vuln per host
+        # pair, the graph one step per finding; the oracle also has creds tokens
+        # that the graph folds into local_privesc. Every crown-path token is in both.
+        on_paths = {h.fix for pl in ob.oracle.paths.values() for hops in pl for h in hops}
+        common = set(got) & set(want)
+        assert on_paths - common <= {t for t in on_paths if t.startswith("step:creds:")}
+        assert {t: want[t] for t in common} == {t: got[t] for t in common}, org
+        assert all(1 <= e <= 5 for e in got.values())
+
+
+@pytest.mark.parametrize("org", ORGS)
+def test_cheapest_cut_matches_oracle_and_disconnects(db, derived_small, org):
+    ob, g, _ = derived_small[org]
+    tools = GraphTools(db, allowed_orgs=[g.name])
+    effort = fix_efforts(ob.oracle.attack_graph, ob.dataset)
+    oracle_cheap = min_cut_fixes(ob.oracle.attack_graph, ob.oracle.crown_nodes, capacity=effort)
+    fewest = tools.min_cut(g.name).data
+    cheapest = tools.min_cut(g.name, mode="cheapest").data
+    assert fewest["mode"] == "fewest" and len(fewest["fix_tokens"]) == len(ob.oracle.min_cut)
+    assert cheapest["total_effort"] == cheapest["max_flow"] == sum(effort[t] for t in oracle_cheap)
+    assert cheapest["total_effort"] <= fewest["total_effort"]
+    assert len(cheapest["fix_tokens"]) >= len(fewest["fix_tokens"])
+    for cut in (fewest, cheapest):
+        sim = tools.simulate_fix(g.name, cut["fix_tokens"])
+        assert sim.data["all_crown_jewels_disconnected"], f"{org} {cut['mode']}"
+
+
+def test_cheapest_differs_from_fewest_somewhere(db, derived_small):
+    """The point of the stretch: on the VPN-gateway org, cutting the shared gateway
+    is the FEWEST fixes but not the CHEAPEST (a gateway upgrade costs 5)."""
+    differs = []
+    for org in ORGS:
+        _, g, _ = derived_small[org]
+        tools = GraphTools(db, allowed_orgs=[g.name])
+        a, b = tools.min_cut(g.name).data, tools.min_cut(g.name, mode="cheapest").data
+        if a["fix_tokens"] != b["fix_tokens"]:
+            assert b["total_effort"] < a["total_effort"]
+            differs.append((org, len(a["fix_tokens"]), len(b["fix_tokens"])))
+    assert differs
+    org_c = [d for d in differs if d[0] == "org_c"]
+    assert org_c and org_c[0][2] > org_c[0][1], "org_c: cheapest should be more, easier fixes"
 
 
 def test_derive_is_idempotent(derived_small):

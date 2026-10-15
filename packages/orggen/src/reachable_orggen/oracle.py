@@ -37,6 +37,7 @@ from reachable_core.attack_rules import (
     VulnSignals,
     exploit_likelihood,
 )
+from reachable_core.effort import FIX_AT_SOURCE, finding_effort, step_effort
 from reachable_intel.products import PRODUCTS_BY_ID
 
 from .model import Dataset
@@ -314,14 +315,44 @@ def simple_paths(g: nx.DiGraph, target: str, hop_cap: int) -> list[list[Hop]]:
     return out
 
 
-def min_cut_fixes(g: nx.DiGraph, crown_nodes: list[str]) -> list[str]:
+def fix_efforts(g: nx.DiGraph, ds: Dataset) -> dict[str, int]:
+    """Effort per fix token, recomputed in Python from reachable_core.effort (the
+    Cypher derivation stamps the same numbers on the FLOW gates). The fix lands
+    on: the asset a Finding is on; else the step's source (FIX_AT_SOURCE rules)
+    or target. Owner bump = the owning team's change_effort."""
+    kind = {a.id: a.kind for a in ds.assets}
+    team_bump = {t.id: t.change_effort for t in ds.teams}
+    bump: dict[str, int] = {}
+    for e in ds.edges:
+        if e.type == "OWNS":
+            bump[e.dst] = max(bump.get(e.dst, 0), team_bump.get(e.src, 0))
+
+    def node_id(state: str) -> str:  # "asset:X" / "priv:X" / "secret:X" -> "X"
+        return state.split(":", 1)[1]
+
+    out: dict[str, int] = {}
+    for u, v, d in g.edges(data=True):
+        fix, rule = d["fix"], d["rule"]
+        if fix.startswith("step:"):
+            n = node_id(u if rule in FIX_AT_SOURCE else v)
+            out[fix] = step_effort(rule, bump.get(n, 0))
+        else:
+            n = node_id(u if rule == "local_privesc" else v)
+            out[fix] = finding_effort(kind.get(n), bump.get(n, 0))
+    return out
+
+
+def min_cut_fixes(
+    g: nx.DiGraph, crown_nodes: list[str], capacity: dict[str, int] | None = None
+) -> list[str]:
     """Minimum set of fix tokens disconnecting internet from all crown jewels.
 
     Node-splitting: every fix token t becomes an edge t#in -> t#out with
     capacity 1; the attack edges that the fix enables feed t#in and leave t#out
     with infinite capacity. A min cut on this flow network can only cut the
     capacity-1 fix edges, so the cut *is* a set of fixes, and cutting a fix that
-    several attack edges share removes all of them at once.
+    several attack edges share removes all of them at once. With `capacity`
+    (fix -> effort) the gates are weighted and the cut is the cheapest one.
     """
     flow = nx.DiGraph()
     flow.add_node("internet")
@@ -331,7 +362,7 @@ def min_cut_fixes(g: nx.DiGraph, crown_nodes: list[str]) -> list[str]:
         fix = data["fix"]
         fin, fout = f"{fix}#in", f"{fix}#out"
         if fix not in seen_fix:
-            flow.add_edge(fin, fout, capacity=1)
+            flow.add_edge(fin, fout, capacity=capacity.get(fix, 1) if capacity else 1)
             seen_fix.add(fix)
         flow.add_edge(u, fin, capacity=INF)
         flow.add_edge(fout, v, capacity=INF)

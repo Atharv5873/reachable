@@ -54,6 +54,14 @@ from reachable_core.attack_rules import (
     RULES,
 )
 from reachable_core.db import create_range_index
+from reachable_core.effort import (
+    DEFAULT_KIND_EFFORT,
+    FIX_AT_SOURCE,
+    KIND_EFFORT,
+    MAX_EFFORT,
+    MIN_EFFORT,
+    STEP_EFFORT,
+)
 
 # "Infinite" capacity for structural FLOW edges. Any value larger than the
 # number of fix tokens works: the max flow can never exceed the token count.
@@ -274,16 +282,59 @@ BUILD_FLOW = [
     MATCH (u)-[e:ATTACK_STEP]->()
     WITH DISTINCT u, e.fix_token AS t
     MATCH (fi:FixIn {token: t})
-    CREATE (u)-[:FLOW {cap: $big}]->(fi)
+    CREATE (u)-[:FLOW {cap: $big, effort: $big}]->(fi)
     """,
     # 3. gate exit -> step target
     """
     MATCH ()-[e:ATTACK_STEP]->(v)
     WITH DISTINCT e.fix_token AS t, v
     MATCH (fo:FixOut {token: t})
-    CREATE (fo)-[:FLOW {cap: $big}]->(v)
+    CREATE (fo)-[:FLOW {cap: $big, effort: $big}]->(v)
     """,
 ]
+
+# ---------------------------------------------------------------------------
+# Effort on each fix gate (reachable_core.effort), the capacity min_cut uses in
+# mode="cheapest". The fix lands on one node, picked by rule:
+#   exploit steps     -> the asset the Finding is ON (the step target; for the
+#                        folded local_privesc, the step source);
+#   FIX_AT_SOURCE     -> the step source (host holding the secret, ...);
+#   other step tokens -> the step target (host trusting the key, data store...).
+# Base effort comes from that node's kind (findings) or the rule (step tokens),
+# plus the owning team's change_effort, clamped to [MIN, MAX].
+# FalkorDB gotcha: every non-aggregated variable used after an aggregation must
+# be a grouping key of that WITH; otherwise it silently comes through as null.
+# The gate is reached by traversal, u -[:FLOW]-> FixIn {token}, not by an id
+# lookup per row (which would not use the index, see the S2 gotchas).
+# ---------------------------------------------------------------------------
+SET_GATE_EFFORT = """
+MATCH (u)-[e:ATTACK_STEP]->(v)
+WITH DISTINCT u, v, e.rule AS rule, e.fix_token AS tok
+WITH u, rule, tok, tok STARTS WITH 'step:' AS is_step,
+     CASE WHEN rule = 'local_privesc' OR (tok STARTS WITH 'step:' AND rule IN $fix_at_source)
+          THEN u ELSE v END AS n
+OPTIONAL MATCH (t:Team)-[:OWNS]->(n)
+WITH u, tok, rule, is_step, n, max(coalesce(t.change_effort, 0)) AS bump
+WITH u, tok, bump + CASE WHEN is_step THEN coalesce($step_effort[rule], $default_effort)
+                         ELSE coalesce($kind_effort[n.kind], $default_effort) END AS x
+MATCH (u)-[:FLOW]->(fi:FixIn)-[gate:FLOW]->(:FixOut)
+WHERE fi.token = tok
+SET gate.effort = CASE WHEN x < $min_effort THEN $min_effort
+                       WHEN x > $max_effort THEN $max_effort ELSE x END
+RETURN count(DISTINCT gate)
+"""
+
+
+def effort_params() -> dict:
+    return {
+        "fix_at_source": sorted(FIX_AT_SOURCE),
+        "step_effort": STEP_EFFORT,
+        "kind_effort": KIND_EFFORT,
+        "default_effort": DEFAULT_KIND_EFFORT,
+        "min_effort": MIN_EFFORT,
+        "max_effort": MAX_EFFORT,
+    }
+
 
 # ---------------------------------------------------------------------------
 # :CrownPath label = nodes on some Internet -> crown-jewel ATTACK_STEP path.
@@ -326,6 +377,9 @@ def derive(graph) -> dict:
     tokens = graph.query(BUILD_FLOW[0]).result_set[0][0]
     for q in BUILD_FLOW[1:]:
         graph.query(q, {"big": BIG_CAPACITY})
+    t = time.perf_counter()
+    gates = graph.query(SET_GATE_EFFORT, effort_params()).result_set[0][0]
+    effort_ms = round((time.perf_counter() - t) * 1000, 1)
 
     graph.query(CLEAR_CROWN_PATH)
     crown_nodes = graph.query(MARK_CROWN_PATH).result_set[0][0]
@@ -339,6 +393,8 @@ def derive(graph) -> dict:
         "per_query": per_rule,
         "swept_stale": swept,
         "fix_tokens": int(tokens),
+        "effort_gates": int(gates),
+        "effort_ms": effort_ms,
         "crown_path_nodes": int(crown_nodes),
         "seconds": round(time.perf_counter() - t0, 2),
     }

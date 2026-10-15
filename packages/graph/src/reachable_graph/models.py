@@ -85,6 +85,12 @@ class MinCutInput(OrgInput):
         description="Several minimum fix sets can exist. 'entry' returns the one closest to "
         "the Internet (patch the way in); 'crown' the one closest to the targets (lock the vault).",
     )
+    mode: Literal["fewest", "cheapest"] = Field(
+        "fewest",
+        description="'fewest': the smallest NUMBER of fixes (every fix counts 1). 'cheapest': "
+        "the lowest total EFFORT (each fix weighted 1-5 by what it touches and who owns it); "
+        "may be more fixes, each easier.",
+    )
 
 
 class ChokePointsInput(OrgInput):

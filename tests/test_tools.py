@@ -99,6 +99,16 @@ def test_min_cut_entry_and_crown(tools):
     assert c.data["fix_tokens"] == sorted([f"step:db:{T.S1}:{T.DS1}", f"step:db:{T.S3}:{T.DS1}"])
 
 
+def test_cheapest_mode_on_tiny(tools):
+    """Tiny graph has no owners, so efforts are the base table: web/db findings by
+    asset kind, step tokens by rule. Both modes must disconnect the crown jewel."""
+    a = tools.min_cut(T.ORG).data
+    b = tools.min_cut(T.ORG, mode="cheapest").data
+    assert b["total_effort"] == b["max_flow"] <= a["total_effort"]
+    assert all(1 <= f["effort"] <= 5 for f in a["fixes"] + b["fixes"])
+    assert tools.simulate_fix(T.ORG, b["fix_tokens"]).data["all_crown_jewels_disconnected"]
+
+
 def test_residual_recovery_picks_cut_not_just_saturated_edges():
     """Two unit gates in series on one path are BOTH saturated; only one is the cut."""
     steps = [

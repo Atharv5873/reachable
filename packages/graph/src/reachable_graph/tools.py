@@ -463,9 +463,18 @@ class GraphTools(CompanyToolsMixin):
 
     # ============================================================== min_cut
     def min_cut(
-        self, org: str, target_ids: list[str] | None = None, prefer: str = "entry"
+        self,
+        org: str,
+        target_ids: list[str] | None = None,
+        prefer: str = "entry",
+        mode: str = "fewest",
     ) -> ToolResult:
         """Minimum set of fix tokens disconnecting the Internet from the targets.
+
+        mode="fewest" uses capacity 1 per fix gate (`cap`): the cut has the fewest
+        fixes. mode="cheapest" uses the gate's `effort` (1-5, stamped by derive) as
+        capacity: the cut has the lowest total effort. Same algorithm, different
+        capacity property; the max-flow value is then |cut| or total effort.
 
         1. algo.maxFlow on the node-split FLOW layer gives the max-flow value and
            the flow on every edge carrying flow. It does NOT return the cut.
@@ -486,8 +495,9 @@ class GraphTools(CompanyToolsMixin):
         path that matters, because residual back-arcs only exist on edges that
         carry flow (and flow only runs on source->target paths).
         """
-        inp = MinCutInput(org=org, target_ids=target_ids, prefer=prefer)
+        inp = MinCutInput(org=org, target_ids=target_ids, prefer=prefer, mode=mode)
         g, qlog = self._org(inp.org), []
+        cap_prop = "cap" if inp.mode == "fewest" else "effort"
         targets = self._targets(g, inp.target_ids, qlog)
         if not targets:
             return ToolResult(summary="No target DataStores.", data={}, queries=qlog)
@@ -499,28 +509,33 @@ class GraphTools(CompanyToolsMixin):
             MATCH (t:DataStore) WHERE t.id IN $targets
             WITH s, collect(t) AS ts
             CALL algo.maxFlow({sourceNodes: [s], targetNodes: ts,
-                               capacityProperty: 'cap', relationshipTypes: ['FLOW']})
+                               capacityProperty: $cap_prop, relationshipTypes: ['FLOW']})
             YIELD edges, edgeFlows, maxFlow
             RETURN maxFlow,
                    [i IN range(0, size(edges) - 1) |
                     [startNode(edges[i]).id, endNode(edges[i]).id, edgeFlows[i]]]
             """,
-            {"targets": targets},
+            {"targets": targets, "cap_prop": cap_prop},
             qlog,
         )
         max_flow = int(round(rows[0][0])) if rows else 0
         flows = {(a, b): f for a, b, f in (rows[0][1] if rows else [])}
 
         steps = self._ancestor_steps(g, targets, qlog)
-        cut = residual_min_cut(steps, flows, targets, prefer=inp.prefer)
-        if len(cut) != max_flow:
-            raise ToolError(f"min-cut recovery failed: |cut|={len(cut)} != maxFlow={max_flow}")
+        effort = self._gate_efforts(g, sorted({s["fix_token"] for s in steps}), qlog)
+        gate_cap = effort if inp.mode == "cheapest" else None
+        cut = residual_min_cut(steps, flows, targets, prefer=inp.prefer, gate_cap=gate_cap)
+        # Self-check (max-flow / min-cut theorem): the cut's capacity == max flow.
+        cut_value = sum(effort[t] for t in cut) if gate_cap else len(cut)
+        if cut_value != max_flow:
+            raise ToolError(f"min-cut recovery failed: cut={cut_value} != maxFlow={max_flow}")
 
-        fixes = [describe_fix(t) for t in cut]
+        fixes = [{**describe_fix(t), "effort": effort.get(t)} for t in cut]
         findings = self._finding_details(g, [t for t in cut if not t.startswith("step:")], qlog)
         for f in fixes:
             if f["kind"] == "finding":
                 f.update(findings.get(f["token"], {}))
+        total_effort = sum(effort.get(t, 0) for t in cut)
         cut_edges = [s for s in steps if s["fix_token"] in set(cut)]
         ev = Evidence(
             node_ids=list(
@@ -534,7 +549,8 @@ class GraphTools(CompanyToolsMixin):
             ],
         )
         summary = (
-            f"Minimum fix set of {len(cut)} cuts every attack path to {len(targets)} target(s) "
+            f"{'Fewest' if inp.mode == 'fewest' else 'Cheapest'} fix set: {len(cut)} fix(es), "
+            f"total effort {total_effort}, cuts every attack path to {len(targets)} target(s) "
             f"(max flow = {max_flow}): " + "; ".join(f["action"] for f in fixes)
         )
         return ToolResult(
@@ -546,6 +562,8 @@ class GraphTools(CompanyToolsMixin):
                 "fixes": fixes,
                 "findings": sorted(findings),
                 "prefer": inp.prefer,
+                "mode": inp.mode,
+                "total_effort": total_effort,
                 "recovered_by": (
                     "residual-graph reachability from the Internet"
                     if inp.prefer == "entry"
@@ -606,6 +624,22 @@ class GraphTools(CompanyToolsMixin):
                         nxt.append(u)
             frontier = nxt
         return list(steps.values())
+
+    def _gate_efforts(self, graph: str, tokens: list[str], qlog) -> dict[str, int]:
+        """Effort (1-5) on each token's fix gate, as stamped by derive."""
+        if not tokens:
+            return {}
+        rows = self._q(
+            graph,
+            """
+            MATCH (fi:FixIn) WHERE fi.token IN $tokens
+            MATCH (fi)-[g:FLOW]->(:FixOut)
+            RETURN fi.token, g.effort
+            """,
+            {"tokens": tokens},
+            qlog,
+        )
+        return {t: int(e) for t, e in rows if e is not None}
 
     def _finding_details(self, graph: str, finding_ids: list[str], qlog) -> dict[str, dict]:
         if not finding_ids:
@@ -1030,6 +1064,7 @@ def residual_min_cut(
     flows: dict[tuple[str, str], float],
     targets: list[str],
     prefer: str = "entry",
+    gate_cap: dict[str, int] | None = None,
 ) -> list[str]:
     """Recover the min-cut fix tokens from max-flow edge flows (pure function).
 
@@ -1040,13 +1075,15 @@ def residual_min_cut(
     residual graph, and returns the tokens whose unit gate crosses the cut:
       entry: S = BFS from 'internet' over residual arcs; cut = FixIn in S, FixOut not.
       crown: T = reverse BFS from the targets; cut = FixIn not in T, FixOut in T.
+    `gate_cap` gives each token's gate capacity (its effort, mode="cheapest");
+    without it every gate has capacity 1 (mode="fewest").
     """
     big = math.inf
     cap: dict[tuple[str, str], float] = {}
     for s in steps:
         t = s["fix_token"]
         fi, fo = f"fix_in:{t}", f"fix_out:{t}"
-        cap[(fi, fo)] = 1
+        cap[(fi, fo)] = gate_cap.get(t, 1) if gate_cap else 1
         cap[(s["src"], fi)] = big
         cap[(fo, s["dst"])] = big
     residual: dict[str, list[str]] = {}

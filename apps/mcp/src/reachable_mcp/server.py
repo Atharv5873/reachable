@@ -147,18 +147,21 @@ def blast_radius(
         "The MINIMUM set of fixes (fix_tokens: Finding ids and step:* tokens) that disconnects "
         "the Internet from every crown jewel (or from target_ids), computed with max-flow/min-cut "
         "(algo.maxFlow on a node-split graph where each fix has capacity 1), plus a "
-        "human-readable action per fix. max_flow = number of fixes needed. prefer='entry' picks "
-        "fixes nearest the Internet, prefer='crown' nearest the data. USE when asked 'what should "
-        "we fix first?' or 'smallest remediation plan'. ALWAYS confirm with simulate_fix before "
-        "recommending. Do NOT use to list every risky finding (attack_paths)."
+        "human-readable action and an effort estimate (1-5) per fix. mode='fewest' (default) "
+        "minimises the NUMBER of fixes; mode='cheapest' minimises total EFFORT (by asset kind "
+        "and owning team), which can mean more but easier fixes. prefer='entry' picks fixes "
+        "nearest the Internet, prefer='crown' nearest the data. USE when asked 'what should we "
+        "fix first?' or 'smallest / cheapest remediation plan'. ALWAYS confirm with simulate_fix "
+        "before recommending. Do NOT use to list every risky finding (attack_paths)."
     ),
 )
 def min_cut(
     org: Org,
     target_ids: arg(M.MinCutInput, "target_ids", list[str] | None) = None,
     prefer: arg(M.MinCutInput, "prefer", Literal["entry", "crown"]) = "entry",
+    mode: arg(M.MinCutInput, "mode", Literal["fewest", "cheapest"]) = "fewest",
 ) -> ToolResult:
-    return _call(_tools().min_cut, org, target_ids=target_ids, prefer=prefer)
+    return _call(_tools().min_cut, org, target_ids=target_ids, prefer=prefer, mode=mode)
 
 
 @server.tool(
