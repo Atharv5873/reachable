@@ -3,7 +3,7 @@
 Same agents, same rescan, same model and budgets; only the memory differs.
 
 * **cold**: fresh memory namespace: no earlier runs, verdicts, risk acceptances or patterns; starter playbooks only (and no carry-over from v1).
-* **warm**: memory after the agents triaged scan v1 (run `lift_org_a:run:3abc63f961e8`): its verdicts and routing, the risk acceptances, the patterns it learned; carried into the v2 graph by the Sentinel.
+* **warm**: memory after the agents triaged scan v1 (run `lift_org_a:run:951630609b95`): its verdicts and routing, the risk acceptances, the patterns it learned; carried into the v2 graph by the Sentinel.
 
 Model: ['primary=gemini/gemini-3.5-flash-lite', 'fallback=groq/qwen/qwen3.8-27b']. Graphs: fresh `lift_org_a` / `lift_org_a_v2` (seed 42, scale 1.0), memory reset before each v2 run.
 
@@ -12,12 +12,12 @@ Model: ['primary=gemini/gemini-3.5-flash-lite', 'fallback=groq/qwen/qwen3.8-27b'
 | findings investigated | 9 | 1 |
 | skipped by memory (carried verdicts) | 0 | 8 |
 | flagged on arrival by a learned pattern | 0 | 4 |
-| LLM calls | 6 | 6 |
+| LLM calls | 7 | 6 |
 | tool calls (real MCP calls) | 27 | 15 |
-| tokens in | 22254 | 20311 |
-| tokens out | 3196 | 1927 |
-| wall time (s) | 66.3 | 68.1 |
-| approx cost (USD, LiteLLM price map) | 0.01467 | 0.01091 |
+| tokens in | 25769 | 20321 |
+| tokens out | 3325 | 2094 |
+| wall time (s) | 31.8 | 21.7 |
+| approx cost (USD, LiteLLM price map) | 0.01604 | 0.01133 |
 | fix set (size) | cheapest (7) | cheapest (7) |
 | simulate_fix disconnects every crown jewel | True | True |
 | fix-set size = oracle min cut | True | True |
@@ -30,10 +30,10 @@ Model: ['primary=gemini/gemini-3.5-flash-lite', 'fallback=groq/qwen/qwen3.8-27b'
 | agent | cold | warm |
 |---|---:|---:|
 | sentinel | 0 / 3 / 0 | 0 / 3 / 0 |
-| triage | 2 / 3 / 5951 | 2 / 3 / 5128 |
+| triage | 3 / 3 / 9453 | 2 / 3 / 5128 |
 | pathfinder | 2 / 4 / 8736 | 2 / 2 / 7243 |
-| fixer | 1 / 17 / 4495 | 1 / 7 / 4549 |
-| reporter | 1 / 0 / 3072 | 1 / 0 / 3391 |
+| fixer | 1 / 17 / 4525 | 1 / 7 / 4549 |
+| reporter | 1 / 0 / 3055 | 1 / 0 / 3401 |
 
 ## What memory changed (warm)
 
@@ -43,6 +43,6 @@ Model: ['primary=gemini/gemini-3.5-flash-lite', 'fallback=groq/qwen/qwen3.8-27b'
 * Investigated cold: ['org_a:finding:06879', 'org_a:finding:06857', 'org_a:finding:06848', 'org_a:finding:06850', 'org_a:finding:06851', 'org_a:finding:06853', 'org_a:finding:06858', 'org_a:finding:06855', 'org_a:finding:06859']
 * Investigated warm: ['org_a:finding:06879']
 * Fix sets: cold ['org_a:finding:06848', 'org_a:finding:06850', 'org_a:finding:06851', 'org_a:finding:06853', 'org_a:finding:06855', 'org_a:finding:06879', 'step:usekey:org_a:secret:00008:org_a:ident:00006']; warm ['org_a:finding:06848', 'org_a:finding:06850', 'org_a:finding:06851', 'org_a:finding:06853', 'org_a:finding:06855', 'org_a:finding:06879', 'step:usekey:org_a:secret:00008:org_a:ident:00006'].
-* Alert (new crown path) raised in both: cold lift_org_a_v2:alert:ddb1fec7bf75, warm lift_org_a_v2:alert:f3bafc9ae61e.
+* Alert (new crown path) raised in both: cold lift_org_a_v2:alert:ca239ae16931, warm lift_org_a_v2:alert:13633724dbf3.
 
-Runs: cold `lift_org_a_v2:run:a20f2c116031`, warm `lift_org_a_v2:run:5697e101d64b` (runs/*.md).
+Runs: cold `lift_org_a_v2:run:16c302b059b6`, warm `lift_org_a_v2:run:974def3903fe` (runs/*.md).

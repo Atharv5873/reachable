@@ -27,6 +27,8 @@ patterns, versioned playbooks).
   `:3001`.
 - pgvector Postgres — baseline mirror only.
 - FastAPI backend: start a run, stream it live (SSE), read it back, drift, verdicts.
+- Next.js 16 web app (`apps/web`): TypeScript, Tailwind 4, shadcn/ui, Cytoscape.js
+  (dagre layout); talks to the API only through its own server-side proxy.
 
 Host ports are offset from the defaults (FalkorDB `6380`, Browser `3001`,
 Postgres `5434`, API `8001`) so this runs beside other local stacks.
@@ -48,6 +50,8 @@ make triage ORG=org_a SCAN=v2 # the rescan, with v1's memory (COLD=1: without it
 make verdict RUN=<run id> FINDING=<finding id> DECISION=reject REASON="..."
 make memory-lift ORG=org_a    # Gate B: cold vs warm on the rescan -> evals/results/
 make api                      # FastAPI + SSE on :8001 (or `docker compose up -d api`)
+make web-install && make web  # the UI on http://localhost:3000 (copy apps/web/.env.example to .env.local)
+make web-test && make e2e     # proxy tests, client-bundle key scan, Playwright smoke
 ```
 
 Then open the FalkorDB Browser at <http://localhost:3001> and try the queries in
@@ -64,7 +68,8 @@ make intel REFETCH=1
 
 ```
 reachable/
-  apps/api/            FastAPI: runs, live SSE stream, drift, verdicts (S5)
+  apps/api/            FastAPI: runs, live SSE stream, drift, verdicts (S5); UI views, ask (S6)
+  apps/web/            Next.js UI: seven screens, key-injecting proxy, Cytoscape graph (S6)
   apps/mcp/            MCP server (stdio + streamable HTTP) over the graph tools
   packages/core/       settings, schema, FalkorDB helpers, attack_rules.py
   packages/intel/      fetch + normalise KEV/EPSS/NVD/ATT&CK; load `threatintel`
@@ -77,7 +82,7 @@ reachable/
   data/threatintel/    committed filtered snapshot + ATTRIBUTION.md
   data/orgs/           generated (gitignored except a tiny sample)
   tests/               pytest (unit + integration + property)
-  learning/            teaching notes (S01.md ... S05.md)
+  learning/            teaching notes (S01.md ... S06.md)
   runs/                agent run dumps (gitignored; the run itself lives in the graph)
 ```
 
@@ -191,6 +196,24 @@ reachable/
    fewer calls and reaches the same verified, minimal fix set. A run is ~26k input
    tokens and 7 LLM calls (S4: ~61k, 12). See [`learning/S05.md`](learning/S05.md).
 
+10. **The UI** (S6, `apps/web`). Seven screens in demo order, every one reading
+    the real graph: **01 Findings** (the same findings sorted by CVSS and by
+    reachability: a CVSS 5.0 that starts the most likely path ranks #1, a 9.8 KEV
+    in quarantine ranks nowhere), **02 Attack paths** (Cytoscape, Internet on the
+    left, each edge an ATT&CK technique; click it for the `why_step` evidence),
+    **03 Fix plan** (fewest vs cheapest cut, owners, on-call, ADRs, drafted
+    tickets, "one fix, many paths"; *Simulate* flips the crown jewels to SAFE),
+    **04 Investigation** (the run's steps live over SSE, or replayed from the
+    graph at their real pace), **05 Company brain** (English -> one fixed intent),
+    **06 Drift** (v1 -> v2: the one new path, what memory recognised, Gate B), and
+    **07 Evals**. **Replay** is the default mode: it reads a finished run from the
+    graph and never calls a model, which is what the demo video is recorded
+    against. The browser never sees the API key: it calls `/api/r/*` on its own
+    origin, and a server-only route handler adds the key and relays the SSE
+    stream (with `Last-Event-ID`). One colour rule carries the design: ember red
+    means "an attacker can get there", and nothing else is red. See
+    [`learning/S06.md`](learning/S06.md).
+
 ## API
 
 ```bash
@@ -207,9 +230,16 @@ curl -N localhost:8001/runs/<id>/stream -H "X-API-Key: $KEY"   # Server-Sent Eve
 | `GET /runs/{id}` | the run read back from the graph (outputs + trace) |
 | `POST /runs/{id}/verdict` | an analyst's accept / reject (procedural memory) |
 | `GET /orgs`, `GET /orgs/{org}/drift` | orgs, scans, recent runs and alerts; the v1 -> v2 drift |
+| `GET /orgs/{org}/findings?scan=&run_id=` | the findings board: scanner order vs reachability order, a reason per row |
+| `GET /runs/{id}/subgraph?finding=&context=&max_nodes=` | the run's attack paths + both min cuts as Cytoscape elements (capped) |
+| `GET /runs/{id}/fixplan?mode=fewest\|cheapest` | a fix set with owners, on-call, ADRs and drafted tickets |
+| `POST /orgs/{org}/simulate`, `GET /orgs/{org}/why_step` | `simulate_fix` on a scratch copy; one step's evidence |
+| `POST /orgs/{org}/ask` `{question, mode}` | English -> one fixed `company_query` intent (model, or rules with no model) |
+| `GET /evals` | `evals/results/*.json` |
 
 The stream reads the run's trace in the graph; it never talks to the agents, so a
-slow or late client never slows a run. Auth: `Authorization: Bearer <key>` or
+slow or late client never slows a run. At most two agent runs execute at once
+(`API_MAX_RUNS`); a third `POST /runs` gets `429` with `Retry-After`. Auth: `Authorization: Bearer <key>` or
 `X-API-Key` (`API_KEY`, else `MCP_API_KEY`); `/health` is open.
 
 ## MCP server
@@ -224,8 +254,8 @@ make mcp-smoke URL=http://localhost:8002/mcp
 HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is open.
 
 See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md),
-[`learning/S03.md`](learning/S03.md), [`learning/S04.md`](learning/S04.md) and
-[`learning/S05.md`](learning/S05.md) for the concepts, the Cypher, the
+[`learning/S03.md`](learning/S03.md), [`learning/S04.md`](learning/S04.md),
+[`learning/S05.md`](learning/S05.md) and [`learning/S06.md`](learning/S06.md) for the concepts, the Cypher, the
 max-flow / min-cut idea, the company brain and agent memory, and Browser
 queries to run now.
 

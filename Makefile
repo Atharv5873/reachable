@@ -8,7 +8,7 @@ INTEL   = $(PY) -m reachable_intel
 ORGGEN  = $(PY) -m reachable_orggen
 GRAPH   = $(PY) -m reachable_graph
 
-.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage drift verdict reset-memory memory-lift api
+.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage drift verdict reset-memory memory-lift api web web-install web-test e2e
 
 # Create .env from the example on first run (never overwrites an existing one).
 .env:
@@ -113,6 +113,23 @@ memory-lift: .env
 ## The API (FastAPI + SSE) on :8001 outside docker (API_KEY or MCP_API_KEY in .env).
 api: .env
 	uv run --env-file .env uvicorn reachable_api.main:app --port $${API_PORT:-8001}
+
+## The web UI (S6) on :3000. Needs apps/web/.env.local with REACHABLE_API_URL and
+## REACHABLE_API_KEY (copy apps/web/.env.example); the key stays on the server.
+web-install:
+	npm --prefix apps/web install
+
+web:
+	npm --prefix apps/web run dev
+
+## Proxy unit tests, a production build, and a scan proving the key is in no client file.
+web-test:
+	npm --prefix apps/web run test
+	npm --prefix apps/web run test:bundle
+
+## Playwright smoke against the running backend (replay: no model calls).
+e2e:
+	npm --prefix apps/web run test:e2e
 
 logs:
 	docker compose logs -f --tail=100

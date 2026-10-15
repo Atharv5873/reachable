@@ -7,7 +7,7 @@
   "fallback=groq/qwen/qwen3.8-27b"
  ],
  "v1_run": {
-  "run_id": "lift_org_a:run:3abc63f961e8",
+  "run_id": "lift_org_a:run:951630609b95",
   "status": "complete",
   "stats": {
    "max_llm_calls": 30,
@@ -31,15 +31,15 @@
    "tool_results": 24,
    "fallbacks": 0,
    "llm_failures": 0,
-   "tokens_in": 22137,
-   "tokens_out": 3232,
+   "tokens_in": 22427,
+   "tokens_out": 3630,
    "models": {
     "primary=gemini/gemini-3.5-flash-lite": 6
    },
    "memory": {
     "patterns_learned": 1
    },
-   "wall_ms": 70760
+   "wall_ms": 40523
   }
  },
  "resets": {
@@ -59,7 +59,7 @@
    "Playbook(learned)": 0
   },
   "before_warm": {
-   "AgentStep": 44.0,
+   "AgentStep": 45.0,
    "ToolOutput": 27.0,
    "Report": 1.0,
    "FixPlan": 1.0,
@@ -85,7 +85,7 @@
   ]
  },
  "cold": {
-  "run_id": "lift_org_a_v2:run:a20f2c116031",
+  "run_id": "lift_org_a_v2:run:16c302b059b6",
   "status": "complete",
   "findings_investigated": 9,
   "investigated": [
@@ -102,15 +102,15 @@
   "skipped_by_memory": 0,
   "carried": {},
   "flagged_on_arrival": [],
-  "alert": "lift_org_a_v2:alert:ddb1fec7bf75",
-  "llm_calls": 6,
+  "alert": "lift_org_a_v2:alert:ca239ae16931",
+  "llm_calls": 7,
   "tool_calls": 27,
   "cache_hits": 0,
-  "tokens_in": 22254,
-  "tokens_out": 3196,
-  "wall_s": 66.3,
+  "tokens_in": 25769,
+  "tokens_out": 3325,
+  "wall_s": 31.8,
   "models": {
-   "primary=gemini/gemini-3.5-flash-lite": 6
+   "primary=gemini/gemini-3.5-flash-lite": 7
   },
   "memory_events": {
    "patterns_learned": 1
@@ -122,9 +122,9 @@
     "tokens_in": 0
    },
    "triage": {
-    "llm": 2,
+    "llm": 3,
     "tool": 3,
-    "tokens_in": 5951
+    "tokens_in": 9453
    },
    "pathfinder": {
     "llm": 2,
@@ -134,15 +134,15 @@
    "fixer": {
     "llm": 1,
     "tool": 17,
-    "tokens_in": 4495
+    "tokens_in": 4525
    },
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3072
+    "tokens_in": 3055
    }
   },
-  "usd": 0.01467,
+  "usd": 0.01604,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",
@@ -160,7 +160,7 @@
   "correct": true
  },
  "warm": {
-  "run_id": "lift_org_a_v2:run:5697e101d64b",
+  "run_id": "lift_org_a_v2:run:974def3903fe",
   "status": "complete",
   "findings_investigated": 1,
   "investigated": [
@@ -183,13 +183,13 @@
    "org_a:finding:06876",
    "org_a:finding:06879"
   ],
-  "alert": "lift_org_a_v2:alert:f3bafc9ae61e",
+  "alert": "lift_org_a_v2:alert:13633724dbf3",
   "llm_calls": 6,
   "tool_calls": 15,
   "cache_hits": 0,
-  "tokens_in": 20311,
-  "tokens_out": 1927,
-  "wall_s": 68.1,
+  "tokens_in": 20321,
+  "tokens_out": 2094,
+  "wall_s": 21.7,
   "models": {
    "primary=gemini/gemini-3.5-flash-lite": 6
   },
@@ -224,10 +224,10 @@
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3391
+    "tokens_in": 3401
    }
   },
-  "usd": 0.01091,
+  "usd": 0.01133,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",
