@@ -70,3 +70,56 @@ def test_api_key_middleware():
             ]
 
     assert _run(go()) == [401, 401, 200, 200, 200]
+
+
+def test_mcp_company_and_memory_tools(db):
+    """The S3 tools answer end to end over MCP on the seeded org."""
+    if "org_c" not in db.list_graphs():
+        pytest.skip("org_c not seeded")
+    gw = (
+        db.select_graph("org_c")
+        .ro_query("MATCH (a:Asset {kind: 'gateway'})<-[:CHANGED]-(:ADR) RETURN a.id LIMIT 1")
+        .result_set
+    )
+    if not gw:
+        pytest.skip("org_c has no company layer (re-run make seed)")
+    asset = gw[0][0]
+    fid = (
+        db.select_graph("org_c")
+        .ro_query("MATCH (:RiskAcceptance)-[:ON]->(f:Finding) RETURN f.id")
+        .result_set
+    )
+
+    async def go():
+        async with Client(server) as c:
+            return (
+                await c.call_tool("owners", {"org": "org_c", "asset_id": asset}),
+                await c.call_tool("decision_trail", {"org": "org_c", "asset_id": asset}),
+                await c.call_tool(
+                    "company_query",
+                    {
+                        "org": "org_c",
+                        "question_kind": "who_approved",
+                        "params": {"asset_id": asset, "port": 443},
+                    },
+                ),
+                await c.call_tool(
+                    "triage_memory", {"org": "org_c", "finding_ids": [r[0] for r in fid]}
+                ),
+                await c.call_tool("min_cut", {"org": "org_c", "mode": "cheapest"}),
+                await c.call_tool(
+                    "company_query",
+                    {"org": "org_c", "question_kind": "who_owns", "params": {"q": "x"}},
+                ),
+            )
+
+    own, trail, appr, mem, cheap, bad = _run(go())
+    for r in (own, trail, appr, mem, cheap):
+        assert not r.is_error, r.content[0].text
+    assert own.structured_content["data"]["teams"]
+    assert trail.structured_content["data"]["decisions"]
+    assert "[org_c:adr:" in appr.structured_content["data"]["answer"]  # cites the ADR
+    findings = mem.structured_content["data"]["findings"]
+    assert {f["suppressed"] for f in findings} == {True, False}  # one live, one expired
+    assert cheap.structured_content["data"]["mode"] == "cheapest"
+    assert bad.is_error  # unknown parameter for the intent is refused at the boundary

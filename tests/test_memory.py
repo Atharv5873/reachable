@@ -187,6 +187,7 @@ def test_seeded_memory_reads_back_through_the_repo(env):
     assert missing_evidence(g, mem.evidence) == []
 
     assert repo.current_playbook(GRAPH, "T1190").version == 2
+    assert repo.current_playbook(GRAPH, "T1190").supersedes.endswith(":T1190:v1")
     assert [p.version for p in repo.playbook_history(GRAPH, "T1190")] == [2, 1]
     assert repo.current_playbook(GRAPH, "T1210").version == 1
     run = repo.get_run(GRAPH, ds.runs[0].id)
