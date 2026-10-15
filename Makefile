@@ -21,10 +21,12 @@ up: .env
 down:
 	docker compose down
 
-## Fetch + normalise the public threat-intel snapshot and load graph `threatintel`.
-## Uses the committed snapshot if present; pass REFETCH=1 to pull fresh from the network.
+## Load the committed threat-intel snapshot into graph `threatintel` (offline).
+## Pass REFETCH=1 to pull fresh feeds from the network and rebuild the snapshot
+## first (needs NVD_API_KEY for a reasonable fetch time).
+INTEL_REFETCH = $(if $(REFETCH),$(INTEL) build --refetch)
 intel: .env
-	$(INTEL) build $(if $(REFETCH),--refetch,)
+	$(INTEL_REFETCH)
 	$(INTEL) load
 
 ## Generate the three synthetic orgs, their labels/oracle, and load FalkorDB + Postgres.
