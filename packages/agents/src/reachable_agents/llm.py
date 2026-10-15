@@ -191,8 +191,12 @@ class RouterLLM:
         *,
         deps: list[Deployment] | None = None,
         extra: dict[str, dict] | None = None,
+        seed: int | None = None,
     ) -> None:
         s = settings or get_settings()
+        # The provider's sampling seed (S7 repeats an eval run under seeds 1..3).
+        # Temperature stays 0; a seed only pins what nondeterminism is left.
+        self.seed = seed
         self.deps = deps if deps is not None else deployments(s)
         if not self.deps:
             raise LLMUnavailable(
@@ -229,6 +233,7 @@ class RouterLLM:
                 tool_choice=tool_choice if tools else None,
                 temperature=0,
                 max_tokens=self.max_tokens,
+                **({"seed": self.seed} if self.seed is not None else {}),
             )
         except Exception as exc:  # noqa: BLE001 - every provider error ends up here
             msg = self._scrub(f"{type(exc).__name__}: {exc}")[:400]

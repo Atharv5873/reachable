@@ -52,6 +52,9 @@ YOUR JOB
 """
 
 
+CONTEXT_INTRO = "CONTEXT (handoff from the previous agents, read back from the graph):"
+
+
 @dataclass(frozen=True)
 class AgentSpec:
     name: str
@@ -63,6 +66,10 @@ class AgentSpec:
     # A protocol check on the answer: returns a correction to send back once (e.g.
     # "you verified a different set than you chose"), or None if the answer is fine.
     check: Callable[[RunCtx, dict], str | None] | None = None
+    # The system message template (default SYSTEM_RULES). The S7 eval gives its
+    # three LLM prioritisers one neutral template that names no datastore.
+    system: str | None = None
+    context_intro: str | None = None  # the line before the CONTEXT JSON (default CONTEXT_INTRO)
 
 
 @dataclass
@@ -73,7 +80,7 @@ class LoopOutcome:
 
 
 async def run_agent(spec: AgentSpec, ctx: RunCtx, context: dict) -> LoopOutcome:
-    system = SYSTEM_RULES.format(
+    system = (spec.system or SYSTEM_RULES).format(
         agent=spec.name,
         graph=ctx.graph,
         as_of=ctx.as_of,
@@ -86,7 +93,8 @@ async def run_agent(spec: AgentSpec, ctx: RunCtx, context: dict) -> LoopOutcome:
         {"role": "system", "content": system},
         {
             "role": "user",
-            "content": "CONTEXT (handoff from the previous agents, read back from the graph):\n"
+            "content": (spec.context_intro or CONTEXT_INTRO)
+            + "\n"
             + json.dumps(context, separators=(",", ":"), default=str),
         },
     ]
