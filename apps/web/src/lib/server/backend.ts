@@ -51,6 +51,36 @@ export function backendConfig(env: NodeJS.ProcessEnv = process.env) {
 
 const PASS_HEADERS = ["content-type", "retry-after"];
 
+/**
+ * CSRF guard for state-changing requests. The proxy adds the key to whatever
+ * reaches it, so another site open in the same browser must not be able to
+ * make it start (billed) runs or write verdicts. A POST must:
+ *   - be JSON: a cross-site form can only send form/text bodies, and a
+ *     cross-site fetch with application/json needs a CORS preflight that this
+ *     route never approves;
+ *   - come from our own origin: Sec-Fetch-Site (modern browsers) or, failing
+ *     that, an Origin whose host is ours. Non-browser clients send neither.
+ */
+export function crossSiteRefusal(req: Request): string | null {
+  if (req.method.toUpperCase() !== "POST") return null;
+  const ct = (req.headers.get("content-type") || "").toLowerCase();
+  if (!ct.startsWith("application/json")) return "POST bodies must be application/json";
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return "cross-site request refused";
+  const origin = req.headers.get("origin");
+  if (origin) {
+    let host: string;
+    try {
+      host = new URL(origin).host;
+    } catch {
+      return "bad Origin";
+    }
+    const own = req.headers.get("x-forwarded-host") || req.headers.get("host") || new URL(req.url).host;
+    if (host !== own) return "cross-origin request refused";
+  }
+  return null;
+}
+
 export async function forward(
   req: Request,
   segments: string[],
@@ -60,6 +90,8 @@ export async function forward(
   if (!isAllowed(method, segments)) {
     return Response.json({ detail: "not found" }, { status: 404 });
   }
+  const refused = crossSiteRefusal(req);
+  if (refused) return Response.json({ detail: refused }, { status: 403 });
   const { url, key } = backendConfig(opts.env);
   if (!key) {
     return Response.json(

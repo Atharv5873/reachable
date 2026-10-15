@@ -84,11 +84,35 @@ describe("the API proxy", () => {
       status: 429,
       headers: { "content-type": "application/json", "retry-after": "30" },
     });
-    const req = new Request("http://web/api/r/runs", { method: "POST", body: JSON.stringify({ org: "org_a" }) });
+    const req = new Request("http://web/api/r/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org: "org_a" }),
+    });
     const res = await forward(req, ["runs"], { fetchImpl: f, env: ENV });
     expect(f.mock.calls[0][1]!.body).toBe('{"org":"org_a"}');
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("30");
+  });
+
+  it("refuses cross-site POSTs (CSRF) before calling the backend", async () => {
+    const f = upstream("{}");
+    const post = (headers: Record<string, string>) =>
+      forward(new Request("http://web/api/r/runs", { method: "POST", headers, body: '{"org":"org_a"}' }), ["runs"], {
+        fetchImpl: f,
+        env: ENV,
+      });
+    // a cross-site <form> can only send form or text bodies
+    expect((await post({ "content-type": "text/plain" })).status).toBe(403);
+    expect((await post({ "content-type": "application/x-www-form-urlencoded" })).status).toBe(403);
+    // a fetch from another site
+    expect((await post({ "content-type": "application/json", "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await post({ "content-type": "application/json", origin: "https://evil.example" })).status).toBe(403);
+    expect(f).not.toHaveBeenCalled();
+    // our own page: same-origin JSON
+    const ok = await post({ "content-type": "application/json", "sec-fetch-site": "same-origin", origin: "http://web" });
+    expect(ok.status).toBe(200);
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
   it("says so when the backend is down or the key is missing", async () => {
@@ -115,7 +139,12 @@ describe("the API proxy", () => {
       const res = await GET(new Request("http://web/api/r/orgs/org_a/drift") as never, ctx);
       expect(res.status).toBe(200);
       const ctx2 = { params: Promise.resolve({ path: ["orgs", "org_a", "ask"] }) };
-      await POST(new Request("http://web/api/r/orgs/org_a/ask", { method: "POST", body: "{}" }) as never, ctx2);
+      const post = new Request("http://web/api/r/orgs/org_a/ask", {
+        method: "POST",
+        headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+        body: "{}",
+      });
+      await POST(post as never, ctx2);
       expect(f).toHaveBeenCalledTimes(2);
       expect(new Headers(f.mock.calls[1][1]!.headers).get("x-api-key")).toBe(KEY);
     } finally {
