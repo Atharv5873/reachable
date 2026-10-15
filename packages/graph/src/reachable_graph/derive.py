@@ -342,13 +342,15 @@ def derive(graph) -> dict:
 
 
 def _create_edge_index(graph) -> None:
-    """Range index on ATTACK_STEP.key so why_step(edge_key) is an index seek."""
-    try:
-        graph.query("CREATE INDEX FOR ()-[e:ATTACK_STEP]-() ON (e.key)")
-    except Exception as exc:  # noqa: BLE001 - only swallow "already indexed"
-        msg = str(exc).lower()
-        if "already indexed" not in msg and "already exists" not in msg:
-            raise
+    """Range indexes on ATTACK_STEP.key (why_step) and .fix_token (min_cut,
+    simulate_fix), so looking a step up by either is an index seek."""
+    for prop in ("key", "fix_token"):
+        try:
+            graph.query(f"CREATE INDEX FOR ()-[e:ATTACK_STEP]-() ON (e.{prop})")
+        except Exception as exc:  # noqa: BLE001 - only swallow "already indexed"
+            msg = str(exc).lower()
+            if "already indexed" not in msg and "already exists" not in msg:
+                raise
 
 
 def edge_signature(graph) -> list[tuple]:
