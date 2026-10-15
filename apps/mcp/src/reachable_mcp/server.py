@@ -303,6 +303,27 @@ def company_query(
     return _call(_tools().company_query, org, question_kind, params or {})
 
 
+# ------------------------------------------------------------- memory layer
+@server.tool(
+    name="triage_memory",
+    description=(
+        "Recall what earlier triage already decided about findings: LIVE risk acceptances "
+        "(signed off, not yet expired: these suppress the finding), EXPIRED ones (listed, but "
+        "they no longer suppress anything), past verdicts (decision + reason), and patterns "
+        "that reach the finding (same asset, same software image/CPE, or same CVE elsewhere). "
+        "as_of evaluates expiry at an earlier time. USE before re-triaging findings so you do "
+        "not repeat or contradict a past decision. Do NOT treat an expired acceptance as "
+        "permission, and do NOT use this to judge reachability (attack_paths)."
+    ),
+)
+def triage_memory(
+    org: Org,
+    finding_ids: arg(M.TriageMemoryInput, "finding_ids", list[str]),
+    as_of: arg(M.TriageMemoryInput, "as_of", int | None) = None,
+) -> ToolResult:
+    return _call(_tools().triage_memory, org, finding_ids, as_of=as_of)
+
+
 # --------------------------------------------------------------------- HTTP
 @server.custom_route("/health", methods=["GET"])
 async def health(_: Request) -> JSONResponse:

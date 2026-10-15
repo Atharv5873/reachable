@@ -13,7 +13,7 @@ from falkordb import FalkorDB
 
 from reachable_core.attack_rules import VulnSignals, exploit_likelihood
 from reachable_core.db import create_range_index, drop_graph, memory_usage_mb, run_batched
-from reachable_core.schema import IDENTITY_KINDS, ORG_INDEXES
+from reachable_core.schema import IDENTITY_KINDS, MEMORY_INDEXES, ORG_INDEXES
 from reachable_intel.products import PRODUCTS_BY_ID
 
 from .model import Dataset
@@ -35,7 +35,18 @@ _NODE_LABEL = {
     "OnCall": lambda ds: ds.oncalls,
     "ADR": lambda ds: ds.adrs,
     "Ticket": lambda ds: ds.tickets,
+    "Run": lambda ds: ds.runs,
+    "AgentStep": lambda ds: ds.steps,
+    "Triage": lambda ds: ds.triages,
+    "Verdict": lambda ds: ds.verdicts,
+    "RiskAcceptance": lambda ds: ds.risk_acceptances,
+    "Pattern": lambda ds: ds.patterns,
+    "Technique": lambda ds: ds.techniques,
+    "Playbook": lambda ds: ds.playbooks,
 }
+
+# Plain property-bag labels loaded with one generic `SET n += r` query each.
+_BAG_LABELS = ["Person", "Team", "OnCall", "ADR", "Ticket", *MEMORY_INDEXES]
 
 
 def _label_map(ds: Dataset) -> dict[str, str]:
@@ -51,7 +62,7 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
         drop_graph(db, ds.org)
     g = db.select_graph(ds.org)
 
-    for label, prop in ORG_INDEXES.items():
+    for label, prop in {**ORG_INDEXES, **MEMORY_INDEXES}.items():
         create_range_index(g, label, prop)
     # decision_trail / company_query accept a hostname ("why is gw-01 exposed?").
     create_range_index(g, "Asset", "hostname")
@@ -153,11 +164,10 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
         [vars(c) for c in ds.controls],
     )
 
-    # --- Company layer: people, teams, rotations, decisions, tickets ---
-    # Plain property bags, loaded the same way: `SET n += r` copies every field.
-    # A None field (an ADR without a port, an open ticket's `closed`) is simply
-    # not stored, because FalkorDB drops properties set to null.
-    for label in ("Person", "Team", "OnCall", "ADR", "Ticket"):
+    # --- Company layer + seeded memory: plain property bags ---
+    # `SET n += r` copies every field. A None field (an ADR without a port, an
+    # open ticket's `closed`) is simply not stored: FalkorDB drops null properties.
+    for label in _BAG_LABELS:
         rows = [vars(o) for o in _NODE_LABEL[label](ds)]
         if rows:
             run_batched(g, f"UNWIND $rows AS r MERGE (n:{label} {{id: r.id}}) SET n += r", rows)

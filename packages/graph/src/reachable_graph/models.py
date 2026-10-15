@@ -209,6 +209,12 @@ class TriageMemoryInput(OrgInput):
     finding_ids: list[NodeId] = Field(
         min_length=1, max_length=MAX_ROWS, description="Finding ids to recall memory for."
     )
+    as_of: int | None = Field(
+        None,
+        ge=0,
+        description="Epoch seconds to judge risk-acceptance expiry at (default: now). "
+        "Use it to ask what was in force at an earlier time.",
+    )
 
 
 # --- Output -----------------------------------------------------------------

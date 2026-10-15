@@ -155,6 +155,87 @@ class Ticket:
     closed: int | None = None
 
 
+# --- Memory layer (Track 02): what agents remember, in the org graph -------
+# The runtime reads and writes these through reachable_graph.memory. The
+# generator seeds a little clearly-synthetic prior memory with the same schema.
+@dataclass
+class Run:
+    """One agent run. Steps hang off it, so a handoff between agents is just
+    'continue Run X' and the whole run can be replayed in order."""
+
+    id: str
+    started: int  # epoch seconds
+    kind: str  # triage | remediation | drift | ...
+
+
+@dataclass
+class AgentStep:
+    id: str
+    tool: str
+    input_hash: str  # sha256 of the canonical JSON input: replay / dedup key
+    ts: int
+    seq: int  # 0-based order within its Run
+
+
+@dataclass
+class Triage:
+    """One triage session (inside a Run, or a human's)."""
+
+    id: str
+    ts: int
+
+
+@dataclass
+class Verdict:
+    id: str
+    decision: str  # fix_now | schedule | not_reachable | false_positive | accept_risk
+    reason: str
+    ts: int
+
+
+@dataclass
+class RiskAcceptance:
+    """A signed-off decision to live with a finding until `expires`. After that
+    it no longer suppresses the finding (temporal validity on the node)."""
+
+    id: str
+    reason: str
+    approved_by: str  # Person id (also an APPROVED_BY edge)
+    created: int
+    expires: int
+
+
+@dataclass
+class Pattern:
+    """Semantic memory: a generalisation learned across triages."""
+
+    id: str
+    kind: str  # recurring_cve | ...
+    description: str
+    ts: int
+
+
+@dataclass
+class Technique:
+    """Org-local copy of an ATT&CK technique id, the anchor for playbooks (the
+    canonical record is in the threatintel graph; graphs cannot be joined)."""
+
+    id: str  # e.g. "T1190"
+    name: str
+
+
+@dataclass
+class Playbook:
+    """Procedural memory: how we handle a technique. Versioned: a new version
+    SUPERSEDES the old one, which stays for history."""
+
+    id: str
+    technique: str
+    version: int
+    body: str
+    ts: int
+
+
 # --- Edges (typed tuples of ids + a small property dict) -------------------
 @dataclass
 class Edge:
@@ -205,6 +286,15 @@ class Dataset:
     oncalls: list[OnCall] = field(default_factory=list)
     adrs: list[ADR] = field(default_factory=list)
     tickets: list[Ticket] = field(default_factory=list)
+    # Memory layer (seeded prior memory)
+    runs: list[Run] = field(default_factory=list)
+    steps: list[AgentStep] = field(default_factory=list)
+    triages: list[Triage] = field(default_factory=list)
+    verdicts: list[Verdict] = field(default_factory=list)
+    risk_acceptances: list[RiskAcceptance] = field(default_factory=list)
+    patterns: list[Pattern] = field(default_factory=list)
+    techniques: list[Technique] = field(default_factory=list)
+    playbooks: list[Playbook] = field(default_factory=list)
 
     def add_edge(self, src: str, dst: str, type: str, **props) -> None:
         self.edges.append(Edge(src, dst, type, props))

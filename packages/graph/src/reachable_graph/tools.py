@@ -37,6 +37,7 @@ from reachable_core.db import connect
 from reachable_core.schema import THREATINTEL_GRAPH
 from reachable_core.settings import get_settings
 
+from . import memory
 from .company_tools import CompanyToolsMixin
 from .models import (
     MAX_BFS_NODES,
@@ -53,6 +54,7 @@ from .models import (
     RunCypherInput,
     SimulateFixInput,
     ToolResult,
+    TriageMemoryInput,
     VulnIntelInput,
     WhyStepInput,
 )
@@ -88,6 +90,7 @@ _KIND_LABEL = {
     "pattern": "Pattern",
     "playbook": "Playbook",
 }
+_TECHNIQUE_RE = re.compile(r"^T\d{4}(\.\d{3})?$")
 # Labels the attack layer runs between (helper labels are hidden from output).
 ATTACK_LABELS = {"Internet", "Asset", "Identity", "Secret", "DataStore"}
 _HIDDEN_LABELS = {"CrownPath"}
@@ -104,6 +107,8 @@ def label_of(node_id: str) -> str | None:
         return "FixIn"
     if node_id.startswith("fix_out:"):
         return "FixOut"
+    if _TECHNIQUE_RE.match(node_id):  # org-local Technique anchor for playbooks
+        return "Technique"
     parts = node_id.split(":")
     return _KIND_LABEL.get(parts[1]) if len(parts) >= 3 else None
 
@@ -1000,11 +1005,20 @@ class GraphTools(CompanyToolsMixin):
             truncated=truncated,
         )
 
-    # ======================================================== S3/S4 stubs
-    def triage_memory(self, org: str, finding_id: str) -> ToolResult:
-        """TODO(S3/S4): prior triage decisions for a finding (agent memory)."""
-        raise NotImplementedError("triage_memory arrives with S3/S4 agent memory")
+    # ========================================================= triage_memory
+    def triage_memory(
+        self, org: str, finding_ids: list[str], as_of: int | None = None
+    ) -> ToolResult:
+        """What memory says about these findings: LIVE risk acceptances (expired ones
+        listed but not suppressing), past verdicts, and patterns that reach them.
+        Read-only: the writes live in memory.MemoryRepo."""
+        inp = TriageMemoryInput(org=org, finding_ids=finding_ids, as_of=as_of)
+        g, qlog = self._org(inp.org), []
+        return memory.triage_memory(
+            lambda c, p: self._q(g, c, p, qlog), g, inp.finding_ids, now=inp.as_of, qlog=qlog
+        )
 
+    # ============================================================ S4 stubs
     def exposure_drift(self, org: str) -> ToolResult:
         """TODO(S4): what changed between scan v1 and v2 (labels_v2 world)."""
         raise NotImplementedError("exposure_drift arrives in S4 (needs the v2 graph loaded)")
@@ -1131,4 +1145,6 @@ TOOL_NAMES = [
     "owners",
     "decision_trail",
     "company_query",
+    # memory layer (S3)
+    "triage_memory",
 ]

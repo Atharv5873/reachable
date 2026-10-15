@@ -84,6 +84,7 @@ class _Index:
         self.finding_of: dict[str, str] = {}  # finding -> vuln
         self.finding_by: dict[tuple[str, str], str] = {}  # (asset, vuln) -> finding
 
+        finding_ids = {f.id for f in ds.findings}
         for e in ds.edges:
             t = e.type
             if t == "EXPOSES":
@@ -106,7 +107,7 @@ class _Index:
                 self.can_assume.setdefault(e.src, []).append(e.dst)
             elif t == "MITIGATES":
                 self.mitigated.add((e.dst, e.props.get("asset", "")))
-            elif t == "ON":
+            elif t == "ON" and e.src in finding_ids:  # not Verdict/RiskAcceptance ON
                 self.finding_on[e.src] = e.dst
             elif t == "OF":
                 self.finding_of[e.src] = e.dst

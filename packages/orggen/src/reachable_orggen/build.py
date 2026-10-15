@@ -18,6 +18,7 @@ from .catalog import Catalog
 from .company import plant_company
 from .generate import GenConfig, generate_background
 from .ground_truth import GroundTruth, PlantedPath
+from .memory_seed import seed_memory
 from .model import Dataset
 from .oracle import OracleResult, run_oracle
 from .planters import DB, Planter, Spine, plant_org
@@ -43,6 +44,7 @@ def generate_org(org: str, seed: int, cfg: GenConfig) -> OrgBuild:
     b = generate_background(org, seed, cfg, catalog)
     gt = plant_org(b, catalog)
     plant_company(b, gt)
+    seed_memory(b, gt)
     res = _finalise(b.ds, gt)
     return OrgBuild(dataset=b.ds, ground_truth=gt, oracle=res)
 
@@ -57,6 +59,7 @@ def drift_org(org: str, seed: int, cfg: GenConfig) -> tuple[OrgBuild, PlantedPat
     bg_software = list(b.ds.software)  # before planting: never touch a planted spine
     gt = plant_org(b, catalog)
     plant_company(b, gt)
+    seed_memory(b, gt)
 
     drng = random.Random(f"{org}:{seed}:drift")
 
@@ -129,6 +132,20 @@ def dataset_hash(ds: Dataset) -> str:
         "oncalls": sorted((o.id, o.window, o.current) for o in ds.oncalls),
         "adrs": sorted((a.id, a.title, a.decision, a.date) for a in ds.adrs),
         "tickets": sorted((t.id, t.title, t.status, t.opened) for t in ds.tickets),
+        "memory": sorted(
+            (o.id, json.dumps(vars(o), sort_keys=True))
+            for lst in (
+                ds.runs,
+                ds.steps,
+                ds.triages,
+                ds.verdicts,
+                ds.risk_acceptances,
+                ds.patterns,
+                ds.techniques,
+                ds.playbooks,
+            )
+            for o in lst
+        ),
         "edges": sorted(
             (e.src, e.dst, e.type, json.dumps(e.props, sort_keys=True)) for e in ds.edges
         ),

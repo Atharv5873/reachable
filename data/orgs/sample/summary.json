@@ -2,7 +2,7 @@
   "org": "org_a",
   "assets": 53,
   "findings": 172,
-  "edges": 1227,
+  "edges": 1253,
   "crown_jewels": [
     "ds:org_a:ds:00001"
   ],

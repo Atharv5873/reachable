@@ -163,6 +163,7 @@ def test_every_tool_is_read_only_on_the_org_graph(rec):
         "owners": lambda: tools.owners(T.ORG, T.WEB1),
         "decision_trail": lambda: tools.decision_trail(T.ORG, asset_id=T.WEB1, port=443),
         "company_query": lambda: tools.company_query(T.ORG, "who_owns", {"asset_id": T.WEB1}),
+        "triage_memory": lambda: tools.triage_memory(T.ORG, [T.F1, T.F4]),
     }
     assert set(calls) == set(TOOL_NAMES)
     if "threatintel" not in r.list_graphs():  # vuln_intel reads the threatintel graph
