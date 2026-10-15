@@ -1,0 +1,21 @@
+{
+  "built_at": "2026-10-15",
+  "sources": {
+    "kev": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+    "epss": "https://epss.cyentia.com/epss_scores-current.csv.gz",
+    "nvd": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+    "attack": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
+  },
+  "kev_catalog_version": "2026.10.14",
+  "kev_date_released": "2026-10-14T19:27:28.0105Z",
+  "epss_model": "model_version:v2026.06.15,score_date:2026-10-14T12:00:24Z",
+  "counts": {
+    "cves": 3136,
+    "kev_cves": 1744,
+    "ransomware_cves": 361,
+    "epss_rows": 3135,
+    "critical": 800,
+    "techniques": 9,
+    "tactics": 7
+  }
+}

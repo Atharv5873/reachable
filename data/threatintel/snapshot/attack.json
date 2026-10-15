@@ -1,0 +1,127 @@
+{
+  "techniques": [
+    {
+      "id": "T1021.004",
+      "name": "SSH",
+      "url": "https://attack.mitre.org/techniques/T1021/004",
+      "tactics": [
+        "TA0008"
+      ]
+    },
+    {
+      "id": "T1068",
+      "name": "Exploitation for Privilege Escalation",
+      "url": "https://attack.mitre.org/techniques/T1068",
+      "tactics": [
+        "TA0004"
+      ]
+    },
+    {
+      "id": "T1078",
+      "name": "Valid Accounts",
+      "url": "https://attack.mitre.org/techniques/T1078",
+      "tactics": [
+        "TA0005",
+        "TA0003",
+        "TA0004",
+        "TA0001"
+      ]
+    },
+    {
+      "id": "T1078.004",
+      "name": "Cloud Accounts",
+      "url": "https://attack.mitre.org/techniques/T1078/004",
+      "tactics": [
+        "TA0005",
+        "TA0003",
+        "TA0004",
+        "TA0001"
+      ]
+    },
+    {
+      "id": "T1190",
+      "name": "Exploit Public-Facing Application",
+      "url": "https://attack.mitre.org/techniques/T1190",
+      "tactics": [
+        "TA0001"
+      ]
+    },
+    {
+      "id": "T1210",
+      "name": "Exploitation of Remote Services",
+      "url": "https://attack.mitre.org/techniques/T1210",
+      "tactics": [
+        "TA0008"
+      ]
+    },
+    {
+      "id": "T1530",
+      "name": "Data from Cloud Storage",
+      "url": "https://attack.mitre.org/techniques/T1530",
+      "tactics": [
+        "TA0009"
+      ]
+    },
+    {
+      "id": "T1552.001",
+      "name": "Credentials In Files",
+      "url": "https://attack.mitre.org/techniques/T1552/001",
+      "tactics": [
+        "TA0006"
+      ]
+    },
+    {
+      "id": "T1552.005",
+      "name": "Cloud Instance Metadata API",
+      "url": "https://attack.mitre.org/techniques/T1552/005",
+      "tactics": [
+        "TA0006"
+      ]
+    }
+  ],
+  "tactics": [
+    {
+      "id": "TA0001",
+      "name": "Initial Access",
+      "shortname": "initial-access",
+      "url": "https://attack.mitre.org/tactics/TA0001"
+    },
+    {
+      "id": "TA0003",
+      "name": "Persistence",
+      "shortname": "persistence",
+      "url": "https://attack.mitre.org/tactics/TA0003"
+    },
+    {
+      "id": "TA0004",
+      "name": "Privilege Escalation",
+      "shortname": "privilege-escalation",
+      "url": "https://attack.mitre.org/tactics/TA0004"
+    },
+    {
+      "id": "TA0005",
+      "name": "Stealth",
+      "shortname": "stealth",
+      "url": "https://attack.mitre.org/tactics/TA0005"
+    },
+    {
+      "id": "TA0006",
+      "name": "Credential Access",
+      "shortname": "credential-access",
+      "url": "https://attack.mitre.org/tactics/TA0006"
+    },
+    {
+      "id": "TA0008",
+      "name": "Lateral Movement",
+      "shortname": "lateral-movement",
+      "url": "https://attack.mitre.org/tactics/TA0008"
+    },
+    {
+      "id": "TA0009",
+      "name": "Collection",
+      "shortname": "collection",
+      "url": "https://attack.mitre.org/tactics/TA0009"
+    }
+  ],
+  "spec_version": "2.1"
+}
