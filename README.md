@@ -32,8 +32,10 @@ Postgres `5434`, API `8001`) so this runs beside other local stacks.
 cp .env.example .env          # set passwords; add NVD_API_KEY (recommended)
 make up                       # FalkorDB + Postgres + API, waits until healthy
 make intel                    # load the committed threat-intel snapshot
-make seed                     # generate + load the 3 orgs, write ground-truth labels
+make seed                     # generate + load the 3 orgs, write labels, derive ATTACK_STEP
 make test                     # unit + integration tests
+make gate-a                   # no-LLM evaluation of the graph tools -> evals/results/
+make mcp-smoke                # MCP server: list tools, call three
 ```
 
 Then open the FalkorDB Browser at <http://localhost:3001> and try the queries in
@@ -50,14 +52,18 @@ make intel REFETCH=1
 
 ```
 reachable/
-  apps/api/            FastAPI /health (placeholder until S2)
+  apps/api/            FastAPI /health
+  apps/mcp/            MCP server (stdio + streamable HTTP) over the graph tools
   packages/core/       settings, schema, FalkorDB helpers, attack_rules.py
   packages/intel/      fetch + normalise KEV/EPSS/NVD/ATT&CK; load `threatintel`
   packages/orggen/     synthetic org generator, planters, networkx oracle, loaders
+  packages/graph/      ATTACK_STEP derivation (derive.py) + typed tool library (tools.py)
+  evals/               Gate A (no-LLM tool evaluation) + results/
+  scripts/             mcp_smoke.py
   data/threatintel/    committed filtered snapshot + ATTRIBUTION.md
   data/orgs/           generated (gitignored except a tiny sample)
-  tests/               pytest (unit + integration)
-  learning/            teaching notes (S01.md)
+  tests/               pytest (unit + integration + property)
+  learning/            teaching notes (S01.md, S02.md)
 ```
 
 ## How it fits together
@@ -72,7 +78,62 @@ reachable/
    computed by an independent networkx **oracle** and written to
    `data/orgs/<org>/labels.json` — never loaded into FalkorDB.
 
-See [`learning/S01.md`](learning/S01.md) for the concepts and 5 Cypher queries to
+4. **`make derive`** (run by `make seed`) materialises the **attack layer**:
+   one Cypher query per attack rule MATCHes the rule's precondition and MERGEs an
+   `ATTACK_STEP` edge carrying `rule`, ATT&CK `technique`, `likelihood`,
+   `cost = -ln(likelihood)`, the `fix_token` that removes it, and `because`
+   (the evidence node ids). It also builds a node-split `FLOW` layer for
+   `algo.maxFlow` and labels nodes on crown-jewel paths `:CrownPath`.
+   A test asserts the derived Internet -> crown-jewel paths equal the oracle's,
+   hop for hop and fix token for fix token.
+5. **Tools** (`packages/graph/tools.py`, served by `apps/mcp`) answer questions
+   with FalkorDB doing the work. All are read-only (`GRAPH.RO_QUERY`), capped,
+   and return `{summary, data, evidence, queries, truncated}`:
+
+   | tool | how |
+   |---|---|
+   | `exposure_surface` | internet-exposed assets + exploitable / control-blocked vulns |
+   | `attack_paths` | `algo.SPpaths` over `ATTACK_STEP`, weight = -ln p: the k most likely paths |
+   | `blast_radius` | `algo.bfs` from a compromised node |
+   | `min_cut` | `algo.maxFlow` on the node-split FLOW layer + residual-graph cut recovery |
+   | `choke_points` | `algo.betweenness` restricted to `:CrownPath` |
+   | `why_step` | one step's rule, technique, fix, and the structural edges behind it |
+   | `vuln_intel` | CVSS/EPSS/KEV/ransomware/CWE/ATT&CK from `threatintel` |
+   | `simulate_fix` | `GRAPH.COPY` to a scratch graph, drop the fixed steps, re-run paths |
+   | `run_cypher_readonly` | logged escape hatch: read-only, forced LIMIT, timeout |
+
+   A derivation query, for flavour (`exploit_remote_service`, T1210):
+
+   ```cypher
+   MATCH (src:Asset)-[r:CAN_REACH]->(dst:Asset)-[:RUNS]->(s:Software)-[:HAS_VULN]->(v:Vuln),
+         (f:Finding)-[:ON]->(dst), (f)-[:OF]->(v)
+   WHERE v.av IN $network_vectors
+     AND (size(s.ports) = 0 OR r.port IN s.ports)
+     AND NOT (:Control)-[:MITIGATES {asset: dst.id}]->(v)
+   WITH DISTINCT src, dst, f.id AS token, v.likelihood AS lk, [f.id, v.id, s.id] AS because
+   MERGE (src)-[e:ATTACK_STEP {key: $rule + '|' + token + '|' + src.id + '|' + dst.id}]->(dst)
+   SET e.rule = $rule, e.technique = $technique, e.fix_token = token,
+       e.likelihood = lk, e.cost = -log(lk), e.because = because
+   ```
+
+6. **Gate A** (`make gate-a`) grades the tools against the oracle labels with no
+   LLM: planted-path recall by difficulty, decoys in top paths, min-cut vs the
+   oracle (each cut proven by `simulate_fix`), evidence validity, latency. See
+   [`evals/results/gate_a.md`](evals/results/gate_a.md).
+
+## MCP server
+
+```bash
+make mcp                                   # stdio: point an MCP host at `uv run reachable-mcp`
+make mcp-http                              # streamable HTTP on :8002/mcp (MCP_API_KEY in .env)
+docker compose up -d mcp                   # same, containerised
+make mcp-smoke URL=http://localhost:8002/mcp
+```
+
+HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is open.
+
+See [`learning/S01.md`](learning/S01.md) and [`learning/S02.md`](learning/S02.md)
+for the concepts, the Cypher, the max-flow / min-cut idea, and Browser queries to
 run now.
 
 ## Attack rules
