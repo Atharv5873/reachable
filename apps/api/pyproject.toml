@@ -1,10 +1,12 @@
 [project]
 name = "reachable-api"
 version = "0.1.0"
-description = "Reachable HTTP API (placeholder in S1: health check over both DBs)"
+description = "Reachable HTTP API: runs, live SSE stream, drift, verdicts (S5)"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "reachable-core",
+    "reachable-graph",
+    "reachable-agents",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "psycopg[binary]>=3.2",
@@ -12,6 +14,8 @@ dependencies = [
 
 [tool.uv.sources]
 reachable-core = { workspace = true }
+reachable-graph = { workspace = true }
+reachable-agents = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

@@ -46,29 +46,29 @@ def _note(outcome: LoopOutcome) -> dict:
 # ====================================================================== Triage
 TRIAGE = AgentSpec(
     name="triage",
-    tools=("triage_memory", "playbooks"),
-    required=("triage_memory", "playbooks"),
+    tools=("playbooks", "triage_memory"),
+    required=("playbooks",),
     max_turns=3,
     role="""\
 Decide which of this scan's open findings deserve attack-path investigation. CONTEXT.scan \
 is the scan digest: counts by severity band, ATT&CK technique and exposure; the CANDIDATES \
-(Internet-facing findings on a crown-jewel path, with detail); a count and sample of the \
-other Internet-facing findings; the critical findings that enable no attack step at all; \
-and the ids of findings someone already decided about (previously_decided).
-1. In ONE turn, in parallel: triage_memory on the candidates, the critical no-step findings \
-AND every previously_decided id; playbooks for the techniques the candidates enable.
-2. A LIVE risk acceptance suppresses a finding: do not investigate it, name the acceptance. \
-An EXPIRED one does NOT suppress anything. Past verdicts and patterns explain recurring \
-problems.
-3. Memory decides what NOT to redo. CONTEXT.drift (a new scan only) is the Sentinel's \
-check: findings on a NEW or cost-changed crown path and arrivals FLAGGED by a learned \
-pattern: investigate those first. A candidate with a past verdict that is on no new or \
-changed path, not flagged, and has no acceptance that lapsed since keeps that verdict: \
-list it under carried and do NOT investigate it again.
+still to decide (Internet-facing findings on a crown-jewel path, with detail); a count and \
+sample of the other Internet-facing findings; the critical findings that enable no attack \
+step at all; and previously_decided (findings a person decided about). CONTEXT.memory is \
+what memory already said about the candidates before you started: CARRIED ones keep their \
+earlier verdict (nothing changed for them) and are NOT investigated again; SUPPRESSED ones \
+have a live risk acceptance.
+1. playbooks for the techniques the candidates and carried findings enable. The memory of \
+every finding in CONTEXT.scan is already in CONTEXT.memory: call triage_memory only for a \
+finding it does not cover. CONTEXT.memory.still_unreachable counts critical no-step findings \
+whose earlier "not reachable" verdict stands (they stay deprioritised).
+2. A LIVE risk acceptance suppresses a finding: name it. An EXPIRED one does NOT suppress \
+anything.
+3. CONTEXT.drift (a new scan only) is the Sentinel's check: findings on a NEW crown path and \
+arrivals FLAGGED by a learned pattern: investigate those first.
 Investigate the remaining candidates unless a live acceptance suppresses them. Deprioritise \
 critical findings that enable no attack step, and say why (high score, no way in).""",
     schema="""{"investigate": ["<finding id>", "... most urgent first"],
- "carried": ["<finding id whose past verdict stands>"],
  "deprioritised": [{"finding": "<finding id>", "reason": "<short>"}],
  "suppressed": [{"finding": "<finding id>", "acceptance": "<risk acceptance id>"}],
  "playbooks": {"<technique id>": "<playbook id>"},
@@ -80,25 +80,57 @@ async def triage_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
     # Every triage starts from the same question, so the run asks it (one traced
     # MCP call, by="run") instead of spending an LLM turn on "call scan_findings".
     sf, _ = await ctx.preload("triage", "scan_findings", {"view": "triage", "limit": 30})
+    sf = (sf or {}).get("data") or {}
     drift_out = ctx.repo.read_output(ctx.graph, ctx.run_id, "Drift")  # the Sentinel's handoff
     drift = (drift_out or {}).get("payload") or {}
-    context = {
-        "org": state["org"],
-        "as_of_date": day(ctx.as_of),
-        "scan": scan_digest((sf or {}).get("data") or {}),
-        **({"drift": drift_digest(drift)} if drift_out else {}),
-    }
-    outcome = await run_agent(TRIAGE, ctx, context)
-    payload = finalise_triage(ctx, outcome, drift)
-    if payload["carried"]:
+    digest = scan_digest(sf)
+
+    # Recall before reasoning (episodic memory): the run asks memory about every
+    # candidate, sets aside those whose earlier verdict still stands, and the
+    # model reasons only about what is new.
+    cands = [c["finding"] for c in digest["candidates"]]
+    crits = [c["finding"] for c in digest["critical_without_attack_step"]]
+    ids = list(dict.fromkeys(cands + crits + list(digest["previously_decided"])))[:200]
+    if ids:
+        await ctx.preload("triage", "triage_memory", {"finding_ids": ids})
+    rec = recall(ctx, _scan_rows(sf), drift, no_step=crits)
+    if rec["carried"]:
         ctx.record_memory(
             "triage",
             "carried_verdicts",
             {
-                "skipped": len(payload["carried"]),
-                "findings": {c["finding"]: c["verdict"] for c in payload["carried"]},
+                "skipped": len(rec["carried"]),
+                "findings": {c["finding"]: c["verdict"] for c in rec["carried"]},
             },
         )
+    set_aside = {c["finding"] for c in rec["carried"]} | rec["sup_ids"]
+    digest["candidates"] = [c for c in digest["candidates"] if c["finding"] not in set_aside]
+    still_out = {c["finding"] for c in rec["still_unreachable"]} | rec["sup_ids"]
+    digest["critical_without_attack_step"] = [
+        c for c in digest["critical_without_attack_step"] if c["finding"] not in still_out
+    ]
+    context = {
+        "org": state["org"],
+        "as_of_date": day(ctx.as_of),
+        "scan": digest,
+        "memory": {
+            "carried": {
+                c[
+                    "finding"
+                ]: f"{c['decision']} on {c['decided']} ({', '.join(c['techniques'] or [])})"
+                for c in rec["carried"]
+            },
+            "suppressed": {s["finding"]: s["acceptance"] for s in rec["suppressed"]},
+            "expired_acceptances": {e["finding"]: e["acceptance"] for e in rec["expired"]},
+            "still_unreachable": len(rec["still_unreachable"]),
+            "patterns": {
+                p["id"]: p["description"][:140] for p in list(rec["patterns"].values())[:5]
+            },
+        },
+        **({"drift": drift_digest(drift)} if drift_out else {}),
+    }
+    outcome = await run_agent(TRIAGE, ctx, context)
+    payload = finalise_triage(ctx, outcome, drift)
     summary = (
         f"{payload['counts'].get('open', '?')} open findings; investigate "
         f"{len(payload['investigate'])}, carried {len(payload['carried'])} (prior verdict "
@@ -124,6 +156,118 @@ async def triage_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
         built_on=(drift_out or {}).get("id"),
     )
     return oid, summary
+
+
+def recall(
+    ctx: RunCtx,
+    on_steps: dict[str, dict],
+    drift: dict,
+    extra: list[str] = (),
+    no_step: list[str] = (),
+) -> dict:
+    """What memory says, merged over every triage_memory result Triage has so far.
+    The tool computed "live" at the run's as_of, so suppression is a fact, not the
+    model's opinion; and so is "carried" (episodic memory, as a rule):
+
+    a candidate whose newest verdict (at the run's clock) still stands is carried,
+    not investigated again. It stands unless something changed for it: it is on a
+    NEW or cost-changed crown path, a learned pattern flagged it on arrival, or a
+    risk acceptance on it lapsed after that verdict was made."""
+    mem: dict[str, dict] = {}
+    acceptances: dict[str, dict] = {}
+    patterns: dict[str, dict] = {}
+    latest: dict[str, dict] = {}
+    for r in ctx.results_of("triage_memory", "triage"):
+        d = r.result["data"]
+        for f in d["findings"]:
+            m = mem.setdefault(f["finding"], {**f})
+            m["suppressed"] = m["suppressed"] or f["suppressed"]
+        for ra in d["live_risk_acceptances"] + d["expired_risk_acceptances"]:
+            acceptances[ra["id"]] = ra
+        for p in d["patterns"]:
+            patterns[p["id"]] = p
+        for v in d["verdicts"]:
+            if (v.get("ts") or 0) > ctx.as_of:
+                continue  # decided after this run's clock: not memory yet
+            cur = latest.get(v["finding"])
+            if cur is None or (v["ts"], v["id"]) > (cur["ts"], cur["id"]):
+                latest[v["finding"]] = v
+    suppressed = []
+    for fid, m in mem.items():
+        if m["suppressed"]:
+            ra = acceptances.get((m["live_acceptances"] or [None])[0], {})
+            suppressed.append(
+                {
+                    "finding": fid,
+                    "acceptance": ra.get("id"),
+                    "approved_by": ra.get("approver_name") or ra.get("approved_by"),
+                    "expires": ra.get("expires"),
+                    "expires_date": day(ra.get("expires")),
+                    "reason": ra.get("reason"),
+                }
+            )
+    sup_ids = {s["finding"] for s in suppressed}
+    expired = [
+        {
+            "finding": fid,
+            "acceptance": aid,
+            "expired_date": day(acceptances.get(aid, {}).get("expires")),
+        }
+        for fid, m in mem.items()
+        if not m["suppressed"]
+        for aid in m["expired_acceptances"]
+    ]
+    flagged = drift.get("flagged_on_arrival") or {}
+    fresh = (
+        set(drift.get("new_path_findings", []))
+        | set(drift.get("changed_path_findings", []))
+        | set(flagged)
+    )
+    pool = [f for f, x in on_steps.items() if x.get("on_crown_path")] + list(extra)
+    carried = []
+    for fid in dict.fromkeys(pool):
+        v = latest.get(fid)
+        # An acceptance that expired AFTER the verdict changed the finding's
+        # standing (the verdict was made while it was accepted); one that had
+        # already expired is part of what the verdict decided.
+        lapsed = [
+            a
+            for a in mem.get(fid, {}).get("expired_acceptances", [])
+            if (acceptances.get(a, {}).get("expires") or 0) > (v or {}).get("ts", 0)
+        ]
+        if v is None or fid in sup_ids or fid in fresh or lapsed:
+            continue
+        carried.append(
+            {
+                "finding": fid,
+                "verdict": v["id"],
+                "decision": v["decision"],
+                "reason": str(v.get("reason") or "")[:300],
+                "decided": day(v.get("ts")),
+                **{
+                    k: on_steps.get(fid, {}).get(k)
+                    for k in ("asset", "hostname", "cve", "kev", "techniques", "on_crown_path")
+                },
+            }
+        )
+    # A critical finding that still enables no attack step, with a standing
+    # "not reachable" verdict: nothing to re-argue, its reason stands.
+    still_unreachable = [
+        {"finding": f, "verdict": latest[f]["id"], "reason": latest[f].get("reason")}
+        for f in no_step
+        if f in latest and latest[f]["decision"] == "not_reachable" and f not in sup_ids
+    ]
+    return {
+        "mem": mem,
+        "patterns": patterns,
+        "suppressed": suppressed,
+        "sup_ids": sup_ids,
+        "expired": expired,
+        "carried": carried,
+        "still_unreachable": still_unreachable,
+        "flagged": flagged,
+        "fresh": fresh,
+    }
 
 
 def drift_digest(d: dict) -> dict:
@@ -189,55 +333,14 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
     on_steps = _scan_rows(sf)
     no_step = {f["finding"]: f for f in sf.get("critical_without_attack_step", [])}
 
-    # Memory, merged over every triage_memory call: the tool computed "live"
-    # at the run's as_of, so suppression here is a fact, not the model's opinion.
-    mem: dict[str, dict] = {}
-    acceptances: dict[str, dict] = {}
-    patterns: dict[str, dict] = {}
-    latest: dict[str, dict] = {}  # finding -> its newest verdict at the run's clock
-    for r in ctx.results_of("triage_memory", "triage"):
-        d = r.result["data"]
-        for f in d["findings"]:
-            m = mem.setdefault(f["finding"], {**f})
-            m["suppressed"] = m["suppressed"] or f["suppressed"]
-        for ra in d["live_risk_acceptances"] + d["expired_risk_acceptances"]:
-            acceptances[ra["id"]] = ra
-        for p in d["patterns"]:
-            patterns[p["id"]] = p
-        for v in d["verdicts"]:
-            if (v.get("ts") or 0) > ctx.as_of:
-                continue  # decided after this run's clock: not memory yet
-            cur = latest.get(v["finding"])
-            if cur is None or (v["ts"], v["id"]) > (cur["ts"], cur["id"]):
-                latest[v["finding"]] = v
-    suppressed = []
-    for fid, m in mem.items():
-        if m["suppressed"]:
-            ra = acceptances.get((m["live_acceptances"] or [None])[0], {})
-            suppressed.append(
-                {
-                    "finding": fid,
-                    "acceptance": ra.get("id"),
-                    "approved_by": ra.get("approver_name") or ra.get("approved_by"),
-                    "expires": ra.get("expires"),
-                    "expires_date": day(ra.get("expires")),
-                    "reason": ra.get("reason"),
-                }
-            )
-    sup_ids = {s["finding"] for s in suppressed}
-    expired = [
-        {
-            "finding": fid,
-            "acceptance": aid,
-            "expired_date": day(acceptances.get(aid, {}).get("expires")),
-        }
-        for fid, m in mem.items()
-        if not m["suppressed"]
-        for aid in m["expired_acceptances"]
-    ]
-
     dropped = []
     wanted = [x for x in ans.get("investigate", []) if isinstance(x, str)]
+    rec = recall(
+        ctx, on_steps, drift, extra=[f for f in wanted if f in on_steps], no_step=list(no_step)
+    )
+    mem, sup_ids, flagged, fresh = rec["mem"], rec["sup_ids"], rec["flagged"], rec["fresh"]
+    carried = rec["carried"]
+    carried_ids = {c["finding"] for c in carried}
     investigate_ids = []
     for fid in wanted:
         if fid in sup_ids:
@@ -250,47 +353,8 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
         investigate_ids = [
             f for f, x in on_steps.items() if x.get("on_crown_path") and f not in sup_ids
         ]
-
-    # Episodic memory, as a rule (like suppression, a fact and not the model's
-    # opinion): a candidate whose past verdict still stands is carried, not
-    # investigated again. It stands unless something changed for it: it is on a
-    # NEW or cost-changed crown path, a learned pattern flagged it on arrival, or
-    # a risk acceptance on it has expired since.
-    flagged = drift.get("flagged_on_arrival") or {}
-    fresh = (
-        set(drift.get("new_path_findings", []))
-        | set(drift.get("changed_path_findings", []))
-        | set(flagged)
-    )
-    pool = [f for f, x in on_steps.items() if x.get("on_crown_path")] + investigate_ids
-    carried = []
-    for fid in dict.fromkeys(pool):
-        v = latest.get(fid)
-        # An acceptance that expired AFTER the verdict changed the finding's
-        # standing (the verdict was made while it was accepted); one that had
-        # already expired is part of what the verdict decided.
-        lapsed = [
-            a
-            for a in mem.get(fid, {}).get("expired_acceptances", [])
-            if (acceptances.get(a, {}).get("expires") or 0) > (v or {}).get("ts", 0)
-        ]
-        if v is None or fid in sup_ids or fid in fresh or lapsed:
-            continue
-        carried.append(
-            {
-                "finding": fid,
-                "verdict": v["id"],
-                "decision": v["decision"],
-                "reason": str(v.get("reason") or "")[:300],
-                "decided": day(v.get("ts")),
-                **{
-                    k: on_steps.get(fid, {}).get(k)
-                    for k in ("asset", "hostname", "cve", "kev", "techniques", "on_crown_path")
-                },
-            }
-        )
-    carried_ids = {c["finding"] for c in carried}
-    # Whatever is fresh and is a candidate gets investigated, first.
+    # Whatever is fresh and is a candidate gets investigated, first; whatever
+    # memory carried does not get investigated again.
     first = [f for f in on_steps if f in fresh and f not in sup_ids]
     investigate_ids = [f for f in dict.fromkeys(first + investigate_ids) if f not in carried_ids][
         :MAX_INVESTIGATE
@@ -302,8 +366,12 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
         if isinstance(d, dict)
     }
     deprioritised = []
+    standing = {x["finding"]: x["reason"] for x in rec["still_unreachable"]}
     for fid, f in no_step.items():
         if fid in sup_ids:
+            continue
+        if fid in standing and fid not in reasons:  # memory: the earlier reason stands
+            deprioritised.append({"finding": fid, "reason": str(standing[fid])[:300]})
             continue
         default = (
             f"CVSS {f.get('cvss')}{' KEV' if f.get('kev') else ''} on {f.get('hostname')}, "
@@ -324,6 +392,7 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
                         "policy": p["current"].get("policy") or [],
                     }
                 )
+    patterns = rec["patterns"]
     by_finding_patterns = {
         pid: sorted(f for f, m in mem.items() if pid in m["patterns"]) for pid in patterns
     }
@@ -359,8 +428,8 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
         "carried": carried,
         "skipped_by_memory": len(carried),
         "flagged_on_arrival": flagged,
-        "suppressed": suppressed,
-        "expired_acceptances": expired,
+        "suppressed": rec["suppressed"],
+        "expired_acceptances": rec["expired"],
         "deprioritised": deprioritised,
         "patterns": [
             {"id": p["id"], "description": p["description"], "findings": by_finding_patterns[pid]}
@@ -623,7 +692,9 @@ async def fixer_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
             for r in pp.get("ranked", [])[:10]
         ],
         "most_likely_path": (pp.get("paths") or [None])[0],
-        "suppressed_by_live_acceptance": tp.get("suppressed", []),
+        "suppressed_by_live_acceptance": {
+            s["finding"]: s["acceptance"] for s in tp.get("suppressed", [])
+        },
         "as_of_date": day(ctx.as_of),
     }
     outcome = await run_agent(FIXER, ctx, context)
@@ -710,7 +781,6 @@ def _route_view(r: dict) -> dict:
             f"{a['adr']} {a['title']} ({a['date']}, approved by {a['approved_by']})"
             for a in r.get("adrs", [])
         ],
-        **({"remembered_from": r["source"]} if r.get("source", "lookup") != "lookup" else {}),
     }
 
 
@@ -891,7 +961,12 @@ def digest(tp: dict, pp: dict, fp: dict, as_of: int) -> dict:
             "suppressed": tp.get("suppressed", []),
             "expired_acceptances": tp.get("expired_acceptances", []),
             "deprioritised": tp.get("deprioritised", [])[:5],
-            "patterns": tp.get("patterns", []),
+            "carried_from_memory": len(tp.get("carried", [])),
+            "flagged_on_arrival": sorted(tp.get("flagged_on_arrival") or {}),
+            "patterns": [
+                {"id": p["id"], "description": p["description"][:140]}
+                for p in tp.get("patterns", [])[:5]
+            ],
         },
         "most_likely_path": best,
         "ranked_findings": [
@@ -964,7 +1039,7 @@ def record_verdicts(ctx: RunCtx, triage_id: str | None, tp: dict, pp: dict, fp: 
     out = []
     for f, (decision, reason) in sorted(decisions.items()):
         v = ctx.repo.record_verdict(
-            ctx.graph, f, decision, reason, triage_id=triage_id, ts=ctx.as_of
+            ctx.graph, f, decision, reason, triage_id=triage_id, ts=ctx.as_of, by="agent"
         )
         out.append(
             {

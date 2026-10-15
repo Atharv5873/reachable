@@ -59,30 +59,24 @@ class FakeLLM:
 
     # ------------------------------------------------------------ triage
     def _triage(self, ctx, res):
-        if "triage_memory" not in res:  # the scan digest is already in CONTEXT
+        if "playbooks" not in res:  # the scan digest and its memory are already in CONTEXT
             d = ctx["scan"]
-            ids = [f["finding"] for f in d["candidates"]]
-            ids += [f["finding"] for f in d["critical_without_attack_step"]]
-            ids += list(d["previously_decided"])
-            techs = sorted({t for f in d["candidates"] for t in f["techniques"]})
-            calls = [_call("triage_memory", finding_ids=list(dict.fromkeys(ids)))]
-            return calls + ([_call("playbooks", techniques=techs)] if techs else [])
+            techs = sorted({t for f in d["candidates"] for t in f["techniques"]}) or sorted(
+                (d.get("aggregates") or {}).get("by_technique") or {}
+            )
+            return [_call("playbooks", techniques=techs or ["T1190"])]
         return self._triage_final(ctx, res)
 
     def _triage_final(self, ctx, res):
         d = ctx["scan"]
-        tm = (res.get("triage_memory") or {}).get("data", {})
-        sup = {f["finding"]: f for f in _dicts(tm.get("findings", [])) if f["suppressed"]}
+        sup = (ctx.get("memory") or {}).get("suppressed") or {}
         return {
             "investigate": [f["finding"] for f in d["candidates"] if f["finding"] not in sup],
             "deprioritised": [
                 {"finding": f["finding"], "reason": "critical, but enables no attack step"}
                 for f in d["critical_without_attack_step"]
             ],
-            "suppressed": [
-                {"finding": f, "acceptance": (s["live_acceptances"] or [None])[0]}
-                for f, s in sup.items()
-            ],
+            "suppressed": [{"finding": f, "acceptance": a} for f, a in sup.items()],
             "reasoning": "Stub policy: investigate every finding on a crown-jewel path or "
             "reachable from the Internet, minus live risk acceptances.",
         }

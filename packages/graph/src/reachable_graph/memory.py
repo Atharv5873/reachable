@@ -148,9 +148,11 @@ MATCH (r:Run {id: $run}), (t:Triage {id: $triage})
 MERGE (r)-[:HAS_TRIAGE]->(t)
 """
 
+# by: who decided ('agent' for a run's Reporter; null for a human/seeded triage;
+# 'analyst' verdicts use CREATE_ANALYST_VERDICT).
 CREATE_VERDICT = """
 MATCH (f:Finding {id: $finding})
-CREATE (v:Verdict {id: $id, decision: $decision, reason: $reason, ts: $ts})-[:ON]->(f)
+CREATE (v:Verdict {id: $id, decision: $decision, reason: $reason, ts: $ts, by: $by})-[:ON]->(f)
 RETURN v.id
 """
 LINK_VERDICT_TO_TRIAGE = """
@@ -490,6 +492,16 @@ MATCH (r:Run)-[:HAS_OUTPUT]->(o:FixPlan)
 WHERE r.id <> $run AND r.as_of <= $as_of AND r.status IN ['complete', 'degraded']
 RETURN r.id, r.as_of, o.payload ORDER BY r.as_of DESC, r.started DESC, o.ts DESC LIMIT 1
 """
+# The live stream (S5 API): a run's steps after a given seq, light (no result
+# bodies), and the run's own properties (status, stats).
+READ_STEPS_AFTER = """
+MATCH (r:Run {id: $id})-[:HAS_STEP]->(s:AgentStep) WHERE s.seq > $after
+RETURN properties(s) ORDER BY s.seq LIMIT $limit
+"""
+READ_RECENT_RUNS = """
+MATCH (r:Run) WHERE r.kind IN ['agent_triage', 'sentinel'] AND r.carried_from IS NULL
+RETURN r.id, r.kind, r.scan, r.status, r.started, r.as_of ORDER BY r.started DESC LIMIT $limit
+"""
 READ_ALERTS = """
 MATCH (r:Run)-[:RAISED]->(a:Alert)
 RETURN a.id, a.kind, a.ts, a.from_scan, a.to_scan, a.summary, r.id ORDER BY a.raised DESC
@@ -683,6 +695,7 @@ class MemoryRepo:
         *,
         triage_id: str | None = None,
         ts: int | None = None,
+        by: str | None = None,
     ) -> VerdictRec:
         self._require(org, "Finding", [finding_id])
         if triage_id:
@@ -691,7 +704,14 @@ class MemoryRepo:
         self._w(
             org,
             CREATE_VERDICT,
-            {"id": vid, "finding": finding_id, "decision": decision, "reason": reason, "ts": ts},
+            {
+                "id": vid,
+                "finding": finding_id,
+                "decision": decision,
+                "reason": reason,
+                "ts": ts,
+                "by": by,
+            },
         )
         if triage_id:
             self._w(org, LINK_VERDICT_TO_TRIAGE, {"triage": triage_id, "verdict": vid})
@@ -936,6 +956,23 @@ class MemoryRepo:
         if assets:
             self._w(org, LINK_ALERT_ABOUT, {"id": aid, "ids": sorted(set(assets))})
         return aid
+
+    # --- S5: what the live stream reads ---------------------------------------
+    def run_head(self, org: str, run_id: str) -> dict | None:
+        rows = self._r(org, READ_RUN_PROPS, {"id": run_id})
+        return _decode(dict(rows[0][0])) if rows else None
+
+    def steps_after(self, org: str, run_id: str, after: int = -1, limit: int = 200) -> list[dict]:
+        """A run's trace steps with seq > after, in order, without result bodies."""
+        rows = self._r(org, READ_STEPS_AFTER, {"id": run_id, "after": after, "limit": limit})
+        return [_decode(dict(r[0])) for r in rows]
+
+    def recent_runs(self, org: str, limit: int = 10) -> list[dict]:
+        keys = ("id", "kind", "scan", "status", "started", "as_of")
+        return [
+            dict(zip(keys, r, strict=True))
+            for r in self._r(org, READ_RECENT_RUNS, {"limit": limit})
+        ]
 
     def alerts(self, org: str) -> list[dict]:
         keys = ("id", "kind", "ts", "from_scan", "to_scan", "summary", "run")

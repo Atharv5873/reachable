@@ -1162,8 +1162,10 @@ class GraphTools(CompanyToolsMixin):
             if r[0] not in steps
         ][:10]
         # Open findings someone already decided about (a risk acceptance or a
-        # verdict ON them): triage must look at their memory even when they
-        # enable no step, or a live acceptance would go unnoticed.
+        # human verdict ON them): triage must look at their memory even when they
+        # enable no step, or a live acceptance would go unnoticed. The agents' own
+        # verdicts (by='agent') are not listed: after one run they would flood
+        # this list, and triage_memory recalls them for the candidates anyway.
         prior: dict[str, dict] = {}
         for kind, cypher in (
             (
@@ -1174,6 +1176,7 @@ class GraphTools(CompanyToolsMixin):
             (
                 "verdicts",
                 "MATCH (m:Verdict)-[:ON]->(f:Finding {status: 'open'}) "
+                "WHERE m.by IS NULL OR m.by <> 'agent' "
                 "RETURN f.id, count(m), max(m.ts)",
             ),
         ):

@@ -1363,7 +1363,9 @@ source = { editable = "apps/api" }
 dependencies = [
     { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "reachable-agents" },
     { name = "reachable-core" },
+    { name = "reachable-graph" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1371,7 +1373,9 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "reachable-agents", editable = "packages/agents" },
     { name = "reachable-core", editable = "packages/core" },
+    { name = "reachable-graph", editable = "packages/graph" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
 

@@ -37,6 +37,32 @@ def snapshot_attack():
     return json.loads(snap.read_text(encoding="utf-8"))
 
 
+def load_scans(db, org: str, base: str, *, scale: float = TEST_SCALE):
+    """Scan v1 of `org` into graph `base` and its week-later rescan v2 into
+    `base`_v2 (the naming exposure_drift / the Sentinel expect), both derived.
+    Returns (v1 build, v2 build, the planted new path)."""
+    from reachable_graph.derive import derive
+    from reachable_orggen.build import drift_org
+    from reachable_orggen.load_falkordb import load_org
+
+    cfg = GenConfig(scale=scale)
+    ob1 = generate_org(org, TEST_SEED, cfg)
+    ob1.dataset.org = base
+    load_org(db, ob1.dataset)
+    derive(db.select_graph(base))
+    ob2, new_path = drift_org(org, TEST_SEED, cfg)
+    ob2.dataset.org = f"{base}_v2"
+    load_org(db, ob2.dataset)
+    derive(db.select_graph(f"{base}_v2"))
+    return ob1, ob2, new_path
+
+
+def drop(db, *names: str) -> None:
+    for n in names:
+        if n in db.list_graphs():
+            db.select_graph(n).delete()
+
+
 @pytest.fixture(scope="session")
 def db():
     try:

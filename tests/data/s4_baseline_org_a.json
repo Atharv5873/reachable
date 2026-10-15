@@ -1,0 +1,72 @@
+{
+ "_provenance": "S4 code (commit 2637d6f) on generate_org(org_a, seed 42, scale 0.05), FakeLLM, fresh graph; tokens_in = (message chars + tool-schema chars) / 4 summed over every LLM call, the same proxy S5 FakeLLM uses. Measured 2026-10-15 with a git worktree of 2637d6f.",
+ "tokens_in": 35487,
+ "llm_calls": 11,
+ "investigate": [
+  "org_a:finding:00376",
+  "org_a:finding:00377",
+  "org_a:finding:00378",
+  "org_a:finding:00380",
+  "org_a:finding:00381",
+  "org_a:finding:00382",
+  "org_a:finding:00383",
+  "org_a:finding:00385",
+  "org_a:finding:00386",
+  "org_a:finding:00387",
+  "org_a:finding:00388",
+  "org_a:finding:00389"
+ ],
+ "suppressed": [
+  "org_a:finding:00391"
+ ],
+ "deprioritised": [
+  "org_a:finding:00050",
+  "org_a:finding:00072",
+  "org_a:finding:00092",
+  "org_a:finding:00113",
+  "org_a:finding:00142",
+  "org_a:finding:00252",
+  "org_a:finding:00256",
+  "org_a:finding:00257",
+  "org_a:finding:00259",
+  "org_a:finding:00269"
+ ],
+ "expired": [
+  "org_a:finding:00378"
+ ],
+ "verdicts": {
+  "org_a:finding:00050": "not_reachable",
+  "org_a:finding:00072": "not_reachable",
+  "org_a:finding:00092": "not_reachable",
+  "org_a:finding:00113": "not_reachable",
+  "org_a:finding:00142": "not_reachable",
+  "org_a:finding:00252": "not_reachable",
+  "org_a:finding:00256": "not_reachable",
+  "org_a:finding:00257": "not_reachable",
+  "org_a:finding:00259": "not_reachable",
+  "org_a:finding:00269": "not_reachable",
+  "org_a:finding:00376": "fix_now",
+  "org_a:finding:00377": "schedule",
+  "org_a:finding:00378": "fix_now",
+  "org_a:finding:00379": "schedule",
+  "org_a:finding:00380": "fix_now",
+  "org_a:finding:00381": "fix_now",
+  "org_a:finding:00382": "schedule",
+  "org_a:finding:00383": "fix_now",
+  "org_a:finding:00384": "schedule",
+  "org_a:finding:00385": "fix_now",
+  "org_a:finding:00386": "fix_now",
+  "org_a:finding:00387": "schedule",
+  "org_a:finding:00388": "schedule",
+  "org_a:finding:00389": "schedule"
+ },
+ "fix": [
+  "org_a:finding:00376",
+  "org_a:finding:00378",
+  "org_a:finding:00380",
+  "org_a:finding:00381",
+  "org_a:finding:00383",
+  "org_a:finding:00385",
+  "org_a:finding:00386"
+ ]
+}

@@ -1,0 +1,252 @@
+{
+ "org": "org_a",
+ "seed": 42,
+ "scale": 1.0,
+ "model": [
+  "primary=gemini/gemini-3.5-flash-lite",
+  "fallback=groq/qwen/qwen3.8-27b"
+ ],
+ "v1_run": {
+  "run_id": "lift_org_a:run:c34e6cf70db8",
+  "status": "complete",
+  "stats": {
+   "max_llm_calls": 30,
+   "max_tool_calls": 45,
+   "llm_calls": 10,
+   "tool_calls": 25,
+   "cache_hits": 0,
+   "refused": 0,
+   "per_tool": {
+    "scan_findings": 1,
+    "triage_memory": 2,
+    "playbooks": 1,
+    "attack_paths": 1,
+    "why_step": 3,
+    "min_cut": 2,
+    "owners": 7,
+    "decision_trail": 6,
+    "simulate_fix": 2
+   },
+   "exhausted": null,
+   "tool_results": 25,
+   "fallbacks": 0,
+   "llm_failures": 0,
+   "tokens_in": 49840,
+   "tokens_out": 4003,
+   "models": {
+    "primary=gemini/gemini-3.5-flash-lite": 10
+   },
+   "memory": {
+    "patterns_learned": 1
+   },
+   "wall_ms": 70452
+  }
+ },
+ "resets": {
+  "before_cold": {
+   "AgentStep": 3.0,
+   "ToolOutput": 0,
+   "Report": 0,
+   "FixPlan": 0,
+   "PathAnalysis": 0,
+   "Drift": 0,
+   "Alert": 0,
+   "Verdict": 2.0,
+   "Triage": 2.0,
+   "Run": 1.0,
+   "RiskAcceptance": 2.0,
+   "Pattern": 1.0,
+   "Playbook(learned)": 0
+  },
+  "before_warm": {
+   "AgentStep": 45.0,
+   "ToolOutput": 27.0,
+   "Report": 1.0,
+   "FixPlan": 1.0,
+   "PathAnalysis": 1.0,
+   "Drift": 1.0,
+   "Alert": 1.0,
+   "Verdict": 24.0,
+   "Triage": 1.0,
+   "Run": 1.0,
+   "RiskAcceptance": 0,
+   "Pattern": 3.0,
+   "Playbook(learned)": 0
+  }
+ },
+ "oracle": {
+  "min_cut_size": 7,
+  "new_path": [
+   "internet",
+   "asset:org_a:asset:01759",
+   "asset:org_a:asset:01760",
+   "secret:org_a:secret:00009",
+   "ds:org_a:ds:00001"
+  ]
+ },
+ "cold": {
+  "run_id": "lift_org_a_v2:run:041c72ac1b95",
+  "status": "complete",
+  "findings_investigated": 9,
+  "investigated": [
+   "org_a:finding:06879",
+   "org_a:finding:06857",
+   "org_a:finding:06848",
+   "org_a:finding:06850",
+   "org_a:finding:06851",
+   "org_a:finding:06853",
+   "org_a:finding:06858",
+   "org_a:finding:06855",
+   "org_a:finding:06859"
+  ],
+  "skipped_by_memory": 0,
+  "carried": {},
+  "flagged_on_arrival": [],
+  "alert": "lift_org_a_v2:alert:70a422c229b6",
+  "llm_calls": 7,
+  "tool_calls": 27,
+  "cache_hits": 0,
+  "tokens_in": 27156,
+  "tokens_out": 2777,
+  "wall_s": 66.4,
+  "models": {
+   "primary=gemini/gemini-3.5-flash-lite": 7
+  },
+  "memory_events": {
+   "patterns_learned": 1
+  },
+  "by_agent": {
+   "sentinel": {
+    "llm": 0,
+    "tool": 3,
+    "tokens_in": 0
+   },
+   "triage": {
+    "llm": 2,
+    "tool": 4,
+    "tokens_in": 6348
+   },
+   "pathfinder": {
+    "llm": 2,
+    "tool": 4,
+    "tokens_in": 8736
+   },
+   "fixer": {
+    "llm": 2,
+    "tool": 16,
+    "tokens_in": 9035
+   },
+   "reporter": {
+    "llm": 1,
+    "tool": 0,
+    "tokens_in": 3037
+   }
+  },
+  "usd": 0.01509,
+  "fix_tokens": [
+   "org_a:finding:06848",
+   "org_a:finding:06850",
+   "org_a:finding:06851",
+   "org_a:finding:06853",
+   "org_a:finding:06855",
+   "org_a:finding:06879",
+   "step:usekey:org_a:secret:00008:org_a:ident:00006"
+  ],
+  "chosen": "cheapest",
+  "verified_in_run": true,
+  "eval_simulate_fix_disconnects": true,
+  "fix_set_size": 7,
+  "oracle_min_cut_size": 7,
+  "correct": true
+ },
+ "warm": {
+  "run_id": "lift_org_a_v2:run:6e1d571ed6cd",
+  "status": "complete",
+  "findings_investigated": 1,
+  "investigated": [
+   "org_a:finding:06879"
+  ],
+  "skipped_by_memory": 8,
+  "carried": {
+   "org_a:finding:06857": "schedule",
+   "org_a:finding:06848": "fix_now",
+   "org_a:finding:06850": "fix_now",
+   "org_a:finding:06851": "fix_now",
+   "org_a:finding:06853": "fix_now",
+   "org_a:finding:06858": "schedule",
+   "org_a:finding:06855": "fix_now",
+   "org_a:finding:06859": "schedule"
+  },
+  "flagged_on_arrival": [
+   "org_a:finding:06868",
+   "org_a:finding:06871",
+   "org_a:finding:06876",
+   "org_a:finding:06879"
+  ],
+  "alert": "lift_org_a_v2:alert:b913cbf3f434",
+  "llm_calls": 7,
+  "tool_calls": 14,
+  "cache_hits": 0,
+  "tokens_in": 25175,
+  "tokens_out": 2194,
+  "wall_s": 79.0,
+  "models": {
+   "primary=gemini/gemini-3.5-flash-lite": 7
+  },
+  "memory_events": {
+   "carry_over": 1,
+   "pattern_flags": 1,
+   "carried_verdicts": 1,
+   "remembered_routes": 1,
+   "patterns_learned": 1
+  },
+  "by_agent": {
+   "sentinel": {
+    "llm": 0,
+    "tool": 3,
+    "tokens_in": 0
+   },
+   "triage": {
+    "llm": 2,
+    "tool": 3,
+    "tokens_in": 5418
+   },
+   "pathfinder": {
+    "llm": 2,
+    "tool": 2,
+    "tokens_in": 7243
+   },
+   "fixer": {
+    "llm": 2,
+    "tool": 6,
+    "tokens_in": 9143
+   },
+   "reporter": {
+    "llm": 1,
+    "tool": 0,
+    "tokens_in": 3371
+   }
+  },
+  "usd": 0.01304,
+  "fix_tokens": [
+   "org_a:finding:06848",
+   "org_a:finding:06850",
+   "org_a:finding:06851",
+   "org_a:finding:06853",
+   "org_a:finding:06855",
+   "org_a:finding:06879",
+   "step:usekey:org_a:secret:00008:org_a:ident:00006"
+  ],
+  "chosen": "cheapest",
+  "verified_in_run": true,
+  "eval_simulate_fix_disconnects": true,
+  "fix_set_size": 7,
+  "oracle_min_cut_size": 7,
+  "correct": true
+ },
+ "gate_b": {
+  "warm_does_strictly_less_work": true,
+  "both_fix_sets_correct": true,
+  "pass": true
+ }
+}
