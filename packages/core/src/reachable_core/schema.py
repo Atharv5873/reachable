@@ -39,6 +39,8 @@ ORG_INDEXES: dict[str, str] = {
     "OnCall": "id",
     "ADR": "id",
     "Ticket": "id",
+    # One per loaded scan: which scan this graph is, and the time it ran.
+    "Scan": "id",
 }
 
 # Memory layer (Track 02): agent memory lives in the org graph too, written only
@@ -52,6 +54,11 @@ MEMORY_INDEXES: dict[str, str] = {
     "Pattern": "id",
     "Playbook": "id",
     "Technique": "id",
+    # S4 agent runs: each tool result, and each agent's handoff output.
+    "ToolOutput": "id",
+    "PathAnalysis": "id",
+    "FixPlan": "id",
+    "Report": "id",
 }
 
 # Identity sub-labels (an Identity node also carries exactly one of these).

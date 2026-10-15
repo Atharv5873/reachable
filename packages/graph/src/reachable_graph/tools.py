@@ -38,7 +38,7 @@ from reachable_core.schema import THREATINTEL_GRAPH
 from reachable_core.settings import get_settings
 
 from . import memory
-from .company_tools import CompanyToolsMixin
+from .company_tools import CompanyToolsMixin, _day
 from .models import (
     MAX_BFS_NODES,
     MAX_ROWS,
@@ -50,8 +50,10 @@ from .models import (
     Evidence,
     ExposureInput,
     MinCutInput,
+    PlaybooksInput,
     QueryLog,
     RunCypherInput,
+    ScanFindingsInput,
     SimulateFixInput,
     ToolResult,
     TriageMemoryInput,
@@ -75,6 +77,7 @@ _KIND_LABEL = {
     "ds": "DataStore",
     "control": "Control",
     "zone": "Zone",
+    "scan": "Scan",
     # company layer
     "person": "Person",
     "team": "Team",
@@ -165,7 +168,7 @@ class GraphTools(CompanyToolsMixin):
         timeout_ms: int = QUERY_TIMEOUT_MS,
     ) -> None:
         self.db = db or connect()
-        self.allowed = set(allowed_orgs or get_settings().orgs)
+        self.allowed = set(allowed_orgs or get_settings().graphs)
         self.threatintel = threatintel_graph
         self.timeout_ms = timeout_ms
 
@@ -1052,10 +1055,221 @@ class GraphTools(CompanyToolsMixin):
             lambda c, p: self._q(g, c, p, qlog), g, inp.finding_ids, now=inp.as_of, qlog=qlog
         )
 
-    # ============================================================ S4 stubs
+    # ========================================================= scan_findings
+    def scan_findings(self, org: str, limit: int = 30) -> ToolResult:
+        """The scan at a glance: which scan and when, the crown jewels, and the open
+        findings ranked by what they enable in the ATTACK_STEP layer.
+
+        A finding matters to an attacker only if it is the fix_token of some
+        ATTACK_STEP. So rank: on a crown-jewel path (both step endpoints are
+        :CrownPath), then reachable straight from the Internet, then KEV, step
+        likelihood, CVSS. Separately list the most severe open findings that
+        enable NO step: high scores, no way in (the classic false alarm)."""
+        inp = ScanFindingsInput(org=org, limit=limit)
+        g, qlog = self._org(inp.org), []
+        scan = self._q(
+            g, "MATCH (s:Scan) RETURN s.id, s.version, s.ts ORDER BY s.ts DESC", {}, qlog
+        )
+        status = dict(self._q(g, "MATCH (f:Finding) RETURN f.status, count(f)", {}, qlog))
+        crown = self._q(
+            g,
+            "MATCH (d:DataStore {crown_jewel: true}) "
+            "RETURN d.id, d.kind, d.sensitivity ORDER BY d.id",
+            {},
+            qlog,
+        )
+        # Every finding that enables at least one step (step:* tokens are not
+        # scanner findings): its techniques and best step likelihood.
+        enabling = self._q(
+            g,
+            """
+            MATCH (a)-[e:ATTACK_STEP]->(b)
+            WHERE NOT e.fix_token STARTS WITH 'step:'
+            RETURN e.fix_token, count(e), collect(DISTINCT e.technique), max(e.likelihood),
+                   max(CASE WHEN a:CrownPath AND b:CrownPath THEN 1 ELSE 0 END),
+                   max(CASE WHEN a:Internet THEN 1 ELSE 0 END)
+            """,
+            {},
+            qlog,
+        )
+        # The vuln signals the ranking needs, for every open finding, joined in
+        # Python. FalkorDB gotcha: joining in Cypher (WITH tok MATCH (f:Finding
+        # {id: tok})) is a per-row scan, not an index seek: 3.6 s vs ~0.1 s here.
+        # Passing the ~3k ids as a parameter instead would also bloat the query log.
+        signals = {
+            fid: (bool(kev), cvss or 0.0)
+            for fid, kev, cvss in self._q(
+                g,
+                "MATCH (f:Finding {status: 'open'})-[:OF]->(v:Vuln) RETURN f.id, v.kev, v.cvss",
+                {},
+                qlog,
+            )
+        }
+        enabling = [
+            (*row, *signals.get(row[0], (False, 0.0))) for row in enabling if row[0] in signals
+        ]
+        steps = {
+            tok: {
+                "attack_steps": n,
+                "techniques": sorted(techs),
+                "best_likelihood": round(lk, 4),
+                "on_crown_path": bool(cp),
+                "from_internet": bool(inet),
+                "_rank": (-cp, -inet, -int(kev), -lk, -cvss, tok),
+            }
+            for tok, n, techs, lk, cp, inet, kev, cvss in enabling
+        }
+        ranked = sorted(steps, key=lambda t: steps[t]["_rank"])
+        truncated = len(ranked) > inp.limit
+        # The most severe open findings that enable nothing: the top criticals,
+        # minus any that do enable a step.
+        severe = [
+            r[0]
+            for r in self._q(
+                g,
+                """
+                MATCH (f:Finding {status: 'open'})-[:OF]->(v:Vuln) WHERE v.cvss >= 9.0
+                RETURN f.id ORDER BY v.kev DESC, v.cvss DESC, v.epss DESC, f.id LIMIT 60
+                """,
+                {},
+                qlog,
+            )
+            if r[0] not in steps
+        ][:10]
+        # Open findings someone already decided about (a risk acceptance or a
+        # verdict ON them): triage must look at their memory even when they
+        # enable no step, or a live acceptance would go unnoticed.
+        prior: dict[str, dict] = {}
+        for kind, cypher in (
+            (
+                "risk_acceptances",
+                "MATCH (m:RiskAcceptance)-[:ON]->(f:Finding {status: 'open'}) "
+                "RETURN f.id, count(m), max(m.created)",
+            ),
+            (
+                "verdicts",
+                "MATCH (m:Verdict)-[:ON]->(f:Finding {status: 'open'}) "
+                "RETURN f.id, count(m), max(m.ts)",
+            ),
+        ):
+            for fid, n, last in self._q(g, cypher, {}, qlog):
+                p = prior.setdefault(
+                    fid, {"finding": fid, "risk_acceptances": 0, "verdicts": 0, "last": 0}
+                )
+                p[kind], p["last"] = n, max(p["last"], last or 0)
+        decided = sorted(
+            prior.values(), key=lambda p: (-p["risk_acceptances"], -p["last"], p["finding"])
+        )[:20]
+        for p in decided:
+            p["enables_attack_step"] = p["finding"] in steps
+            p.pop("last")
+        details = self._finding_details(g, [*ranked[: inp.limit], *severe], qlog)
+        findings = [
+            {"finding": f, **details[f], **{k: v for k, v in steps[f].items() if k != "_rank"}}
+            for f in ranked[: inp.limit]
+            if f in details
+        ]
+        unreachable = [
+            {"finding": f, **details[f], "attack_steps": 0} for f in severe if f in details
+        ]
+        ev = Evidence(
+            node_ids=[
+                *(s[0] for s in scan[:1]),
+                *(c[0] for c in crown),
+                *(x for f in findings + unreachable for x in (f["finding"], f["asset"])),
+                *(p["finding"] for p in decided),
+            ]
+        )
+        ev.node_ids = list(dict.fromkeys(ev.node_ids))
+        on_crown = sum(1 for s in steps.values() if s["on_crown_path"])
+        sid, version, ts = scan[0] if scan else (None, None, None)
+        summary = (
+            f"Scan {version or '?'} ({_day(ts)}): {status.get('open', 0)} open findings; "
+            f"{len(steps)} enable an attack step, {on_crown} on a crown-jewel path; "
+            f"{len(unreachable)} critical finding(s) enable no step at all; "
+            f"{len(prior)} carry an earlier decision (check triage_memory). "
+            f"Crown jewels: {[c[0] for c in crown]}."
+        )
+        return ToolResult(
+            summary=summary,
+            data={
+                "scan": {"id": sid, "version": version, "ts": ts, "date": _day(ts)},
+                "counts": {
+                    "open": status.get("open", 0),
+                    "fixed": status.get("fixed", 0),
+                    "enabling_attack_steps": len(steps),
+                    "on_crown_path": on_crown,
+                },
+                "crown_jewels": [{"id": i, "kind": k, "sensitivity": s} for i, k, s in crown],
+                "findings": findings,
+                "critical_without_attack_step": unreachable,
+                "previously_decided": decided,
+            },
+            evidence=ev,
+            queries=qlog,
+            truncated=truncated,
+        )
+
+    # ============================================================= playbooks
+    def playbooks(self, org: str, techniques: list[str], as_of: int | None = None) -> ToolResult:
+        """The playbook version in force for each technique at `as_of` (procedural
+        memory): the newest version published at or before then. Without as_of,
+        the version nothing supersedes."""
+        inp = PlaybooksInput(org=org, techniques=techniques, as_of=as_of)
+        g, qlog = self._org(inp.org), []
+        out, ev = [], Evidence()
+        for tech in dict.fromkeys(inp.techniques):
+            rows = [
+                {"id": i, "version": v, "body": b, "ts": ts, "supersedes": old}
+                for i, _, v, b, ts, old in self._q(
+                    g, memory.READ_PLAYBOOK_HISTORY, {"technique": tech}, qlog
+                )
+            ]
+            if inp.as_of is None:
+                superseded = {r["supersedes"] for r in rows}
+                live = [r for r in rows if r["id"] not in superseded]
+            else:
+                live = [r for r in rows if r["ts"] <= inp.as_of]
+            cur = max(live, key=lambda r: r["version"]) if live else None
+            out.append(
+                {
+                    "technique": tech,
+                    "current": cur,
+                    "versions": [
+                        {"id": r["id"], "version": r["version"], "date": _day(r["ts"])}
+                        for r in rows
+                    ],
+                }
+            )
+            if cur:
+                ev.node_ids += [tech, cur["id"]]
+                ev.edges.append(EdgeRef(src=tech, rel="HANDLED_BY", dst=cur["id"]))
+        have = [p["technique"] for p in out if p["current"]]
+        missing = [p["technique"] for p in out if not p["current"]]
+        summary = (
+            "Playbooks in force"
+            + (f" at {_day(inp.as_of)}" if inp.as_of is not None else "")
+            + ": "
+            + (
+                ", ".join(
+                    f"{p['technique']} v{p['current']['version']}" for p in out if p["current"]
+                )
+                or "none"
+            )
+            + (f"; no playbook for {missing}" if missing else "")
+            + "."
+        )
+        return ToolResult(
+            summary=summary,
+            data={"as_of": inp.as_of, "playbooks": out, "covered": have, "missing": missing},
+            evidence=ev,
+            queries=qlog,
+        )
+
+    # ============================================================ S5 stubs
     def exposure_drift(self, org: str) -> ToolResult:
-        """TODO(S4): what changed between scan v1 and v2 (labels_v2 world)."""
-        raise NotImplementedError("exposure_drift arrives in S4 (needs the v2 graph loaded)")
+        """TODO(S5): what changed between scan v1 and v2 (graphs <org> and <org>_v2)."""
+        raise NotImplementedError("exposure_drift arrives in S5 (Sentinel / drift)")
 
 
 # ---------------------------------------------------------------- helpers
@@ -1184,4 +1398,7 @@ TOOL_NAMES = [
     "company_query",
     # memory layer (S3)
     "triage_memory",
+    # agent layer (S4): the scan's findings, and procedural memory
+    "scan_findings",
+    "playbooks",
 ]

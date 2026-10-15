@@ -15,8 +15,8 @@ import random
 from dataclasses import dataclass
 
 from .catalog import Catalog
-from .company import plant_company
-from .generate import GenConfig, generate_background
+from .company import DAY, plant_company
+from .generate import NOW, GenConfig, generate_background
 from .ground_truth import GroundTruth, PlantedPath
 from .memory_seed import seed_memory
 from .model import Dataset
@@ -62,6 +62,9 @@ def drift_org(org: str, seed: int, cfg: GenConfig) -> tuple[OrgBuild, PlantedPat
     seed_memory(b, gt)
 
     drng = random.Random(f"{org}:{seed}:drift")
+    # The rescan runs six days later: still inside the on-call week the company
+    # layer was generated for, so "who is on call at scan time" has an answer.
+    b.ds.scan, b.ds.scan_ts = "v2", NOW + 6 * DAY
 
     # 1. Some fixes applied: close a handful of open background findings...
     open_findings = [f for f in b.ds.findings if f.status == "open"]

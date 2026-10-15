@@ -2,7 +2,8 @@
 
 Subcommands:
   seed   Generate all orgs, load FalkorDB (+ Postgres mirror), write labels
-         (v1 and v2). Skips Postgres with --no-postgres.
+         (v1 and v2). Scan v2 is loaded as graph `<org>_v2` (FalkorDB only).
+         Skips Postgres with --no-postgres.
   reset  Drop every org graph + Postgres schema (Makefile reloads afterwards).
   sample Write a tiny committed sample under data/orgs/sample/.
 """
@@ -38,9 +39,12 @@ def _seed(seed: int, scale: float, postgres: bool) -> None:
         out_dir = settings.orgs_dir / org
         write_labels(out_dir, ob, scan="v1")
 
-        # scan v2 (week-later drift): write labels_v2 with the one new path.
+        # scan v2 (week-later drift): write labels_v2 with the one new path, and
+        # load it as its own graph `<org>_v2` (node ids stay `<org>:...`).
         v2, new_path = drift_org(org, seed, cfg)
         write_labels(out_dir, v2, scan="v2", new_path=new_path)
+        v2.dataset.org = settings.scan_graph(org, "v2")
+        stats["v2_nodes"] = load_org(db, v2.dataset)["nodes"]
 
         stats["load_seconds"] = round(time.time() - t0, 1)
         stats["planted_paths"] = len(ob.ground_truth.paths)

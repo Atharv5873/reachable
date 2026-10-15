@@ -52,6 +52,7 @@ def test_falkordb_counts_match_generator(db):
                 )
             )
             + 1  # +1 Internet
+            + 1  # +1 Scan (which scan the graph holds, and when it ran)
         )
         assert stats["nodes"] == node_total
     finally:

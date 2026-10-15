@@ -37,12 +37,14 @@ log = logging.getLogger("reachable.mcp")
 
 INSTRUCTIONS = """\
 Reachable answers "what can an attacker actually reach?" over FalkorDB graphs of
-synthetic orgs (org_a, org_b, org_c). Each org graph has a materialised
+synthetic orgs (org_a, org_b, org_c; the week-later rescan of each is loaded as
+org_a_v2, ...). Each org graph has a materialised
 ATTACK_STEP layer: one edge per attacker step (exploit, stolen credential,
 role assumption, ...), each with a likelihood and a fix_token (the Finding id or
 step:* token that removes it if fixed).
 
-Typical flow: exposure_surface -> attack_paths -> why_step on surprising hops ->
+Typical flow: scan_findings (what the scan found, ranked by what each finding
+enables) -> exposure_surface -> attack_paths -> why_step on surprising hops ->
 min_cut for the smallest fix set -> simulate_fix to PROVE it before proposing.
 vuln_intel explains a CVE. run_cypher_readonly is a last resort.
 
@@ -50,7 +52,10 @@ The same graphs hold the company layer (teams, people, on-call, ADRs, tickets):
 owners routes a fix to a team and tonight's on-call person; decision_trail and
 company_query answer "why is this exposed and who approved it?" with the ADR as
 the source. triage_memory recalls prior verdicts, live risk acceptances and
-recurring patterns for findings before you triage them again.
+recurring patterns for findings before you triage them again; playbooks gives
+the versioned procedure in force per ATT&CK technique. Time-dependent tools
+(triage_memory, playbooks, owners, company_query) take as_of in epoch seconds:
+pass the scan's time, not today's, when reasoning about a scan.
 Every result carries `evidence` (ids that exist in the graph): cite them.
 """
 
@@ -78,7 +83,7 @@ def _call(fn, *args, **kwargs) -> ToolResult:
 
 Org = arg(M.OrgInput, "org", str)
 
-server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.3.0")
+server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.4.0")
 
 
 @server.tool(
@@ -256,13 +261,18 @@ def run_cypher_readonly(
     name="owners",
     description=(
         "Who owns an asset or data store: the owning team(s), every member with their role, and "
-        "the person on call RIGHT NOW for each team. USE to route a fix or an incident to a "
+        "the person on call for each team (right now, or at as_of). USE to route a fix or an "
+        "incident to a "
         "human ('who do I page about this host?'). Do NOT use to explain why something is "
         "configured the way it is (decision_trail) or what an attacker can do (attack_paths)."
     ),
 )
-def owners(org: Org, asset_id: arg(M.OwnersInput, "asset_id", str)) -> ToolResult:
-    return _call(_tools().owners, org, asset_id)
+def owners(
+    org: Org,
+    asset_id: arg(M.OwnersInput, "asset_id", str),
+    as_of: arg(M.OwnersInput, "as_of", int | None) = None,
+) -> ToolResult:
+    return _call(_tools().owners, org, asset_id, as_of=as_of)
 
 
 @server.tool(
@@ -302,8 +312,9 @@ def company_query(
     org: Org,
     question_kind: arg(M.CompanyQueryInput, "question_kind", M.CompanyIntent),
     params: arg(M.CompanyQueryInput, "params", dict[str, Any] | None) = None,
+    as_of: arg(M.CompanyQueryInput, "as_of", int | None) = None,
 ) -> ToolResult:
-    return _call(_tools().company_query, org, question_kind, params or {})
+    return _call(_tools().company_query, org, question_kind, params or {}, as_of=as_of)
 
 
 # ------------------------------------------------------------- memory layer
@@ -325,6 +336,41 @@ def triage_memory(
     as_of: arg(M.TriageMemoryInput, "as_of", int | None) = None,
 ) -> ToolResult:
     return _call(_tools().triage_memory, org, finding_ids, as_of=as_of)
+
+
+# -------------------------------------------------------------- agent layer
+@server.tool(
+    name="scan_findings",
+    description=(
+        "Start of triage: which scan this graph holds and WHEN it ran (use its ts as your "
+        "clock), the crown jewels, counts, and the open findings ranked by what they enable in "
+        "the attack layer: on a crown-jewel path first, then reachable from the Internet, then "
+        "KEV / step likelihood / CVSS. Also lists the most severe findings that enable NO attack "
+        "step (high score, no way in) and the findings that already carry a decision (risk "
+        "acceptance or verdict: check them with triage_memory). USE FIRST when triaging a "
+        "scan. Do NOT use it to get the "
+        "paths themselves (attack_paths) or what memory says about a finding (triage_memory)."
+    ),
+)
+def scan_findings(org: Org, limit: arg(M.ScanFindingsInput, "limit", int) = 30) -> ToolResult:
+    return _call(_tools().scan_findings, org, limit=limit)
+
+
+@server.tool(
+    name="playbooks",
+    description=(
+        "Procedural memory: for each ATT&CK technique, the playbook version in force at as_of "
+        "(newest published at or before it) with its steps, plus the version history (older "
+        "versions are kept, SUPERSEDED). USE to pick how to handle the techniques your findings "
+        "enable. Do NOT use it to decide whether a finding is reachable (attack_paths)."
+    ),
+)
+def playbooks(
+    org: Org,
+    techniques: arg(M.PlaybooksInput, "techniques", list[str]),
+    as_of: arg(M.PlaybooksInput, "as_of", int | None) = None,
+) -> ToolResult:
+    return _call(_tools().playbooks, org, techniques, as_of=as_of)
 
 
 # --------------------------------------------------------------------- HTTP

@@ -28,6 +28,7 @@ _TOKEN_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_:.\-]{0,255}$")
 _CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$")
 _PARAM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 _HOST_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}$")
+_TECH_RE = re.compile(r"^T\d{4}(\.\d{3})?$")
 
 
 def _match(rx: re.Pattern, what: str):
@@ -45,11 +46,21 @@ CveId = Annotated[str, AfterValidator(_match(_CVE_RE, "CVE id"))]
 OrgName = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")]
 Hostname = Annotated[str, AfterValidator(_match(_HOST_RE, "hostname"))]
 Port = Annotated[int, Field(ge=1, le=65535)]
+TechniqueId = Annotated[str, AfterValidator(_match(_TECH_RE, "ATT&CK technique id"))]
+# Epoch seconds the answer is evaluated at. Agents always pass the scan's time;
+# omitted, a tool falls back to its own notion of "now" (documented per tool).
+AsOf = Annotated[int | None, Field(None, ge=0)]
 
 
 # --- Inputs -----------------------------------------------------------------
 class OrgInput(BaseModel):
     org: OrgName = Field(description="Org graph name, e.g. 'org_a'.")
+
+
+class ScanFindingsInput(OrgInput):
+    limit: int = Field(
+        30, ge=1, le=MAX_ROWS, description="Max findings to list (attack-step findings first)."
+    )
 
 
 class ExposureInput(OrgInput):
@@ -133,6 +144,11 @@ class RunCypherInput(OrgInput):
 # --- Company layer (Track 03) ------------------------------------------------
 class OwnersInput(OrgInput):
     asset_id: NodeId = Field(description="An Asset or DataStore id.")
+    as_of: AsOf = Field(
+        None,
+        description="Epoch seconds: who was on call at this time (default: the slot marked "
+        "current).",
+    )
 
 
 class _Exposure(BaseModel):
@@ -205,6 +221,7 @@ class CompanyQueryInput(OrgInput):
     params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for the chosen question_kind."
     )
+    as_of: AsOf = Field(None, description="Epoch seconds for on-call questions (see owners).")
 
     def typed_params(self) -> BaseModel:
         return COMPANY_INTENTS[self.question_kind].model_validate(self.params)
@@ -220,6 +237,16 @@ class TriageMemoryInput(OrgInput):
         ge=0,
         description="Epoch seconds to judge risk-acceptance expiry at (default: now). "
         "Use it to ask what was in force at an earlier time.",
+    )
+
+
+class PlaybooksInput(OrgInput):
+    techniques: list[TechniqueId] = Field(
+        min_length=1, max_length=20, description="ATT&CK technique ids, e.g. ['T1190', 'T1210']."
+    )
+    as_of: AsOf = Field(
+        None,
+        description="Epoch seconds: the version that was current then (default: the newest).",
     )
 
 

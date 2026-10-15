@@ -280,6 +280,9 @@ class Dataset:
     reach_rules: list[ReachRule] = field(default_factory=list)
     edges: list[Edge] = field(default_factory=list)
     internet_id: str = "internet"
+    # Which scan this dataset is (v1, or the week-later v2) and when it ran.
+    scan: str = "v1"
+    scan_ts: int = 0
     # Company layer
     persons: list[Person] = field(default_factory=list)
     teams: list[Team] = field(default_factory=list)

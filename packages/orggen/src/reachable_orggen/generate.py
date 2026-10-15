@@ -170,7 +170,7 @@ class Builder:
         self.rng = random.Random(f"{org}:{seed}")
         self.catalog = catalog
         self.shape = SHAPES[org]
-        self.ds = Dataset(org=org, seed=seed, scale=cfg.scale)
+        self.ds = Dataset(org=org, seed=seed, scale=cfg.scale, scan_ts=NOW)
         self._n: dict[str, int] = {}
         self.zone_assets: dict[str, list[str]] = {z.id: [] for z in self.shape.zones}
         # Track which Vuln node already exists for a (software, cve) pair.

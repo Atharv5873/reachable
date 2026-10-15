@@ -46,7 +46,10 @@ _NODE_LABEL = {
 }
 
 # Plain property-bag labels loaded with one generic `SET n += r` query each.
-_BAG_LABELS = ["Person", "Team", "OnCall", "ADR", "Ticket", *MEMORY_INDEXES]
+# (Only memory labels the generator seeds; ToolOutput, FixPlan, ... are written
+# by agent runs at runtime.)
+_BAG_LABELS = ["Person", "Team", "OnCall", "ADR", "Ticket"]
+_BAG_LABELS += [lbl for lbl in MEMORY_INDEXES if lbl in _NODE_LABEL]
 
 
 def _label_map(ds: Dataset) -> dict[str, str]:
@@ -69,6 +72,13 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
 
     # --- Internet (one node) ---
     g.query("MERGE (:Internet {id: $id})", {"id": ds.internet_id})
+
+    # --- Scan (one node): which scan this graph holds and WHEN it ran. Agents
+    # take their clock (as_of) from here, never from the wall clock.
+    g.query(
+        "MERGE (s:Scan {id: $id}) SET s.version = $version, s.ts = $ts",
+        {"id": f"{ds.org}:scan:{ds.scan}", "version": ds.scan, "ts": ds.scan_ts},
+    )
 
     # --- Zones ---
     run_batched(

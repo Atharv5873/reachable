@@ -7,7 +7,7 @@ so there is exactly one place that knows host names, ports and passwords.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root = four levels up from this file:
@@ -46,6 +46,28 @@ class Settings(BaseSettings):
     data_dir: Path = REPO_ROOT / "data"
     seed: int = 42
 
+    # --- LLM router (S4 agents). Keys are SecretStr: they never print in a repr
+    # or a log line; only llm.py unwraps them, to hand them to LiteLLM. ---
+    gemini_api_key: SecretStr | None = None  # primary (free tier)
+    groq_api_key: SecretStr | None = None  # fallback 1 (free tier)
+    llm_primary_model: str = "gemini/gemini-2.5-flash"
+    llm_fallback_model: str = "groq/llama-3.3-70b-versatile"
+    # Fallback 2: a small paid model, OFF unless both are set (judging week).
+    llm_reserve_model: str | None = None
+    llm_reserve_api_key: SecretStr | None = None
+    llm_timeout_s: float = 60.0  # per call
+    llm_retries: int = 1  # Router retries per deployment before falling back
+    llm_max_tokens: int = 2048  # per completion
+
+    # --- Agent run budgets (free-tier protection) ---
+    agent_max_llm_calls: int = 30
+    agent_max_tool_calls: int = 45
+
+    @property
+    def graphs(self) -> list[str]:
+        """Every org graph a tool may read: scan v1 is `<org>`, scan v2 `<org>_v2`."""
+        return [*self.orgs, *(f"{o}_v2" for o in self.orgs)]
+
     @property
     def threatintel_dir(self) -> Path:
         return self.data_dir / "threatintel"
@@ -53,6 +75,11 @@ class Settings(BaseSettings):
     @property
     def orgs_dir(self) -> Path:
         return self.data_dir / "orgs"
+
+    def scan_graph(self, org: str, scan: str = "v1") -> str:
+        if org not in self.orgs or scan not in ("v1", "v2"):
+            raise ValueError(f"unknown org/scan {org!r}/{scan!r}")
+        return org if scan == "v1" else f"{org}_v2"
 
     @property
     def postgres_dsn(self) -> str:

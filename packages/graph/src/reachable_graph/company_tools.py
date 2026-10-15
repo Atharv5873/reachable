@@ -40,14 +40,15 @@ class CompanyToolsMixin:
     """Requires the host class to provide _org, _q, _node (see GraphTools)."""
 
     # ================================================================ owners
-    def owners(self, org: str, asset_id: str) -> ToolResult:
-        """Owning team(s) of an asset or data store, their members, and who is on call now."""
-        inp = OwnersInput(org=org, asset_id=asset_id)
+    def owners(self, org: str, asset_id: str, as_of: int | None = None) -> ToolResult:
+        """Owning team(s) of an asset or data store, their members, and who is on call
+        (now, or at `as_of`)."""
+        inp = OwnersInput(org=org, asset_id=asset_id, as_of=as_of)
         g, qlog = self._org(inp.org), []
         node = self._owned_node(g, inp.asset_id, qlog)
         teams = self._owning_teams(g, node, qlog)
         members = self._members(g, [t["id"] for t in teams], qlog)
-        oncall = self._on_call(g, [t["id"] for t in teams], qlog)
+        oncall = self._on_call(g, [t["id"] for t in teams], qlog, inp.as_of)
         ev = Evidence(node_ids=[inp.asset_id])
         for t in teams:
             ev.node_ids.append(t["id"])
@@ -66,8 +67,9 @@ class CompanyToolsMixin:
             for t in teams:
                 oc = oncall.get(t["id"])
                 who = f"{oc[0]['name']} ({oc[0]['role']})" if oc else "nobody"
+                when = "now" if inp.as_of is None else f"on {_day(inp.as_of)}"
                 parts.append(
-                    f"{t['name']} ({len(members.get(t['id'], []))} people; on call now: {who})"
+                    f"{t['name']} ({len(members.get(t['id'], []))} people; on call {when}: {who})"
                 )
             summary = f"{name} is owned by " + "; ".join(parts) + "."
         else:
@@ -134,26 +136,45 @@ class CompanyToolsMixin:
             out.setdefault(tid, []).append({"id": pid, "name": name, "role": role})
         return out
 
-    def _on_call(self, g: str, team_ids: list[str], qlog) -> dict[str, list[dict]]:
-        """The person in each team's CURRENT rotation slot."""
+    def _on_call(
+        self, g: str, team_ids: list[str], qlog, as_of: int | None = None
+    ) -> dict[str, list[dict]]:
+        """The person in each team's rotation slot: the slot marked current, or, with
+        `as_of`, the latest slot that had started by then (`covers_as_of` says
+        whether that slot's window still includes as_of)."""
         if not team_ids:
             return {}
+        if as_of is None:
+            slot = "MATCH (oc:OnCall {current: true})-[:FOR]->(t)"
+        else:
+            slot = "MATCH (oc:OnCall)-[:FOR]->(t) WHERE oc.start <= $as_of"
         rows = self._q(
             g,
-            """
+            f"""
             MATCH (t:Team) WHERE t.id IN $teams
-            MATCH (oc:OnCall {current: true})-[:FOR]->(t)
+            {slot}
             MATCH (p:Person)-[:ON_CALL]->(oc)
-            RETURN t.id, oc.id, oc.window, p.id, p.name, p.role ORDER BY t.id
+            RETURN t.id, oc.id, oc.window, p.id, p.name, p.role,
+                   $as_of IS NULL OR oc.end > $as_of
+            ORDER BY t.id, oc.start DESC
             """,
-            {"teams": team_ids},
+            {"teams": team_ids, "as_of": as_of},
             qlog,
         )
         out: dict[str, list[dict]] = {}
-        for tid, oc, window, pid, name, role in rows:
-            out.setdefault(tid, []).append(
-                {"oncall": oc, "window": window, "person": pid, "name": name, "role": role}
-            )
+        for tid, oc, window, pid, name, role, covers in rows:
+            if tid in out:  # newest slot per team only
+                continue
+            out[tid] = [
+                {
+                    "oncall": oc,
+                    "window": window,
+                    "person": pid,
+                    "name": name,
+                    "role": role,
+                    "covers_as_of": bool(covers),
+                }
+            ]
         return out
 
     # ========================================================= decision_trail
@@ -289,16 +310,20 @@ class CompanyToolsMixin:
         return rows[0][0]
 
     # ========================================================== company_query
-    def company_query(self, org: str, question_kind: str, params: dict | None = None) -> ToolResult:
+    def company_query(
+        self, org: str, question_kind: str, params: dict | None = None, as_of: int | None = None
+    ) -> ToolResult:
         """One of a FIXED set of company-brain intents (no free text to Cypher)."""
-        inp = CompanyQueryInput(org=org, question_kind=question_kind, params=params or {})
+        inp = CompanyQueryInput(
+            org=org, question_kind=question_kind, params=params or {}, as_of=as_of
+        )
         p = inp.typed_params()
         if isinstance(p, WhoOwnsParams):
-            r = self.owners(inp.org, p.asset_id)
+            r = self.owners(inp.org, p.asset_id, inp.as_of)
             teams = r.data["teams"]
             answer = ", ".join(t["name"] for t in teams) if teams else "no owner recorded"
         elif isinstance(p, WhoIsOnCallParams):
-            r = self._on_call_result(inp.org, p)
+            r = self._on_call_result(inp.org, p, inp.as_of)
             answer = r.data["answer"]
         elif isinstance(p, WhyExposedParams | WhoApprovedParams):
             r = self.decision_trail(inp.org, p.asset_id, p.hostname, p.port)
@@ -327,7 +352,9 @@ class CompanyToolsMixin:
         r.summary = f"[{inp.question_kind}] {r.summary}"
         return r
 
-    def _on_call_result(self, org: str, p: WhoIsOnCallParams) -> ToolResult:
+    def _on_call_result(
+        self, org: str, p: WhoIsOnCallParams, as_of: int | None = None
+    ) -> ToolResult:
         g, qlog = self._org(org), []
         ev = Evidence()
         if p.asset_id:
@@ -338,7 +365,7 @@ class CompanyToolsMixin:
         else:
             n = self._node(g, p.team_id, qlog)
             teams = [{"id": p.team_id, "name": n["props"].get("name")}]
-        oncall = self._on_call(g, [t["id"] for t in teams], qlog)
+        oncall = self._on_call(g, [t["id"] for t in teams], qlog, as_of)
         rota = []
         for t in teams:
             ev.node_ids.append(t["id"])

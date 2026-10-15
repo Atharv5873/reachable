@@ -24,7 +24,9 @@ def main(argv: list[str] | None = None) -> None:
     args = p.parse_args(argv)
 
     db = connect()
-    names = args.graph or get_settings().orgs
+    # Default: every scan graph that is loaded (v1 always; v2 once seeded).
+    loaded = set(db.list_graphs())
+    names = args.graph or [g for g in get_settings().graphs if g in loaded]
     for name in names:
         if name not in db.list_graphs():
             raise SystemExit(f"graph {name!r} not loaded (run `make seed`)")
