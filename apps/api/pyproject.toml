@@ -1,0 +1,21 @@
+[project]
+name = "reachable-api"
+version = "0.1.0"
+description = "Reachable HTTP API (placeholder in S1: health check over both DBs)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "reachable-core",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "psycopg[binary]>=3.2",
+]
+
+[tool.uv.sources]
+reachable-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reachable_api"]

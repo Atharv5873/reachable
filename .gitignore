@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Generated org data: everything under data/orgs except the tiny committed sample.
+data/orgs/*
+!data/orgs/sample/
+!data/orgs/README.md
+
+# Raw threat-intel downloads (big / unfiltered). The committed snapshot lives in
+# data/threatintel/snapshot/ and IS tracked; the raw dumps are not.
+data/threatintel/raw/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

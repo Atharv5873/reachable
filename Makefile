@@ -1,0 +1,61 @@
+# Reachable dev tasks. Recipes call Python for anything non-trivial, so they
+# behave the same under bash, macOS and Windows (GNU make + PowerShell/cmd).
+
+SEED  ?= 42
+SCALE ?= 1.0
+PY      = uv run python
+INTEL   = $(PY) -m reachable_intel
+ORGGEN  = $(PY) -m reachable_orggen
+
+.PHONY: up down intel seed test reset lint fmt sample logs browser
+
+# Create .env from the example on first run (never overwrites an existing one).
+.env:
+	$(PY) -c "import shutil; shutil.copyfile('.env.example', '.env')"
+
+## Start FalkorDB (+ Browser), Postgres and the API; wait until healthy.
+up: .env
+	docker compose up -d --build --wait
+
+## Stop containers. Data volumes are kept.
+down:
+	docker compose down
+
+## Fetch + normalise the public threat-intel snapshot and load graph `threatintel`.
+## Uses the committed snapshot if present; pass REFETCH=1 to pull fresh from the network.
+intel: .env
+	$(INTEL) build $(if $(REFETCH),--refetch,)
+	$(INTEL) load
+
+## Generate the three synthetic orgs, their labels/oracle, and load FalkorDB + Postgres.
+seed: .env
+	$(ORGGEN) seed --seed $(SEED) --scale $(SCALE)
+
+## Drop every graph + Postgres schema, then reload intel and regenerate orgs.
+reset: .env
+	$(ORGGEN) reset --seed $(SEED) --scale $(SCALE)
+	$(INTEL) load
+	$(ORGGEN) seed --seed $(SEED) --scale $(SCALE)
+
+## Unit tests + integration tests (integration tests skip if FalkorDB is down).
+test:
+	uv run pytest -v
+
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
+
+fmt:
+	uv run ruff format .
+	uv run ruff check --fix .
+
+## Regenerate the tiny committed sample in data/orgs/sample/.
+sample:
+	$(ORGGEN) sample --seed $(SEED)
+
+logs:
+	docker compose logs -f --tail=100
+
+## Print the FalkorDB Browser URL.
+browser:
+	@echo "FalkorDB Browser: http://localhost:$${FALKORDB_BROWSER_PORT:-3001}"
