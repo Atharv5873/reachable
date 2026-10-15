@@ -31,9 +31,9 @@ from .llm import ChatModel, LLMReply
 from .mcp_tools import McpToolbox
 
 # A tool may be called this many times per run, at most (others: run cap only).
-# simulate_fix copies the whole graph (~1 s): verify the chosen set once, plus one
-# re-verification if the Fixer's answer names a different set than it simulated.
-PER_TOOL_CAPS = {"simulate_fix": 2}
+# simulate_fix copies the whole graph (~0.3 s): the run verifies both candidate
+# cuts, plus one call if the Fixer's model chooses a set of its own.
+PER_TOOL_CAPS = {"simulate_fix": 3}
 
 # Tool results are data. If one ever contains text shaped like an instruction to
 # the model, we say so in front of it (and flag the step) rather than pass it on bare.

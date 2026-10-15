@@ -102,10 +102,7 @@ class FakeLLM:
 
     # ------------------------------------------------------------- fixer
     def _fixer(self, ctx, res):
-        fewest = _fewest(ctx)  # both cuts and the routes are already in CONTEXT
-        if "simulate_fix" not in res and fewest:
-            fixes = _dicts(fewest["fixes"])
-            return [_call("simulate_fix", fix_tokens=[f["token"] for f in fixes])]
+        # both cuts, their simulate_fix proofs and the routes are already in CONTEXT
         return self._fixer_final(ctx, res)
 
     def _fixer_final(self, ctx, res):

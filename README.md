@@ -26,7 +26,7 @@ patterns, versioned playbooks).
 - FalkorDB (`falkordb/falkordb:latest`) — primary graph store, Browser UI on
   `:3001`.
 - pgvector Postgres — baseline mirror only.
-- FastAPI `/health` checking both datastores.
+- FastAPI backend: start a run, stream it live (SSE), read it back, drift, verdicts.
 
 Host ports are offset from the defaults (FalkorDB `6380`, Browser `3001`,
 Postgres `5434`, API `8001`) so this runs beside other local stacks.
@@ -43,6 +43,11 @@ make gate-a                   # no-LLM evaluation of the graph tools -> evals/re
 make mcp-smoke                # MCP server: list tools, call three
 make triage FAKE=1            # the four agents with a stub model (no keys, no network)
 make triage ORG=org_a SCAN=v1 # the four agents with real LLMs (GEMINI/GROQ keys in .env)
+make drift ORG=org_a          # the Sentinel: what scan v2 changed for an attacker (no LLM)
+make triage ORG=org_a SCAN=v2 # the rescan, with v1's memory (COLD=1: without it)
+make verdict RUN=<run id> FINDING=<finding id> DECISION=reject REASON="..."
+make memory-lift ORG=org_a    # Gate B: cold vs warm on the rescan -> evals/results/
+make api                      # FastAPI + SSE on :8001 (or `docker compose up -d api`)
 ```
 
 Then open the FalkorDB Browser at <http://localhost:3001> and try the queries in
@@ -59,20 +64,20 @@ make intel REFETCH=1
 
 ```
 reachable/
-  apps/api/            FastAPI /health
+  apps/api/            FastAPI: runs, live SSE stream, drift, verdicts (S5)
   apps/mcp/            MCP server (stdio + streamable HTTP) over the graph tools
   packages/core/       settings, schema, FalkorDB helpers, attack_rules.py
   packages/intel/      fetch + normalise KEV/EPSS/NVD/ATT&CK; load `threatintel`
   packages/orggen/     synthetic org generator, planters, networkx oracle, loaders
   packages/graph/      ATTACK_STEP derivation (derive.py), typed read-only tools (tools.py,
                        company_tools.py) and the agent memory repositories (memory.py)
-  packages/agents/     LiteLLM router, MCP -> LLM tools, LangGraph agents, CLI (S4)
-  evals/               Gate A (no-LLM tool evaluation) + results/
+  packages/agents/     LiteLLM router, MCP -> LLM tools, LangGraph agents, Sentinel, CLI
+  evals/               Gate A (no-LLM tool evaluation), Gate B (memory lift) + results/
   scripts/             mcp_smoke.py
   data/threatintel/    committed filtered snapshot + ATTRIBUTION.md
   data/orgs/           generated (gitignored except a tiny sample)
   tests/               pytest (unit + integration + property)
-  learning/            teaching notes (S01.md ... S04.md)
+  learning/            teaching notes (S01.md ... S05.md)
   runs/                agent run dumps (gitignored; the run itself lives in the graph)
 ```
 
@@ -117,6 +122,7 @@ reachable/
    | `triage_memory` | live vs expired risk acceptances, past verdicts, patterns reaching the findings |
    | `scan_findings` | the scan (version, time), crown jewels, open findings ranked by what they enable |
    | `playbooks` | the versioned playbook in force per ATT&CK technique at `as_of` |
+   | `exposure_drift` | diff two scans' Internet -> crown-jewel path sets: new / closed / cost-changed; `new_crown_path` only for a brand-new path |
 
    A derivation query, for flavour (`exploit_remote_service`, T1210):
 
@@ -165,6 +171,47 @@ reachable/
    `LLM_RESERVE_MODEL` + `LLM_RESERVE_API_KEY` for demos. See
    [`learning/S04.md`](learning/S04.md).
 
+9. **Memory that changes behaviour, drift, and a live stream** (S5).
+   A v2 run starts with the **Sentinel** (no LLM): it carries the org's memory into
+   the rescan's graph, flags arriving findings a learned pattern matches (before
+   any path search), diffs the two scans' crown-jewel path sets
+   (`exposure_drift`) and raises an `Alert` only for a brand-new crown path.
+   Then the agents use the three kinds of memory:
+
+   * **episodic**: a finding whose earlier verdict still stands is carried, not
+     re-investigated; the last run's owner routing is reused while the on-call
+     slot covers the clock;
+   * **semantic**: the Reporter learns "image X was the way in" patterns; the next
+     scan's Sentinel flags new hosts built from it on arrival;
+   * **procedural**: an analyst's rejected verdict with a reusable reason becomes a
+     new playbook version (old one kept, `SUPERSEDES`) whose rule later runs apply.
+
+   Gate B ([`evals/results/memory_lift.md`](evals/results/memory_lift.md)): on the
+   same rescan, warm (v1's memory) vs cold (fresh) investigates fewer findings with
+   fewer calls and reaches the same verified, minimal fix set. A run is ~26k input
+   tokens and 7 LLM calls (S4: ~61k, 12). See [`learning/S05.md`](learning/S05.md).
+
+## API
+
+```bash
+make api                                    # or: docker compose up -d api   (:8001)
+curl -X POST localhost:8001/runs -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+     -d '{"org": "org_a", "scan": "v2"}'    # -> {"run_id": ..., "stream": "/runs/<id>/stream"}
+curl -N localhost:8001/runs/<id>/stream -H "X-API-Key: $KEY"   # Server-Sent Events
+```
+
+| endpoint | |
+|---|---|
+| `POST /runs` `{org, scan, fake?, cold?}` | start a run in the background; returns `run_id` |
+| `GET /runs/{id}/stream` | SSE: `agent_entered`, `tool_called` (with the Cypher + timing), `llm_called`, `memory`, `drift_checked`, `alert_raised`, `triage_done`, `path_found`, `finding_ranked`, `fix_chosen`, `report_written`, `report_ready`; resumable with `Last-Event-ID` |
+| `GET /runs/{id}` | the run read back from the graph (outputs + trace) |
+| `POST /runs/{id}/verdict` | an analyst's accept / reject (procedural memory) |
+| `GET /orgs`, `GET /orgs/{org}/drift` | orgs, scans, recent runs and alerts; the v1 -> v2 drift |
+
+The stream reads the run's trace in the graph; it never talks to the agents, so a
+slow or late client never slows a run. Auth: `Authorization: Bearer <key>` or
+`X-API-Key` (`API_KEY`, else `MCP_API_KEY`); `/health` is open.
+
 ## MCP server
 
 ```bash
@@ -177,7 +224,8 @@ make mcp-smoke URL=http://localhost:8002/mcp
 HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is open.
 
 See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md),
-[`learning/S03.md`](learning/S03.md) and [`learning/S04.md`](learning/S04.md) for the concepts, the Cypher, the
+[`learning/S03.md`](learning/S03.md), [`learning/S04.md`](learning/S04.md) and
+[`learning/S05.md`](learning/S05.md) for the concepts, the Cypher, the
 max-flow / min-cut idea, the company brain and agent memory, and Browser
 queries to run now.
 

@@ -46,7 +46,7 @@ def _note(outcome: LoopOutcome) -> dict:
 # ====================================================================== Triage
 TRIAGE = AgentSpec(
     name="triage",
-    tools=("playbooks", "triage_memory"),
+    tools=("playbooks",),  # memory is recalled by the run before the model starts
     required=("playbooks",),
     max_turns=3,
     role="""\
@@ -58,10 +58,10 @@ step at all; and previously_decided (findings a person decided about). CONTEXT.m
 what memory already said about the candidates before you started: CARRIED ones keep their \
 earlier verdict (nothing changed for them) and are NOT investigated again; SUPPRESSED ones \
 have a live risk acceptance.
-1. playbooks for the techniques the candidates and carried findings enable. The memory of \
-every finding in CONTEXT.scan is already in CONTEXT.memory: call triage_memory only for a \
-finding it does not cover. CONTEXT.memory.still_unreachable counts critical no-step findings \
-whose earlier "not reachable" verdict stands (they stay deprioritised).
+1. playbooks for the techniques the candidates and carried findings enable (one call). \
+The memory of every finding in CONTEXT.scan is already in CONTEXT.memory (recalled for you). \
+CONTEXT.memory.still_unreachable counts critical no-step findings whose earlier "not \
+reachable" verdict stands (they stay deprioritised).
 2. A LIVE risk acceptance suppresses a finding: name it. An EXPIRED one does NOT suppress \
 anything.
 3. CONTEXT.drift (a new scan only) is the Sentinel's check: findings on a NEW crown path and \
@@ -356,9 +356,15 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
     # Whatever is fresh and is a candidate gets investigated, first; whatever
     # memory carried does not get investigated again.
     first = [f for f in on_steps if f in fresh and f not in sup_ids]
-    investigate_ids = [f for f in dict.fromkeys(first + investigate_ids) if f not in carried_ids][
-        :MAX_INVESTIGATE
-    ]
+    # A candidate (a way in, on a crown-jewel path) that nothing suppresses and
+    # memory did not carry is always investigated: the model orders the list, it
+    # cannot drop one (seen for real: it skipped the finding whose risk acceptance
+    # had expired, which is exactly the one back in scope).
+    must = [f for f, x in on_steps.items() if x.get("on_crown_path") and f not in sup_ids]
+    added = [f for f in must if f not in investigate_ids and f not in carried_ids]
+    investigate_ids = [
+        f for f in dict.fromkeys(first + investigate_ids + added) if f not in carried_ids
+    ][:MAX_INVESTIGATE]
 
     reasons = {
         d.get("finding"): d.get("reason")
@@ -437,6 +443,7 @@ def finalise_triage(ctx: RunCtx, outcome: LoopOutcome, drift: dict | None = None
         ],
         "playbooks": list({p["technique"]: p for p in playbooks}.values()),
         "reasoning": str(ans.get("reasoning", ""))[:2000],
+        "added_by_rule": [f for f in added if f in investigate_ids],
         "dropped": sorted(set(dropped)),
         **_note(outcome),
     }
@@ -630,25 +637,54 @@ def finalise_paths(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
 # ======================================================================= Fixer
 FIXER = AgentSpec(
     name="fixer",
-    tools=("simulate_fix", "owners", "decision_trail"),
-    required=("simulate_fix",),
+    tools=("owners", "decision_trail", "simulate_fix"),
+    required=(),
     role="""\
 Turn the attack paths into a fix plan people can act on. CONTEXT.min_cuts holds min_cut in \
-both modes ("fewest" and "cheapest"); CONTEXT.routes holds, per fix asset, the owning team, \
-the on-call person and the ADR that exposed it (looked up for you, or remembered from an \
-earlier run).
-1. Compare fewer fixes vs less total effort and choose ONE of the two sets. If both have \
-the same number of fixes, take the cheaper one (same work count, less effort).
-2. simulate_fix ONCE on exactly the chosen set (it copies the graph: one call, never one \
-per fix). owners / decision_trail only for an asset CONTEXT.routes lacks.
+both modes ("fewest" and "cheapest"), and CONTEXT.verified what simulate_fix proved for \
+each (run for you on a copy of the graph). CONTEXT.routes holds, per fix asset, the owning \
+team, the on-call person and the ADR that exposed it (looked up for you, or remembered \
+from an earlier run). CONTEXT.no_asset_owner lists fixes on a credential or role (no asset \
+owns them): say so in their ticket, do not look them up.
+1. Choose ONE of the two verified sets: fewer fixes vs less total effort. If both have the \
+same number of fixes, take the cheaper one (CONTEXT.tie_break names it). Answer with its \
+mode in "chosen" and copy its fix_tokens exactly. simulate_fix only for a DIFFERENT set.
+2. owners / decision_trail only for an ASSET that CONTEXT.routes lacks.
 Write a ticket per fix: a title and a 2-4 sentence body naming the asset, the attack step it \
 removes, the owner, and the ADR if there is one.""",
     schema="""{"chosen": "fewest" | "cheapest", "fix_tokens": ["<fix token>"],
  "rationale": "<2-4 sentences>",
  "tickets": [{"token": "<fix token>", "title": "<title>", "body": "<2-4 sentences>"}]}""",
     check=lambda ctx, final: verify_mismatch(ctx, final),
-    max_turns=4,  # verify, answer; +1 turn each only if the answer needs re-verifying
+    max_turns=3,  # answer; +1 lookup or re-verification turn only if needed
 )
+
+
+def _cut(ctx: RunCtx, mode: str) -> dict | None:
+    for r in ctx.results_of("min_cut", "fixer"):
+        if r.result["data"].get("mode") == mode:
+            return r.result["data"]
+    return None
+
+
+def tie_break(ctx: RunCtx) -> str | None:
+    """When both cuts have the same number of fixes the rule picks the cheaper one;
+    say so up front, so the model simulates the set it will answer with (seen for
+    real twice: it simulated "fewest", then answered "cheapest")."""
+    cuts = {
+        r.result["data"]["mode"]: r.result["data"]
+        for r in ctx.results_of("min_cut", "fixer")
+        if r.result["data"].get("fix_tokens")
+    }
+    f, c = cuts.get("fewest"), cuts.get("cheapest")
+    if not f or not c or len(f["fix_tokens"]) != len(c["fix_tokens"]):
+        return None
+    if c["total_effort"] < f["total_effort"]:
+        return (
+            f"cheapest: same {len(c['fix_tokens'])} fixes, effort {c['total_effort']} vs "
+            f"{f['total_effort']}"
+        )
+    return f"fewest: same {len(f['fix_tokens'])} fixes, effort is not lower in cheapest"
 
 
 def verify_mismatch(ctx: RunCtx, final: dict) -> str | None:
@@ -676,6 +712,22 @@ async def fixer_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
     entry = {f["asset"] for f in tp.get("investigate", []) if f.get("asset")}
     prior_run, known = ctx.repo.prior_routes(ctx.graph, run_id=ctx.run_id, as_of=ctx.as_of)
     routes = await lookup_routes(ctx, list(fixes.values()), entry, known)
+    # Proving a set is not a judgement: the run simulates both candidate cuts (one
+    # graph copy each, well under a second) and the model chooses between two
+    # verified options. (Seen for real: the model retyped a step token with an
+    # extra "org_a:" prefix, so it "verified" a set nobody had proposed.)
+    verified = {}
+    for mode in ("fewest", "cheapest"):
+        toks = (_cut(ctx, mode) or {}).get("fix_tokens")
+        if not toks:
+            continue
+        sim, _ = await ctx.preload("fixer", "simulate_fix", {"fix_tokens": toks})
+        d = (sim or {}).get("data") or {}
+        verified[mode] = {
+            "all_crown_jewels_disconnected": d.get("all_crown_jewels_disconnected"),
+            "removed_steps": d.get("removed_steps"),
+            "still_reachable": d.get("reachable_after"),
+        }
     reused = sorted(a for a, r in routes.items() if r.get("source", "").startswith("memory:"))
     if reused:
         ctx.record_memory(
@@ -685,7 +737,10 @@ async def fixer_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
         )
     context = {
         "min_cuts": cuts,
+        "verified": verified,
+        **({"tie_break": tie} if (tie := tie_break(ctx)) else {}),
         "routes": {a: _route_view(r) for a, r in routes.items()},
+        "no_asset_owner": sorted(t for t, f in fixes.items() if not _route_asset(f)),
         "crown_jewels": pp.get("crown_jewels", []),
         "ranked_findings": [
             {k: r.get(k) for k in ("rank", "finding", "score", "targets", "step_key")}

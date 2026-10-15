@@ -7,18 +7,18 @@
   "fallback=groq/qwen/qwen3.8-27b"
  ],
  "v1_run": {
-  "run_id": "lift_org_a:run:c34e6cf70db8",
+  "run_id": "lift_org_a:run:3abc63f961e8",
   "status": "complete",
   "stats": {
    "max_llm_calls": 30,
    "max_tool_calls": 45,
-   "llm_calls": 10,
-   "tool_calls": 25,
+   "llm_calls": 6,
+   "tool_calls": 24,
    "cache_hits": 0,
    "refused": 0,
    "per_tool": {
     "scan_findings": 1,
-    "triage_memory": 2,
+    "triage_memory": 1,
     "playbooks": 1,
     "attack_paths": 1,
     "why_step": 3,
@@ -28,18 +28,18 @@
     "simulate_fix": 2
    },
    "exhausted": null,
-   "tool_results": 25,
+   "tool_results": 24,
    "fallbacks": 0,
    "llm_failures": 0,
-   "tokens_in": 49840,
-   "tokens_out": 4003,
+   "tokens_in": 22137,
+   "tokens_out": 3232,
    "models": {
-    "primary=gemini/gemini-3.5-flash-lite": 10
+    "primary=gemini/gemini-3.5-flash-lite": 6
    },
    "memory": {
     "patterns_learned": 1
    },
-   "wall_ms": 70452
+   "wall_ms": 70760
   }
  },
  "resets": {
@@ -59,7 +59,7 @@
    "Playbook(learned)": 0
   },
   "before_warm": {
-   "AgentStep": 45.0,
+   "AgentStep": 44.0,
    "ToolOutput": 27.0,
    "Report": 1.0,
    "FixPlan": 1.0,
@@ -85,7 +85,7 @@
   ]
  },
  "cold": {
-  "run_id": "lift_org_a_v2:run:041c72ac1b95",
+  "run_id": "lift_org_a_v2:run:a20f2c116031",
   "status": "complete",
   "findings_investigated": 9,
   "investigated": [
@@ -102,15 +102,15 @@
   "skipped_by_memory": 0,
   "carried": {},
   "flagged_on_arrival": [],
-  "alert": "lift_org_a_v2:alert:70a422c229b6",
-  "llm_calls": 7,
+  "alert": "lift_org_a_v2:alert:ddb1fec7bf75",
+  "llm_calls": 6,
   "tool_calls": 27,
   "cache_hits": 0,
-  "tokens_in": 27156,
-  "tokens_out": 2777,
-  "wall_s": 66.4,
+  "tokens_in": 22254,
+  "tokens_out": 3196,
+  "wall_s": 66.3,
   "models": {
-   "primary=gemini/gemini-3.5-flash-lite": 7
+   "primary=gemini/gemini-3.5-flash-lite": 6
   },
   "memory_events": {
    "patterns_learned": 1
@@ -123,8 +123,8 @@
    },
    "triage": {
     "llm": 2,
-    "tool": 4,
-    "tokens_in": 6348
+    "tool": 3,
+    "tokens_in": 5951
    },
    "pathfinder": {
     "llm": 2,
@@ -132,17 +132,17 @@
     "tokens_in": 8736
    },
    "fixer": {
-    "llm": 2,
-    "tool": 16,
-    "tokens_in": 9035
+    "llm": 1,
+    "tool": 17,
+    "tokens_in": 4495
    },
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3037
+    "tokens_in": 3072
    }
   },
-  "usd": 0.01509,
+  "usd": 0.01467,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",
@@ -160,7 +160,7 @@
   "correct": true
  },
  "warm": {
-  "run_id": "lift_org_a_v2:run:6e1d571ed6cd",
+  "run_id": "lift_org_a_v2:run:5697e101d64b",
   "status": "complete",
   "findings_investigated": 1,
   "investigated": [
@@ -183,15 +183,15 @@
    "org_a:finding:06876",
    "org_a:finding:06879"
   ],
-  "alert": "lift_org_a_v2:alert:b913cbf3f434",
-  "llm_calls": 7,
-  "tool_calls": 14,
+  "alert": "lift_org_a_v2:alert:f3bafc9ae61e",
+  "llm_calls": 6,
+  "tool_calls": 15,
   "cache_hits": 0,
-  "tokens_in": 25175,
-  "tokens_out": 2194,
-  "wall_s": 79.0,
+  "tokens_in": 20311,
+  "tokens_out": 1927,
+  "wall_s": 68.1,
   "models": {
-   "primary=gemini/gemini-3.5-flash-lite": 7
+   "primary=gemini/gemini-3.5-flash-lite": 6
   },
   "memory_events": {
    "carry_over": 1,
@@ -209,7 +209,7 @@
    "triage": {
     "llm": 2,
     "tool": 3,
-    "tokens_in": 5418
+    "tokens_in": 5128
    },
    "pathfinder": {
     "llm": 2,
@@ -217,17 +217,17 @@
     "tokens_in": 7243
    },
    "fixer": {
-    "llm": 2,
-    "tool": 6,
-    "tokens_in": 9143
+    "llm": 1,
+    "tool": 7,
+    "tokens_in": 4549
    },
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3371
+    "tokens_in": 3391
    }
   },
-  "usd": 0.01304,
+  "usd": 0.01091,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",

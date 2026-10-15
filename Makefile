@@ -35,6 +35,7 @@ intel: .env
 ## patterns and playbook versions) is reset to the small synthetic seed.
 seed: .env
 	$(ORGGEN) seed --seed $(SEED) --scale $(SCALE)
+	$(GRAPH) derive
 
 ## Derive the ATTACK_STEP layer (+ FLOW layer, :CrownPath) on every org graph.
 ## Run after `make seed`. Re-runs once and checks the edge set is unchanged.

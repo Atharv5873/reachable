@@ -151,7 +151,11 @@ def test_fixer_set_disconnects_the_crown_jewels(env):
     assert sorted(fp["simulation"]["fix_tokens"]) == fp["fix_tokens"]
     assert len(fp["fix_tokens"]) == len(ob.ground_truth.min_cut)  # minimal, per the oracle
     dump = repo.agent_run(GRAPH, res["run_id"])
-    assert sum(1 for s in dump["steps"] if s.get("tool") == "simulate_fix") == 1
+    # S5: the run proves each distinct candidate cut once (fewest, cheapest); the
+    # model only chooses between verified sets
+    sims = [s for s in dump["steps"] if s.get("tool") == "simulate_fix" and not s.get("cached")]
+    distinct = {tuple(sorted(o["fix_tokens"])) for o in fp["options"].values()}
+    assert len(sims) == len(distinct) and all(s.get("by") == "run" for s in sims)
     # the Reporter kept only evidenced claims and dropped the stub's made-up one
     rp = repo.read_output(GRAPH, res["run_id"], "Report")["payload"]
     assert rp["claims"] and all(c["evidence"] for c in rp["claims"])
