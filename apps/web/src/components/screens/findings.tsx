@@ -177,6 +177,7 @@ export function FindingsScreen() {
   }, [ids]);
 
   if (board.error) return <ErrorState error={board.error} retry={board.reload} what="the findings" />;
+  if (ws.orgsError && !board.data) return <ErrorState error={ws.orgsError} retry={ws.reloadOrgs} what="the workspace" />;
   if (!board.data) return <LoadingRows rows={10} label="Ranking findings" />;
   const b = board.data;
   const F = b.findings;

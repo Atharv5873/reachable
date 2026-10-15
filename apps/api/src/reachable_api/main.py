@@ -696,7 +696,16 @@ def _app() -> FastAPI:
     """uvicorn reachable_api.main:app. Built at import, but only if a key is set:
     importing the module (e.g. for tests) must not require one."""
     try:
-        return create_app()
+        app = create_app()
+        # Import the agents (and with them litellm) now, on the main thread,
+        # before serving. Imported lazily inside the first POST /runs worker
+        # thread, litellm's log filter ran against the half-imported package
+        # (`KeyError: 'litellm'` from importlib) and wedged the event loop.
+        import reachable_agents.fake  # noqa: F401
+        import reachable_agents.graph  # noqa: F401
+        import reachable_agents.llm  # noqa: F401
+
+        return app
     except RuntimeError as exc:
         log.warning("API not configured: %s", exc)
         fallback = FastAPI(title="Reachable (no API key set)")

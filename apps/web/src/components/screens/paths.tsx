@@ -26,6 +26,15 @@ export function useSubgraph(opts: { finding?: string | null; context?: boolean; 
   return useApi<Subgraph>(q);
 }
 
+/** What a run-based screen shows when there is no run to read: the backend's
+ *  error, a loading state, or how to get a first run. */
+export function NoRunState() {
+  const ws = useWorkspace();
+  if (ws.orgsError) return <ErrorState error={ws.orgsError} retry={ws.reloadOrgs} what="the workspace" />;
+  if (!ws.orgs) return <LoadingRows label="Loading the workspace" />;
+  return <NoRun />;
+}
+
 export function NoRun() {
   const ws = useWorkspace();
   return (
@@ -130,7 +139,7 @@ function PathsView() {
     [focus, edge, row?.asset, node],
   );
 
-  if (!ws.runId) return ws.orgs ? <NoRun /> : <LoadingRows label="Loading the workspace" />;
+  if (!ws.runId) return <NoRunState />;
 
   const g = sub.data;
   const title =

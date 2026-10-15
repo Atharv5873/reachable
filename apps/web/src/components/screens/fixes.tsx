@@ -12,7 +12,7 @@ import type { Fix, FixPlan, SimResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 
-import { NoRun, useSubgraph } from "./paths";
+import { NoRunState, useSubgraph } from "./paths";
 
 type Mode = "fewest" | "cheapest";
 
@@ -168,7 +168,7 @@ function FixesView() {
     [m, sim, hubs, focusPaths],
   );
 
-  if (!ws.runId) return ws.orgs ? <NoRun /> : <LoadingRows label="Loading the workspace" />;
+  if (!ws.runId) return <NoRunState />;
   const err = plan.error || sub.error;
   if (err) return <ErrorState error={err} retry={() => (plan.reload(), sub.reload())} what="the fix plan" />;
 
@@ -220,7 +220,7 @@ function FixesView() {
               "Computing the cut…"
             )}
           </h1>
-          <p className="mt-1 text-sm text-fg-2">
+          <p className="mt-1 line-clamp-2 max-w-5xl text-sm text-fg-2">
             Max-flow / min-cut on the attack graph: the smallest set of fixes that disconnects the Internet from every
             crown jewel.{" "}
             {p?.chosen && <span className="text-fg-3">The agents chose “{p.chosen}”{p.rationale ? `: ${p.rationale}` : "."}</span>}
