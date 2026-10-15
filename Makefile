@@ -8,7 +8,7 @@ INTEL   = $(PY) -m reachable_intel
 ORGGEN  = $(PY) -m reachable_orggen
 GRAPH   = $(PY) -m reachable_graph
 
-.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage
+.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage drift verdict reset-memory memory-lift api
 
 # Create .env from the example on first run (never overwrites an existing one).
 .env:
@@ -31,6 +31,8 @@ intel: .env
 	$(INTEL) load
 
 ## Generate the three synthetic orgs, their labels/oracle, and load FalkorDB + Postgres.
+## Every graph is dropped and reloaded, so agent memory (runs, verdicts, learned
+## patterns and playbook versions) is reset to the small synthetic seed.
 seed: .env
 	$(ORGGEN) seed --seed $(SEED) --scale $(SCALE)
 
@@ -84,7 +86,32 @@ gate-a: .env
 ORG  ?= org_a
 SCAN ?= v1
 triage: .env
-	$(PY) -m reachable_agents triage --org $(ORG) --scan $(SCAN) $(if $(FAKE),--fake) $(if $(AS_OF),--as-of $(AS_OF))
+	$(PY) -m reachable_agents triage --org $(ORG) --scan $(SCAN) $(if $(FAKE),--fake) $(if $(AS_OF),--as-of $(AS_OF)) $(if $(COLD),--no-carry)
+
+## The Sentinel on the week-later rescan (no LLM): carry memory into <org>_v2, flag
+## arrivals that match a learned pattern, diff the Internet -> crown-jewel path
+## sets of v1 and v2, and raise an Alert only on a brand-new crown path.
+drift: .env
+	$(PY) -m reachable_agents drift --org $(ORG) $(if $(COLD),--no-carry)
+
+## An analyst's review of a run's decision on one finding (procedural memory):
+##   make verdict RUN=<run id> FINDING=<finding id> DECISION=reject REASON="..."
+## A reject with a reusable reason writes a new playbook version (old one kept).
+verdict: .env
+	$(PY) -m reachable_agents verdict --run-id "$(RUN)" --finding "$(FINDING)" --decision $(DECISION) --reason "$(REASON)" $(if $(REUSABLE),--reusable $(REUSABLE))
+
+## Cold start for one scan graph: delete every memory node but the starter playbooks.
+reset-memory: .env
+	$(PY) -m reachable_agents reset-memory --org $(ORG) --scan $(SCAN)
+
+## Gate B: the agents on <org>_v2 cold (fresh memory) vs warm (v1's memory present).
+## Writes evals/results/memory_lift.md (+ .json). FAKE=1 runs it with the stub model.
+memory-lift: .env
+	$(PY) evals/memory_lift.py --org $(ORG) $(if $(FAKE),--fake)
+
+## The API (FastAPI + SSE) on :8001 outside docker (API_KEY or MCP_API_KEY in .env).
+api: .env
+	uv run --env-file .env uvicorn reachable_api.main:app --port $${API_PORT:-8001}
 
 logs:
 	docker compose logs -f --tail=100

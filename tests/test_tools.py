@@ -188,8 +188,8 @@ def test_force_limit():
     assert force_limit("MATCH (n) RETURN n limit 3", 10).endswith("LIMIT 3")
 
 
-def test_stubs_are_typed_todos(tools):
-    with pytest.raises(NotImplementedError):
+def test_exposure_drift_refuses_a_scan_graph_it_may_not_read(tools):
+    with pytest.raises(ToolError):  # test_tiny_v2 is not on this tools' allowlist
         tools.exposure_drift(T.ORG)
 
 

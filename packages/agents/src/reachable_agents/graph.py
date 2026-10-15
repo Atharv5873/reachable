@@ -23,11 +23,13 @@ from langgraph.graph import END, START, StateGraph
 
 from reachable_core.settings import get_settings
 from reachable_graph.memory import MemoryRepo
+from reachable_graph.tools import scan_graph_name
 
 from .agents import fixer_agent, pathfinder_agent, reporter_agent, triage_agent
 from .llm import ChatModel
 from .mcp_tools import McpToolbox
 from .runtime import Budget, RunCtx
+from .sentinel import previous_scan, sentinel_check
 
 AGENTS = (
     ("triage", "Triage", triage_agent),
@@ -48,6 +50,8 @@ class RunState(TypedDict, total=False):
     run_id: str
     as_of: int  # the run's clock (epoch s): the scan's time, never wall clock
     scan_info: dict
+    prev_scan: str | None  # the scan before this one ("v1" for a v2 run): Sentinel runs
+    carry_from: str | None  # graph to carry memory from (None: a cold start)
     budget: dict  # caps + usage, refreshed after every agent
     outputs: Annotated[dict[str, str], _merge]  # output label -> node id (the handoffs)
     summaries: Annotated[dict[str, str], _merge]
@@ -58,7 +62,13 @@ def build_graph(ctx: RunCtx):
     g = StateGraph(RunState)
     for name, label, agent in AGENTS:
         g.add_node(name, _node(ctx, name, label, agent))
-    g.add_edge(START, "triage")
+    g.add_node("sentinel", _node(ctx, "sentinel", "Drift", _sentinel))
+    # A run over a NEW scan starts with the Sentinel (carry memory, flag arrivals,
+    # diff the path sets); a run over the first scan starts at Triage.
+    g.add_conditional_edges(
+        START, lambda st: "sentinel" if st.get("prev_scan") else "triage", ["sentinel", "triage"]
+    )
+    g.add_edge("sentinel", "triage")
     g.add_edge("triage", "pathfinder")
     g.add_edge("pathfinder", "fixer")
     g.add_edge("fixer", "reporter")
@@ -68,10 +78,19 @@ def build_graph(ctx: RunCtx):
     return g.compile(checkpointer=InMemorySaver())
 
 
+async def _sentinel(ctx: RunCtx, state: RunState) -> tuple[str, str]:
+    oid, payload = await sentinel_check(
+        ctx, prev_scan=state["prev_scan"], scan=state["scan"], carry_from=state.get("carry_from")
+    )
+    return oid, (ctx.repo.read_output(ctx.graph, ctx.run_id, "Drift") or {}).get("summary", "")
+
+
 def _node(ctx: RunCtx, name: str, label: str, agent):
     async def run(state: RunState) -> dict:
         t = time.perf_counter()
+        ctx.record_agent(name)
         oid, summary = await agent(ctx, state)
+        ctx.record_output(name, label, oid, summary)
         secs = time.perf_counter() - t
         return {
             "outputs": {label: oid},
@@ -95,8 +114,16 @@ async def run_agents(
     transport: str = "memory",
     repo: MemoryRepo | None = None,
     graph: str | None = None,
+    run_id: str | None = None,
+    carry_memory: bool = True,
 ) -> dict:
-    """Run the four agents on one scan; everything is written under a new run id."""
+    """Run the agents on one scan; everything is written under one run id.
+
+    On a scan with an earlier scan loaded (v2), the Sentinel runs first. With
+    carry_memory (the default) it brings the org's memory over from the earlier
+    scan's graph; carry_memory=False is a cold start (memory lift's baseline).
+    run_id: a Run the caller already created (the API returns it before the run
+    starts); by default a new one."""
     s = get_settings()
     graph = graph or s.scan_graph(org, scan)
     repo = repo or MemoryRepo()
@@ -110,8 +137,9 @@ async def run_agents(
         max_tool_calls=max_tool_calls or s.agent_max_tool_calls,
     )
     run_id = repo.start_agent_run(
-        graph, kind="agent_triage", scan=scan, as_of=as_of, budget=budget.snapshot()
+        graph, kind="agent_triage", scan=scan, as_of=as_of, budget=budget.snapshot(), run_id=run_id
     )
+    prev = previous_scan(graph, scan, repo.allowed)
     t0 = time.perf_counter()
     status, ctx, final = "failed", None, {}
     try:
@@ -134,6 +162,8 @@ async def run_agents(
                     "run_id": run_id,
                     "as_of": as_of,
                     "scan_info": info or {},
+                    "prev_scan": prev,
+                    "carry_from": scan_graph_name(graph, prev) if prev and carry_memory else None,
                     "budget": budget.snapshot(),
                     "outputs": {},
                     "summaries": {},

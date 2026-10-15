@@ -48,6 +48,7 @@ from .models import (
     ChokePointsInput,
     EdgeRef,
     Evidence,
+    ExposureDriftInput,
     ExposureInput,
     MinCutInput,
     PlaybooksInput,
@@ -67,6 +68,9 @@ SCRATCH_PREFIX = "scratch__"
 # scan_findings(view="triage"): Internet-facing findings OFF any crown path get a
 # count and this many rows, no more (they are what triage deprioritises).
 TRIAGE_OTHERS = 5
+# exposure_drift enumerates every Internet -> crown-jewel walk; a sane org has a
+# handful (org_a: 9). Past this many the diff is reported as truncated.
+DRIFT_MAX_WALKS = 5000
 
 # Our node ids look like "<org>:<kind>:<n>"; the kind tells us the label, which
 # lets every lookup be an index seek on (:Label {id}) instead of a full scan.
@@ -95,6 +99,12 @@ _KIND_LABEL = {
     "riskacc": "RiskAcceptance",
     "pattern": "Pattern",
     "playbook": "Playbook",
+    # agent outputs (S4) + the Sentinel's (S5)
+    "pathanalysis": "PathAnalysis",
+    "fixplan": "FixPlan",
+    "report": "Report",
+    "drift": "Drift",
+    "alert": "Alert",
 }
 _TECHNIQUE_RE = re.compile(r"^T\d{4}(\.\d{3})?$")
 # Labels the attack layer runs between (helper labels are hidden from output).
@@ -1260,8 +1270,16 @@ class GraphTools(CompanyToolsMixin):
         out, ev = [], Evidence()
         for tech in dict.fromkeys(inp.techniques):
             rows = [
-                {"id": i, "version": v, "body": b, "ts": ts, "supersedes": old}
-                for i, _, v, b, ts, old in self._q(
+                {
+                    "id": i,
+                    "version": v,
+                    "body": b,
+                    "ts": ts,
+                    "supersedes": old,
+                    "policy": memory._policy(policy),
+                    "source": source,
+                }
+                for i, _, v, b, ts, old, policy, source in self._q(
                     g, memory.READ_PLAYBOOK_HISTORY, {"technique": tech}, qlog
                 )
             ]
@@ -1306,13 +1324,232 @@ class GraphTools(CompanyToolsMixin):
             queries=qlog,
         )
 
-    # ============================================================ S5 stubs
-    def exposure_drift(self, org: str) -> ToolResult:
-        """TODO(S5): what changed between scan v1 and v2 (graphs <org> and <org>_v2)."""
-        raise NotImplementedError("exposure_drift arrives in S5 (Sentinel / drift)")
+    # ======================================================= exposure_drift
+    def exposure_drift(
+        self, org: str, from_scan: str = "v1", to_scan: str = "v2", include_paths: bool = True
+    ) -> ToolResult:
+        """What changed for an attacker between two scans of one org.
+
+        Incremental recompute: instead of re-triaging the new scan from scratch,
+        enumerate the Internet -> crown-jewel path SET of each scan's ATTACK_STEP
+        layer (open findings only, derive enforces that) and diff the sets. A path
+        is its node sequence; its cost is the cheapest way to walk it (parallel
+        steps between the same two nodes: the most likely one counts).
+          new_paths     node sequences only the newer scan has;
+          closed_paths  only the earlier scan has (with the steps that vanished
+                        and the findings now fixed: the evidence for "closed");
+          cost_changed  same nodes, different min cost (a parallel step came/went).
+        new_crown_path is true ONLY when a brand-new path to a crown jewel exists:
+        a closed or cheaper/dearer path never raises it.
+        include_paths=false answers just the cheap part (which open findings
+        arrived / left) without any path search: what a sentinel checks on arrival.
+        """
+        inp = ExposureDriftInput(
+            org=org, from_scan=from_scan, to_scan=to_scan, include_paths=include_paths
+        )
+        g_from = self._org(scan_graph_name(inp.org, inp.from_scan))
+        g_to = self._org(scan_graph_name(inp.org, inp.to_scan))
+        qlog: list[QueryLog] = []
+        scans = {}
+        for g in (g_from, g_to):
+            rows = self._q(g, "MATCH (s:Scan) RETURN s.version, s.ts ORDER BY s.ts DESC", {}, qlog)
+            scans[g] = {
+                "graph": g,
+                "scan": rows[0][0] if rows else None,
+                "ts": rows[0][1] if rows else None,
+            }
+            scans[g]["date"] = _day(scans[g]["ts"])
+
+        # Which open findings arrived / left (two parameter-free reads, joined in Python).
+        open_ids = {
+            g: {
+                r[0] for r in self._q(g, "MATCH (f:Finding {status: 'open'}) RETURN f.id", {}, qlog)
+            }
+            for g in (g_from, g_to)
+        }
+        arrived = sorted(open_ids[g_to] - open_ids[g_from])
+        left = sorted(open_ids[g_from] - open_ids[g_to])
+        data: dict[str, Any] = {
+            "org": inp.org,
+            "from": scans[g_from],
+            "to": scans[g_to],
+            "arrived_findings": arrived,
+            "left_findings": left,
+        }
+        ev = Evidence(node_ids=list(arrived[:MAX_ROWS]))
+        summary = (
+            f"{scans[g_from]['scan']} -> {scans[g_to]['scan']}: {len(arrived)} open finding(s) "
+            f"arrived, {len(left)} left (fixed or gone)."
+        )
+        truncated = False
+        if inp.include_paths:
+            before, t1 = self._crown_paths(g_from, qlog)
+            after, t2 = self._crown_paths(g_to, qlog)
+            truncated = t1 or t2
+            diff = self._diff_paths(g_from, g_to, before, after, qlog)
+            data.update(diff)
+            data["paths_before"], data["paths_after"] = len(before), len(after)
+            for p in diff["new_paths"] + diff["closed_paths"]:
+                ids = [n["id"] for n in p["nodes"]]
+                ev.paths.append(ids)
+                ev.node_ids += ids
+                ev.edges += [
+                    EdgeRef(src=ids[i], rel="ATTACK_STEP", dst=ids[i + 1], key=s["key"])
+                    for i, s in enumerate(p["steps"])
+                ]
+            n_new, n_closed = len(diff["new_paths"]), len(diff["closed_paths"])
+            summary += (
+                f" Crown-jewel paths {len(before)} -> {len(after)}: {n_new} new, {n_closed} "
+                f"closed, {len(diff['cost_changed'])} changed cost, {diff['unchanged']} unchanged."
+                + (
+                    " NEW CROWN PATH: "
+                    + "; ".join(
+                        " -> ".join(n["name"] for n in p["nodes"]) for p in diff["new_paths"]
+                    )
+                    if diff["new_crown_path"]
+                    else " No new path to a crown jewel."
+                )
+            )
+        ev.node_ids = list(dict.fromkeys(ev.node_ids))
+        return ToolResult(
+            summary=summary, data=data, evidence=ev, queries=qlog, truncated=truncated
+        )
+
+    def _crown_paths(self, graph: str, qlog) -> tuple[dict[tuple, dict], bool]:
+        """Every Internet -> crown-jewel ATTACK_STEP path (the same pattern derive
+        uses for :CrownPath), keyed by node sequence, cheapest walk kept."""
+        rows = self._q(
+            graph,
+            f"""
+            MATCH p = (:Internet)-[:ATTACK_STEP*1..{HOP_CAP}]->(t:DataStore {{crown_jewel: true}})
+            RETURN t.id,
+                   [n IN nodes(p) | {{id: n.id, name: coalesce(n.hostname, n.name, n.kind, n.id)}}],
+                   [e IN relationships(p) | {{key: e.key, rule: e.rule, technique: e.technique,
+                                              fix_token: e.fix_token, likelihood: e.likelihood,
+                                              cost: e.cost}}]
+            LIMIT {DRIFT_MAX_WALKS + 1}
+            """,
+            {},
+            qlog,
+        )
+        paths: dict[tuple, dict] = {}
+        for target, nodes, steps in rows[:DRIFT_MAX_WALKS]:
+            sig = tuple(n["id"] for n in nodes)
+            cost = sum(s["cost"] for s in steps)
+            if sig not in paths or cost < paths[sig]["cost"] - 1e-12:
+                paths[sig] = {
+                    "target": target,
+                    "nodes": nodes,
+                    "steps": [{k: s[k] for k in s if k != "cost"} for s in steps],
+                    "hop_costs": [s["cost"] for s in steps],
+                    "cost": cost,
+                    "likelihood": math.exp(-cost),
+                }
+        return paths, len(rows) > DRIFT_MAX_WALKS
+
+    def _diff_paths(self, g_from, g_to, before: dict, after: dict, qlog) -> dict:
+        new_sigs = [s for s in after if s not in before]
+        closed_sigs = [s for s in before if s not in after]
+        common = [s for s in after if s in before]
+        changed = [s for s in common if abs(after[s]["cost"] - before[s]["cost"]) > 1e-9]
+
+        def pub(p: dict) -> dict:
+            return {k: p[k] for k in ("target", "nodes", "steps", "likelihood")}
+
+        # Evidence for "new": which of its nodes / steps the earlier scan did not have.
+        new_ids = sorted({n for s in new_sigs for n in s})
+        new_keys = sorted({st["key"] for s in new_sigs for st in after[s]["steps"]})
+        had_nodes = set(self._nodes(g_from, new_ids, qlog)) | ({"internet"} & set(new_ids))
+        had_keys = self._step_keys(g_from, new_keys, qlog)
+        # Evidence for "closed": which of its steps the newer scan lacks, and whether
+        # the finding behind each is now fixed.
+        gone_keys = sorted({st["key"] for s in closed_sigs for st in before[s]["steps"]})
+        still = self._step_keys(g_to, gone_keys, qlog)
+        tokens = sorted(
+            {st["fix_token"] for s in closed_sigs for st in before[s]["steps"]} - {"internet"}
+        )
+        status = {
+            fid: st
+            for fid, st in self._q(
+                g_to,
+                "MATCH (f:Finding) WHERE f.id IN $ids RETURN f.id, f.status",
+                {"ids": [t for t in tokens if label_of(t) == "Finding"]},
+                qlog,
+            )
+        }
+        new_paths = [
+            {
+                **pub(after[s]),
+                "new_nodes": [n for n in s if n not in had_nodes],
+                "new_steps": [st["key"] for st in after[s]["steps"] if st["key"] not in had_keys],
+            }
+            for s in new_sigs
+        ]
+        closed_paths = []
+        for s in closed_sigs:
+            gone = [st for st in before[s]["steps"] if st["key"] not in still]
+            closed_paths.append(
+                {
+                    **pub(before[s]),
+                    "gone_steps": [st["key"] for st in gone],
+                    "fixed_findings": sorted(
+                        {st["fix_token"] for st in gone if status.get(st["fix_token"]) == "fixed"}
+                    ),
+                }
+            )
+        cost_changed = []
+        for s in changed:
+            a, b = before[s], after[s]
+            hops = [
+                {
+                    "from": s[i],
+                    "to": s[i + 1],
+                    "cost_before": round(x, 4),
+                    "cost_after": round(y, 4),
+                }
+                for i, (x, y) in enumerate(zip(a["hop_costs"], b["hop_costs"], strict=True))
+                if abs(x - y) > 1e-9
+            ]
+            cost_changed.append(
+                {
+                    **pub(b),
+                    "likelihood_before": a["likelihood"],
+                    "likelihood_after": b["likelihood"],
+                    "changed_hops": hops,
+                }
+            )
+        for lst in (new_paths, closed_paths, cost_changed):
+            lst.sort(key=lambda p: -p["likelihood"])
+        return {
+            "new_paths": new_paths,
+            "closed_paths": closed_paths,
+            "cost_changed": cost_changed,
+            "unchanged": len(common) - len(changed),
+            "new_crown_path": bool(new_paths),
+        }
+
+    def _step_keys(self, graph: str, keys: list[str], qlog) -> set[str]:
+        """Which of these ATTACK_STEP keys exist in a graph (edge index on key)."""
+        if not keys:
+            return set()
+        rows = self._q(
+            graph,
+            "MATCH ()-[e:ATTACK_STEP]->() WHERE e.key IN $keys RETURN e.key",
+            {"keys": keys},
+            qlog,
+        )
+        return {r[0] for r in rows}
 
 
 # ---------------------------------------------------------------- helpers
+def scan_graph_name(org: str, scan: str) -> str:
+    """The graph holding one scan of an org: v1 is `<org>`, v2 is `<org>_v2`.
+    `org` may be either graph name (or any namespaced copy following the same
+    convention, e.g. a test or eval graph)."""
+    base = org[: -len("_v2")] if org.endswith("_v2") else org
+    return base if scan == "v1" else f"{base}_{scan}"
+
+
 def _scan_aggregates(signals: dict[str, tuple[bool, float]], steps: dict[str, dict]) -> dict:
     """Counts a triager reasons from before looking at any single finding: open
     findings by CVSS band (and how many of each enable an attack step), by the
@@ -1467,4 +1704,6 @@ TOOL_NAMES = [
     # agent layer (S4): the scan's findings, and procedural memory
     "scan_findings",
     "playbooks",
+    # S5: incremental recompute between scans
+    "exposure_drift",
 ]

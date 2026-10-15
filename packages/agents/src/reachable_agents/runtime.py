@@ -126,7 +126,7 @@ class RunCtx:
         graph: str,
         run_id: str,
         as_of: int,
-        llm: ChatModel,
+        llm: ChatModel | None,  # None: a run with no model (the Sentinel)
         toolbox: McpToolbox,
         repo: MemoryRepo,
         budget: Budget,
@@ -142,6 +142,7 @@ class RunCtx:
         self.tokens_in = self.tokens_out = 0
         self.called: set[tuple[str, str]] = set()  # (agent, tool) actually answered
         self._by: str | None = None  # "run" while the run (not the model) calls a tool
+        self.memory_events: dict[str, int] = {}  # memory recalls/writes this run, by action
 
     # ------------------------------------------------------------- tools
     async def call_tool(self, agent: str, allowed: tuple[str, ...], name: str, args: Any) -> str:
@@ -286,6 +287,38 @@ class RunCtx:
             },
         )
 
+    # ------------------------------------------- trace markers (S5, for the stream)
+    def record_agent(self, agent: str) -> None:
+        """An agent starts: the stream's "agent entered" event."""
+        self.repo.append_agent_step(
+            self.graph, self.run_id, {"kind": "agent", "agent": agent, "tool": "enter"}
+        )
+
+    def record_output(self, agent: str, label: str, output_id: str, summary: str) -> None:
+        """An agent wrote its handoff output (Triage, PathAnalysis, ...): the stream
+        reads the output node back to emit "path found", "fix chosen", ..."""
+        self.repo.append_agent_step(
+            self.graph,
+            self.run_id,
+            {
+                "kind": "output",
+                "agent": agent,
+                "tool": label,
+                "output_id": output_id,
+                "summary": summary[:1000],
+            },
+        )
+
+    def record_memory(self, agent: str, action: str, detail: dict, ms: float | None = None) -> None:
+        """Memory changed what this run does (recall) or what the next one will
+        (a write): carried verdicts, remembered routes, a pattern firing, ..."""
+        self.memory_events[action] = self.memory_events.get(action, 0) + 1
+        self.repo.append_agent_step(
+            self.graph,
+            self.run_id,
+            {"kind": "memory", "agent": agent, "tool": action, "detail": detail, "ms": ms},
+        )
+
     def record_llm_failure(self, agent: str, error: str) -> None:
         self.llm_failures += 1
         self.repo.append_agent_step(
@@ -308,6 +341,7 @@ class RunCtx:
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
             "models": dict(self.models),
+            "memory": dict(self.memory_events),
         }
 
 

@@ -59,6 +59,9 @@ MEMORY_INDEXES: dict[str, str] = {
     "PathAnalysis": "id",
     "FixPlan": "id",
     "Report": "id",
+    # S5: the Sentinel's drift check on a new scan, and the alert it may raise.
+    "Drift": "id",
+    "Alert": "id",
 }
 
 # Identity sub-labels (an Identity node also carries exactly one of these).

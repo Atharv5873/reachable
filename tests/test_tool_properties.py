@@ -68,9 +68,14 @@ class RecordingDB:
 def rec(db):
     g = T.build(db)
     derive(g)
+    v2 = f"{T.ORG}_v2"  # a second "scan" of the same org, for exposure_drift
+    if v2 in db.list_graphs():
+        db.select_graph(v2).delete()
+    g.copy(v2)
     r = RecordingDB(db)
-    yield r, GraphTools(r, allowed_orgs=[T.ORG])
+    yield r, GraphTools(r, allowed_orgs=[T.ORG, v2])
     g.delete()
+    db.select_graph(v2).delete()
 
 
 def _assert_read_only(calls):
@@ -166,6 +171,7 @@ def test_every_tool_is_read_only_on_the_org_graph(rec):
         "triage_memory": lambda: tools.triage_memory(T.ORG, [T.F1, T.F4]),
         "scan_findings": lambda: tools.scan_findings(T.ORG),
         "playbooks": lambda: tools.playbooks(T.ORG, ["T1190"], as_of=0),
+        "exposure_drift": lambda: tools.exposure_drift(T.ORG),
     }
     assert set(calls) == set(TOOL_NAMES)
     if "threatintel" not in r.list_graphs():  # vuln_intel reads the threatintel graph

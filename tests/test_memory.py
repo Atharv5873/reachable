@@ -17,6 +17,8 @@ from evidence import missing_evidence
 from reachable_core.schema import MEMORY_INDEXES
 from reachable_graph.derive import derive
 from reachable_graph.memory import (
+    RESET_LEARNED_PLAYBOOKS,
+    RESET_MEMORY,
     WRITE_QUERIES,
     MemoryError_,
     MemoryRepo,
@@ -227,4 +229,9 @@ def test_repo_refuses_unknown_orgs_and_foreign_writes(env):
         repo.start_run("org_zzz", "triage")
     with pytest.raises(MemoryError_):
         repo._w(GRAPH, "MATCH (n:Asset) DETACH DELETE n", {})
-    assert all("DELETE" not in q.upper() for q in WRITE_QUERIES)
+    # The only deletes are the cold-start reset (S5): one fixed query per MEMORY
+    # label. Nothing can delete an infrastructure node.
+    deletes = {q for q in WRITE_QUERIES if "DELETE" in q.upper()}
+    assert deletes == {*RESET_MEMORY.values(), RESET_LEARNED_PLAYBOOKS}
+    for label, q in RESET_MEMORY.items():
+        assert label in MEMORY_LABELS and q == f"MATCH (n:{label}) DETACH DELETE n"

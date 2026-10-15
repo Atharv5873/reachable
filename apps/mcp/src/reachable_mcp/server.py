@@ -56,6 +56,8 @@ recurring patterns for findings before you triage them again; playbooks gives
 the versioned procedure in force per ATT&CK technique. Time-dependent tools
 (triage_memory, playbooks, owners, company_query) take as_of in epoch seconds:
 pass the scan's time, not today's, when reasoning about a scan.
+When a new scan lands, exposure_drift diffs the two scans' crown-jewel path sets
+(new / closed / cost-changed paths) instead of re-triaging everything.
 Every result carries `evidence` (ids that exist in the graph): cite them.
 """
 
@@ -83,7 +85,7 @@ def _call(fn, *args, **kwargs) -> ToolResult:
 
 Org = arg(M.OrgInput, "org", str)
 
-server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.4.0")
+server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.5.0")
 
 
 @server.tool(
@@ -375,6 +377,42 @@ def playbooks(
     as_of: arg(M.PlaybooksInput, "as_of", int | None) = None,
 ) -> ToolResult:
     return _call(_tools().playbooks, org, techniques, as_of=as_of)
+
+
+# ------------------------------------------------------------ S5: drift
+@server.tool(
+    name="exposure_drift",
+    description=(
+        "What changed for an attacker between two scans of an org (org_a = scan v1, "
+        "org_a_v2 = the week-later rescan): the Internet -> crown-jewel path SETS of both "
+        "scans' attack layers, diffed. new_paths (with the nodes and steps the old scan did not "
+        "have), closed_paths (with the steps that vanished and the findings now fixed), "
+        "cost_changed, and new_crown_path = true ONLY when a brand-new path to a crown jewel "
+        "appeared. include_paths=false returns just the open findings that arrived / left, with "
+        "no path search. USE when a new scan lands, before re-triaging everything. Do NOT use it "
+        "to rank one scan's findings (scan_findings / attack_paths)."
+    ),
+)
+def exposure_drift(
+    org: Org,
+    from_scan: arg(M.ExposureDriftInput, "from_scan", Literal["v1", "v2"]) = "v1",
+    to_scan: arg(M.ExposureDriftInput, "to_scan", Literal["v1", "v2"]) = "v2",
+    include_paths: arg(M.ExposureDriftInput, "include_paths", bool) = True,
+) -> ToolResult:
+    return _call(
+        _tools().exposure_drift,
+        org,
+        from_scan=from_scan,
+        to_scan=to_scan,
+        include_paths=include_paths,
+    )
+
+
+def use_tools(tools: GraphTools) -> None:
+    """Point this in-process server at another GraphTools (an eval namespace or a
+    test graph with its own allowlist). The MCP surface is unchanged."""
+    global _tools
+    _tools = lambda: tools  # noqa: E731
 
 
 # --------------------------------------------------------------------- HTTP

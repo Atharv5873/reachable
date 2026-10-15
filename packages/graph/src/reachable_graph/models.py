@@ -255,6 +255,21 @@ class PlaybooksInput(OrgInput):
     )
 
 
+class ExposureDriftInput(OrgInput):
+    from_scan: Literal["v1", "v2"] = Field("v1", description="The earlier scan.")
+    to_scan: Literal["v1", "v2"] = Field("v2", description="The newer scan.")
+    include_paths: bool = Field(
+        True,
+        description="false: only which findings arrived / left (no path search at all).",
+    )
+
+    @model_validator(mode="after")
+    def _two_scans(self):
+        if self.from_scan == self.to_scan:
+            raise ValueError("from_scan and to_scan must differ")
+        return self
+
+
 # --- Output -----------------------------------------------------------------
 class EdgeRef(BaseModel):
     src: str

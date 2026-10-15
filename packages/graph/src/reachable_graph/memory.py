@@ -31,6 +31,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -117,6 +118,8 @@ class PlaybookRec(BaseModel):
     body: str
     ts: int
     supersedes: str | None = None
+    policy: list[dict] = Field(default_factory=list)  # machine-readable rules (S5)
+    source: str | None = None  # None = seeded starter; "verdict:<id>" = learned
 
 
 # ---------------------------------------------------------------- write queries
@@ -190,10 +193,13 @@ ENSURE_TECHNIQUE = "MERGE (t:Technique {id: $technique})"
 # A version's id is deterministic (<org>:playbook:<technique>:v<n>), so two
 # writers racing to publish the same version collide on MERGE instead of
 # silently producing two "v2"s; the loser sees nodes_created == 0.
+# policy: JSON list of machine-readable rules (S5, from analyst verdicts);
+# source: what produced the version (null for the seeded starter playbooks).
 CREATE_PLAYBOOK = """
 MATCH (t:Technique {id: $technique})
 MERGE (p:Playbook {id: $id})
-ON CREATE SET p.technique = $technique, p.version = $version, p.body = $body, p.ts = $ts
+ON CREATE SET p.technique = $technique, p.version = $version, p.body = $body, p.ts = $ts,
+              p.policy = $policy, p.source = $source
 MERGE (t)-[:HANDLED_BY]->(p)
 RETURN p.version
 """
@@ -239,8 +245,9 @@ MATCH (s:AgentStep {id: $step}), (o:ToolOutput {id: $output})
 MERGE (s)-[:RESULT]->(o)
 """
 # Each agent's handoff output, one label per agent. Labels come from this
-# fixed tuple, never from input.
-OUTPUT_LABELS = ("Triage", "PathAnalysis", "FixPlan", "Report")
+# fixed tuple, never from input. Drift (S5) is the Sentinel's, written before
+# Triage on a run over a new scan; Triage is then BUILT_ON it.
+OUTPUT_LABELS = ("Drift", "Triage", "PathAnalysis", "FixPlan", "Report")
 WRITE_OUTPUT = {
     label: f"""
 MATCH (r:Run {{id: $run}})
@@ -268,8 +275,114 @@ MERGE (n)-[:BUILT_ON]->(o)
     for new, old in zip(OUTPUT_LABELS[1:], OUTPUT_LABELS[:-1], strict=True)
 }
 
+# --- S5 ----------------------------------------------------------------------
+SET_RUN_STATUS = "MATCH (r:Run {id: $id}) SET r.status = $status RETURN r.id"
+# The Sentinel's alert: only ever raised for a brand-new path to a crown jewel.
+RAISE_ALERT = """
+MATCH (r:Run {id: $run})
+CREATE (r)-[:RAISED]->(a:Alert {id: $id})
+SET a.kind = $kind, a.ts = $ts, a.raised = $raised, a.from_scan = $from_scan,
+    a.to_scan = $to_scan, a.summary = $summary, a.payload = $payload
+RETURN a.id
+"""
+LINK_ALERT_CITES = """
+MATCH (a:Alert {id: $id})
+MATCH (f:Finding) WHERE f.id IN $ids
+MERGE (a)-[:CITES]->(f)
+RETURN count(f)
+"""
+LINK_ALERT_ABOUT = """
+MATCH (a:Alert {id: $id})
+MATCH (x:Asset) WHERE x.id IN $ids
+MERGE (a)-[:ABOUT]->(x)
+RETURN count(x)
+"""
+# An analyst's review of an agent verdict (procedural memory's input).
+CREATE_ANALYST_VERDICT = """
+MATCH (f:Finding {id: $finding}), (o:Verdict {id: $reviews})
+CREATE (v:Verdict {id: $id, decision: $decision, reason: $reason, ts: $ts, by: 'analyst',
+                   review: $review, overrides: $overrides, run: $run})-[:ON]->(f)
+CREATE (v)-[:REVIEWS]->(o)
+RETURN v.id
+"""
+LINK_VERDICT_LED_TO = """
+MATCH (v:Verdict {id: $verdict}), (p:Playbook {id: $playbook})
+MERGE (v)-[:LED_TO]->(p)
+"""
+
+# Cold start: delete every memory node except the seeded starter playbooks (and
+# the Technique anchors). One fixed query per label; labels from this tuple only.
+RESET_LABELS = (
+    "AgentStep",
+    "ToolOutput",
+    "Report",
+    "FixPlan",
+    "PathAnalysis",
+    "Drift",
+    "Alert",
+    "Verdict",
+    "Triage",
+    "Run",
+    "RiskAcceptance",
+    "Pattern",
+)
+RESET_MEMORY = {label: f"MATCH (n:{label}) DETACH DELETE n" for label in RESET_LABELS}
+RESET_LEARNED_PLAYBOOKS = "MATCH (p:Playbook) WHERE p.source IS NOT NULL DETACH DELETE p"
+
+# Carry-over (scan v1's graph -> scan v2's): memory belongs to the org, not to a
+# scan. Every copied node is MERGEd by id with the source's properties; every
+# copied edge is MERGEd between nodes that exist in the target (infrastructure
+# nodes are matched, never created). Labels and edge types come from these
+# fixed tables only.
+CARRY_LABELS = (
+    "Technique",
+    "Playbook",
+    "RiskAcceptance",
+    "Triage",
+    "Verdict",
+    "Pattern",
+    "Run",
+    "Drift",
+    "PathAnalysis",
+    "FixPlan",
+    "Report",
+)
+CARRY_NODE = {label: f"MERGE (n:{label} {{id: $id}}) SET n += $props" for label in CARRY_LABELS}
+CARRY_EDGES = (
+    ("Technique", "HANDLED_BY", "Playbook"),
+    ("Playbook", "SUPERSEDES", "Playbook"),
+    ("RiskAcceptance", "ON", "Finding"),
+    ("RiskAcceptance", "APPROVED_BY", "Person"),
+    ("Verdict", "ON", "Finding"),
+    ("Verdict", "REVIEWS", "Verdict"),
+    ("Verdict", "LED_TO", "Playbook"),
+    ("Triage", "HAS_VERDICT", "Verdict"),
+    ("Pattern", "ABOUT", "Asset"),
+    ("Pattern", "ABOUT", "Software"),
+    ("Pattern", "ABOUT", "Vuln"),
+    ("Pattern", "SEEN_IN", "Triage"),
+    ("Run", "HAS_TRIAGE", "Triage"),
+    *(("Run", "HAS_OUTPUT", lbl) for lbl in OUTPUT_LABELS),
+    *((lbl, "CITES", "Finding") for lbl in OUTPUT_LABELS),
+    *(zip(OUTPUT_LABELS[1:], ("BUILT_ON",) * 4, OUTPUT_LABELS[:-1], strict=True)),
+)
+CARRY_EDGE = {
+    (a, rel, b): f"MATCH (a:{a} {{id: $a}}) MATCH (b:{b} {{id: $b}}) MERGE (a)-[:{rel}]->(b)"
+    for a, rel, b in CARRY_EDGES
+}
+
 WRITE_QUERIES = frozenset(
     {
+        SET_RUN_STATUS,
+        RAISE_ALERT,
+        LINK_ALERT_CITES,
+        LINK_ALERT_ABOUT,
+        CREATE_ANALYST_VERDICT,
+        LINK_VERDICT_LED_TO,
+        *RESET_MEMORY.values(),
+        RESET_LEARNED_PLAYBOOKS,
+        *CARRY_NODE.values(),
+        *CARRY_EDGE.values(),
         CREATE_RUN,
         APPEND_STEP,
         START_AGENT_RUN,
@@ -355,14 +468,40 @@ READ_CURRENT_PLAYBOOK = """
 MATCH (:Technique {id: $technique})-[:HANDLED_BY]->(p:Playbook)
 WHERE NOT (:Playbook)-[:SUPERSEDES]->(p)
 OPTIONAL MATCH (p)-[:SUPERSEDES]->(o:Playbook)
-RETURN p.id, p.technique, p.version, p.body, p.ts, o.id
+RETURN p.id, p.technique, p.version, p.body, p.ts, o.id, p.policy, p.source
 """
 READ_PLAYBOOK_HISTORY = """
 MATCH (:Technique {id: $technique})-[:HANDLED_BY]->(p:Playbook)
 OPTIONAL MATCH (p)-[:SUPERSEDES]->(o:Playbook)
-RETURN p.id, p.technique, p.version, p.body, p.ts, o.id
+RETURN p.id, p.technique, p.version, p.body, p.ts, o.id, p.policy, p.source
 ORDER BY p.version DESC
 """
+
+# --- S5 reads ------------------------------------------------------------------
+# The verdict a run's Reporter recorded on a finding (what an analyst reviews).
+READ_RUN_VERDICT = """
+MATCH (:Run {id: $run})-[:HAS_TRIAGE]->(t:Triage)-[:HAS_VERDICT]->(v:Verdict)
+MATCH (v)-[:ON]->(:Finding {id: $finding})
+RETURN v.id, v.decision, v.reason, t.id ORDER BY v.ts DESC, v.id LIMIT 1
+"""
+# Episodic recall: the latest earlier agent run's fix plan (its routing).
+READ_PRIOR_FIXPLAN = """
+MATCH (r:Run)-[:HAS_OUTPUT]->(o:FixPlan)
+WHERE r.id <> $run AND r.as_of <= $as_of AND r.status IN ['complete', 'degraded']
+RETURN r.id, r.as_of, o.payload ORDER BY r.as_of DESC, r.started DESC, o.ts DESC LIMIT 1
+"""
+READ_ALERTS = """
+MATCH (r:Run)-[:RAISED]->(a:Alert)
+RETURN a.id, a.kind, a.ts, a.from_scan, a.to_scan, a.summary, r.id ORDER BY a.raised DESC
+"""
+# Carry-over reads: every memory node of a label with its properties, and the
+# edges between memory nodes and what they are about.
+CARRY_READ_NODES = {
+    label: f"MATCH (n:{label}) RETURN n.id, properties(n)" for label in CARRY_LABELS
+}
+CARRY_READ_EDGES = {
+    (a, rel, b): f"MATCH (x:{a})-[:{rel}]->(y:{b}) RETURN x.id, y.id" for a, rel, b in CARRY_EDGES
+}
 
 # agent runs (S4)
 READ_SCAN = "MATCH (s:Scan) RETURN s.id, s.version, s.ts ORDER BY s.ts DESC LIMIT 1"
@@ -380,12 +519,57 @@ RETURN o.id, o.agent, o.ts, o.summary, o.payload ORDER BY o.ts DESC LIMIT 1
     for label in OUTPUT_LABELS
 }
 # Step / run properties stored as JSON text (FalkorDB holds primitives and flat arrays).
-_JSON_PROPS = {"input", "queries", "tool_calls", "budget", "stats"}
+_JSON_PROPS = {"input", "queries", "tool_calls", "budget", "stats", "detail"}
 
 
 def _playbook(row) -> PlaybookRec:
-    pid, tech, version, body, ts, old = row
-    return PlaybookRec(id=pid, technique=tech, version=version, body=body, ts=ts, supersedes=old)
+    pid, tech, version, body, ts, old, policy, source = row
+    return PlaybookRec(
+        id=pid,
+        technique=tech,
+        version=version,
+        body=body,
+        ts=ts,
+        supersedes=old,
+        policy=_policy(policy),
+        source=source,
+    )
+
+
+def _policy(raw) -> list[dict]:
+    """A playbook's machine-readable rules (JSON text; none on starter playbooks)."""
+    if not raw:
+        return []
+    try:
+        rules = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    return [r for r in rules if isinstance(r, dict)] if isinstance(rules, list) else []
+
+
+# An analyst who rejects an agent's decision is saying "one notch the other way".
+ESCALATE = {
+    "schedule": "fix_now",
+    "not_reachable": "schedule",
+    "accept_risk": "fix_now",
+    "false_positive": "schedule",
+    "fix_now": "schedule",
+}
+# A reject reason that is about this one instance is not a rule for the next
+# finding: it names a node, or says why only this case is special.
+_INSTANCE_WORDS = re.compile(
+    r"\b(this (host|box|server|one|finding|asset|instance)|just this|only this|one[- ]off|"
+    r"decommission\w*|temporar\w*|this week|until (monday|tuesday|wednesday|thursday|friday)|"
+    r"[a-z0-9_]+:(asset|finding|vuln|sw|secret|ident|ds):\d+)\b",
+    re.IGNORECASE,
+)
+
+
+def is_reusable(reason: str) -> bool:
+    """Is a reject reason a rule for every finding like this one (-> a new playbook
+    version), or about this instance only (-> just the verdict)? Deliberately
+    simple and explainable; the CLI / API can override it."""
+    return len(reason.split()) >= 5 and not _INSTANCE_WORDS.search(reason)
 
 
 # ------------------------------------------------------------------ repository
@@ -398,6 +582,7 @@ class MemoryRepo:
         self.db = db or connect()
         self.allowed = set(allowed_orgs or get_settings().graphs)
         self.timeout_ms = timeout_ms
+        self.lock_waits = 0  # how often a memory lock was contended (S5 concurrency)
 
     # --- plumbing -----------------------------------------------------------
     def _org(self, org: str) -> str:
@@ -636,37 +821,325 @@ class MemoryRepo:
 
     # --- procedural: versioned playbooks ------------------------------------
     def add_playbook_version(
-        self, org: str, technique: str, body: str, *, ts: int | None = None
+        self,
+        org: str,
+        technique: str,
+        body: str,
+        *,
+        ts: int | None = None,
+        policy: list[dict] | None = None,
+        source: str | None = None,
+        lock: bool = True,
     ) -> PlaybookRec:
         """Publish the next version for a technique; it SUPERSEDES the current one,
-        which stays in the graph as history."""
-        cur = self.current_playbook(org, technique)
-        version = (cur.version if cur else 0) + 1
-        pid = f"{org}:playbook:{technique}:v{version}"
-        self._w(org, ENSURE_TECHNIQUE, {"technique": technique})
-        res = self._w(
-            org,
-            CREATE_PLAYBOOK,
-            {
-                "technique": technique,
-                "id": pid,
-                "version": version,
-                "body": body,
-                "ts": ts or now_ts(),
-            },
-        )
-        if res.nodes_created == 0:
-            raise MemoryError_(f"{pid} already exists: someone published v{version} first")
-        if cur:
-            self._w(org, LINK_SUPERSEDES, {"new": pid, "old": cur.id})
+        which stays in the graph as history.
+
+        Read-modify-write (read the current version, write version + 1), so two
+        writers can race: both read v2, both try v3, one loses (MERGE on the
+        deterministic id refuses the duplicate). The memory lock serialises just
+        this, so the second writer reads v3 and publishes v4: no lost update."""
+        with self.lock(org, f"playbook:{technique}") if lock else contextlib.nullcontext():
+            cur = self.current_playbook(org, technique)
+            version = (cur.version if cur else 0) + 1
+            pid = f"{org}:playbook:{technique}:v{version}"
+            ts = ts or now_ts()
+            self._w(org, ENSURE_TECHNIQUE, {"technique": technique})
+            res = self._w(
+                org,
+                CREATE_PLAYBOOK,
+                {
+                    "technique": technique,
+                    "id": pid,
+                    "version": version,
+                    "body": body,
+                    "ts": ts,
+                    "policy": json.dumps(policy) if policy else None,
+                    "source": source,
+                },
+            )
+            if res.nodes_created == 0:
+                raise MemoryError_(f"{pid} already exists: someone published v{version} first")
+            if cur:
+                self._w(org, LINK_SUPERSEDES, {"new": pid, "old": cur.id})
         return PlaybookRec(
             id=pid,
             technique=technique,
             version=version,
             body=body,
-            ts=ts or now_ts(),
+            ts=ts,
             supersedes=cur.id if cur else None,
+            policy=policy or [],
+            source=source,
         )
+
+    # --- S5: a short lock for read-modify-write memory updates ---------------
+    @contextlib.contextmanager
+    def lock(self, org: str, name: str, *, ttl_ms: int = 5_000, wait_s: float = 10.0):
+        """A short mutual-exclusion lock, held in the FalkorDB server itself (it
+        speaks Redis: SET NX PX), so it serialises writers across threads AND
+        processes (the API, the CLI, an eval). Only read-modify-write memory
+        updates take it; plain CREATE/MERGE writes are atomic per query already.
+        The TTL frees it if a holder dies; release is compare-and-delete, so a
+        holder that outlived its TTL cannot free someone else's lock."""
+        key = f"reachable:lock:{self._org(org)}:{name}"
+        token = uuid.uuid4().hex
+        conn = self.db.connection
+        deadline = time.monotonic() + wait_s
+        waited = 0
+        while not conn.set(key, token, nx=True, px=ttl_ms):
+            if time.monotonic() > deadline:
+                raise MemoryError_(f"memory lock {name!r} on {org} still held after {wait_s}s")
+            waited += 1
+            time.sleep(0.01)
+        self.lock_waits += waited > 0
+        try:
+            yield
+        finally:
+            conn.eval(_RELEASE_LUA, 1, key, token)
+
+    def set_run_status(self, org: str, run_id: str, status: str) -> None:
+        self._w(org, SET_RUN_STATUS, {"id": run_id, "status": status})
+
+    # --- S5: the Sentinel's alert ---------------------------------------------
+    def raise_alert(
+        self,
+        org: str,
+        run_id: str,
+        *,
+        kind: str,
+        ts: int,
+        from_scan: str,
+        to_scan: str,
+        summary: str,
+        payload: dict,
+        findings: list[str],
+        assets: list[str],
+    ) -> str:
+        aid = self._new_id(org, "alert")
+        self._w(
+            org,
+            RAISE_ALERT,
+            {
+                "run": run_id,
+                "id": aid,
+                "kind": kind,
+                "ts": ts,
+                "raised": now_ts(),
+                "from_scan": from_scan,
+                "to_scan": to_scan,
+                "summary": summary,
+                "payload": json.dumps(payload, sort_keys=True, default=str),
+            },
+        )
+        if findings:
+            self._w(org, LINK_ALERT_CITES, {"id": aid, "ids": sorted(set(findings))})
+        if assets:
+            self._w(org, LINK_ALERT_ABOUT, {"id": aid, "ids": sorted(set(assets))})
+        return aid
+
+    def alerts(self, org: str) -> list[dict]:
+        keys = ("id", "kind", "ts", "from_scan", "to_scan", "summary", "run")
+        return [dict(zip(keys, r, strict=True)) for r in self._r(org, READ_ALERTS)]
+
+    # --- S5: cold start and carry-over ---------------------------------------
+    def reset_memory(self, org: str) -> dict[str, int]:
+        """Cold start: delete every memory node (runs, traces, outputs, verdicts,
+        risk acceptances, patterns, alerts, learned playbook versions). Keeps only
+        the seeded starter playbooks and the Technique anchors. Infrastructure is
+        never touched: each query is a fixed DETACH DELETE on one memory label."""
+        out = {}
+        for label in RESET_LABELS:
+            out[label] = self._w(org, RESET_MEMORY[label], {}).nodes_deleted
+        out["Playbook(learned)"] = self._w(org, RESET_LEARNED_PLAYBOOKS, {}).nodes_deleted
+        return out
+
+    def carry_over(self, src: str, dst: str) -> dict[str, int]:
+        """Copy the org's memory from one scan's graph into the next scan's graph.
+
+        Memory belongs to the org, not to a scan; our scans live in separate
+        graphs (`org_a` = v1, `org_a_v2` = v2) so they can be diffed side by side.
+        A new scan therefore inherits the previous graph's memory: playbooks (every
+        version), risk acceptances, verdicts (and the triages they hang off),
+        patterns, and each earlier run with its handoff outputs (not its
+        step-by-step trace, which stays where it ran). MERGE by id: idempotent.
+        Edges attach to infrastructure nodes that exist in the new scan by id; a
+        memory edge to something the new scan no longer has is dropped."""
+        counts: dict[str, int] = {}
+        for label in CARRY_LABELS:
+            rows = self._r(src, CARRY_READ_NODES[label])
+            for nid, props in rows:
+                props = {k: v for k, v in dict(props).items() if k != "id"}
+                if label == "Run":
+                    props.setdefault("carried_from", src)
+                self._w(dst, CARRY_NODE[label], {"id": nid, "props": props})
+            counts[label] = len(rows)
+        edges = 0
+        for triple in CARRY_EDGES:
+            for a, b in self._r(src, CARRY_READ_EDGES[triple]):
+                self._w(dst, CARRY_EDGE[triple], {"a": a, "b": b})
+                edges += 1
+        counts["edges"] = edges
+        return counts
+
+    # --- S5: episodic recall for the Fixer -----------------------------------
+    def prior_routes(self, org: str, *, run_id: str, as_of: int) -> tuple[str | None, dict]:
+        """Who got each fix last time: the routing in the latest earlier run's fix
+        plan, per asset, kept only while that on-call slot still covers `as_of`
+        (a week later the pager may have moved on: look it up again)."""
+        rows = self._r(org, READ_PRIOR_FIXPLAN, {"run": run_id, "as_of": as_of})
+        if not rows:
+            return None, {}
+        prior, _, payload = rows[0]
+        routes = {}
+        for f in json.loads(payload).get("fixes", []):
+            oc = f.get("on_call") or {}
+            if not f.get("asset") or not f.get("team") or not _covers(oc.get("window"), as_of):
+                continue
+            routes.setdefault(
+                f["asset"],
+                {
+                    "asset": f["asset"],
+                    "team": f["team"],
+                    "on_call": oc,
+                    "adrs": f.get("adrs", []),
+                    "source": f"memory:{prior}",
+                },
+            )
+        return prior, routes
+
+    # --- S5: procedural memory from an analyst's verdict ----------------------
+    def record_analyst_verdict(
+        self,
+        org: str,
+        run_id: str,
+        finding_id: str,
+        review: Literal["accept", "reject"],
+        reason: str,
+        *,
+        reusable: bool | None = None,
+    ) -> dict:
+        """An analyst accepts or rejects the decision a run made on a finding.
+
+        accept: a Verdict confirming the agent's decision.
+        reject: a Verdict with the corrected decision (ESCALATE: one notch the
+          other way). If the reason is reusable (a rule, not a remark about this
+          one host; see is_reusable), it becomes a new Playbook version for the
+          finding's ATT&CK technique(s): the old version stays and is SUPERSEDED,
+          and the new one carries a machine-readable rule {when, decision,
+          instead_of} that later runs apply.
+        Both are timestamped on the synthetic clock, one hour after the run's
+        scan: a run of a LATER scan sees them; a re-run "as of" the same scan
+        time sees memory as it was then."""
+        if review not in ("accept", "reject"):
+            raise MemoryError_("review must be 'accept' or 'reject'")
+        head = self._r(org, READ_RUN_PROPS, {"id": run_id})
+        if not head:
+            raise MemoryError_(f"no Run {run_id!r} in {org}")
+        run = _decode(dict(head[0][0]))
+        rows = self._r(org, READ_RUN_VERDICT, {"run": run_id, "finding": finding_id})
+        if not rows:
+            raise MemoryError_(f"run {run_id} recorded no verdict on {finding_id}")
+        agent_vid, agent_decision, _, _ = rows[0]
+        decision = ESCALATE.get(agent_decision, "fix_now") if review == "reject" else agent_decision
+        ts = int(run.get("as_of") or now_ts()) + ANALYST_DELAY_S
+        vid = self._new_id(org, "verdict")
+        self._w(
+            org,
+            CREATE_ANALYST_VERDICT,
+            {
+                "finding": finding_id,
+                "reviews": agent_vid,
+                "id": vid,
+                "decision": decision,
+                "reason": reason,
+                "ts": ts,
+                "review": review,
+                "overrides": agent_decision if review == "reject" else None,
+                "run": run_id,
+            },
+        )
+        out = {
+            "verdict": vid,
+            "finding": finding_id,
+            "review": review,
+            "agent_decision": agent_decision,
+            "decision": decision,
+            "reusable": False,
+            "playbooks": [],
+        }
+        if review != "reject":
+            return out
+        reusable = is_reusable(reason) if reusable is None else reusable
+        out["reusable"] = reusable
+        if not reusable:
+            return out
+        facts = self._finding_facts(org, run_id, finding_id)
+        for tech in facts.pop("techniques"):
+            rule = {
+                "when": facts,
+                "decision": decision,
+                "instead_of": agent_decision,
+                "because": reason,
+                "verdict": vid,
+            }
+            with self.lock(org, f"playbook:{tech}"):
+                cur = self.current_playbook(org, tech)
+                n = (cur.body.count("\n") + 2) if cur else 1
+                when = ", ".join(f"{k}={v}" for k, v in facts.items())
+                line = (
+                    f"{n}. Analyst rule ({vid}): a {tech} finding with {when} is {decision}, "
+                    f"not {agent_decision}. {reason}"
+                )
+                pb = self.add_playbook_version(
+                    org,
+                    tech,
+                    f"{cur.body}\n{line}" if cur else line,
+                    ts=ts,
+                    policy=[*(cur.policy if cur else []), rule],
+                    source=f"verdict:{vid}",
+                    lock=False,  # held above, across the read of the current version
+                )
+            self._w(org, LINK_VERDICT_LED_TO, {"verdict": vid, "playbook": pb.id})
+            out["playbooks"].append(
+                {"id": pb.id, "technique": tech, "version": pb.version, "supersedes": pb.supersedes}
+            )
+        return out
+
+    def _finding_facts(self, org: str, run_id: str, finding_id: str) -> dict:
+        """What a playbook rule generalises over: the finding's ATT&CK techniques
+        and, as the run saw them, whether it is a way in from the Internet, on a
+        crown-jewel path, and in CISA KEV."""
+        tp = (self.read_output(org, run_id, "Triage") or {}).get("payload", {})
+        pp = (self.read_output(org, run_id, "PathAnalysis") or {}).get("payload", {})
+        techs, inet = set(), False
+        for p in pp.get("paths", []):
+            for s in p["steps"]:
+                if s.get("fix_token") == finding_id:
+                    techs.add(s.get("technique"))
+                    inet = inet or s["key"].split("|")[2] == "internet"
+        row = next(
+            (
+                f
+                for f in tp.get("investigate", []) + tp.get("carried", [])
+                if f["finding"] == finding_id
+            ),
+            {},
+        )
+        techs |= set(row.get("techniques") or [])
+        return {
+            "techniques": sorted(t for t in techs if t),
+            "from_internet": inet,
+            "on_crown_path": any(r["finding"] == finding_id for r in pp.get("ranked", [])),
+            "kev": bool(row.get("kev")),
+        }
+
+    def finding_context(self, org: str, finding_ids: list[str]) -> dict[str, dict]:
+        """Asset, vuln (CVE) and software (CPE) behind each finding."""
+        rows = self._r(org, READ_FINDING_CONTEXT, {"ids": list(dict.fromkeys(finding_ids))})
+        return {
+            f: {"asset": a, "vuln": v, "cve": cve, "software": s, "cpe": cpe}
+            for f, a, v, cve, s, cpe in rows
+        }
 
     def current_playbook(self, org: str, technique: str) -> PlaybookRec | None:
         rows = self._r(org, READ_CURRENT_PLAYBOOK, {"technique": technique})
@@ -847,6 +1320,26 @@ class MemoryRepo:
         self, org: str, finding_ids: list[str], *, now: int | None = None
     ) -> ToolResult:
         return triage_memory(lambda c, p: self._r(org, c, p), org, finding_ids, now=now)
+
+
+ANALYST_DELAY_S = 3600  # an analyst reviews a run an hour after its scan (synthetic clock)
+_RELEASE_LUA = (
+    "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) "
+    "else return 0 end"
+)
+
+
+def _covers(window: str | None, ts: int) -> bool:
+    """Does an on-call window 'YYYY-MM-DD/YYYY-MM-DD' (end exclusive) cover ts?"""
+    if not window or "/" not in window:
+        return False
+    from datetime import UTC, datetime
+
+    start, end = (
+        int(datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=UTC).timestamp())
+        for d in window.split("/")
+    )
+    return start <= ts < end
 
 
 def _decode(props: dict) -> dict:

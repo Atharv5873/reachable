@@ -28,6 +28,12 @@ def _seed(seed: int, scale: float, postgres: bool) -> None:
     settings = get_settings()
     db = connect(settings)
     cfg = GenConfig(scale=scale)
+    # Every org graph is dropped and reloaded below (load_org(fresh=True)), so agent
+    # memory goes back to the synthetic seed. Leftover eval namespaces (memory lift)
+    # and scratch copies go too: a cold run after `make seed` is genuinely cold.
+    for name in db.list_graphs():
+        if name.startswith(("lift_", "scratch__")):
+            drop_graph(db, name)
 
     for org in settings.orgs:
         t0 = time.time()

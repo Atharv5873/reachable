@@ -175,7 +175,13 @@ def test_as_of_decides_whether_an_acceptance_suppresses(env):
     assert {"finding": finding, "acceptance": ra} in [
         {k: e[k] for k in ("finding", "acceptance")} for e in tp["expired_acceptances"]
     ]
-    assert finding in {f["finding"] for f in tp["investigate"]}  # back in scope
+    # Back in scope: investigated, or (S5 episodic memory) carried on a verdict an
+    # earlier run made AFTER the acceptance had expired. Never on the suppressed run's.
+    carried = {c["finding"]: c for c in tp["carried"]}
+    assert finding in {f["finding"] for f in tp["investigate"]} | set(carried)
+    if finding in carried:
+        v = repo.verdicts(GRAPH, [finding])
+        assert next(x for x in v if x.id == carried[finding]["verdict"]).ts > expires
 
 
 # ----------------------------------------------------------------- budget

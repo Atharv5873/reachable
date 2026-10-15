@@ -6,6 +6,15 @@
     replay  --org org_a --scan v1 --run-id <id>
             Re-render runs/<run_id>.md + .json from the graph alone.
     check   Probe every configured LLM deployment with one real tool call.
+    drift   --org org_a [--scan v2] [--no-carry]
+            The Sentinel alone (no LLM): carry memory into the new scan, flag
+            arrivals that match a learned pattern, diff the crown-jewel path sets,
+            raise an Alert only on a brand-new crown path.
+    verdict --run-id <id> --finding <id> --decision accept|reject --reason "..."
+            An analyst's review of a run's decision (procedural memory: a reusable
+            reject writes a new playbook version).
+    reset-memory --org org_a --scan v2
+            Cold start: delete every memory node but the starter playbooks.
 
 Both files are rendered from the run as READ BACK FROM THE GRAPH, not from the
 objects the process holds.
@@ -27,6 +36,7 @@ from .fake import FakeLLM
 from .graph import run_agents
 from .llm import RouterLLM, check_deployments
 from .report import render_run
+from .sentinel import run_sentinel
 
 
 def parse_as_of(text: str | None) -> int | None:
@@ -53,17 +63,39 @@ def main(argv: list[str] | None = None) -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("triage", "replay"):
         s = sub.add_parser(name)
+        s.add_argument("--out", type=Path, default=REPO_ROOT / "runs")
         s.add_argument("--org", required=True, choices=get_settings().orgs)
         s.add_argument("--scan", default="v1", choices=["v1", "v2"])
-        s.add_argument("--out", type=Path, default=REPO_ROOT / "runs")
     t = sub.choices["triage"]
     t.add_argument("--as-of", help="the run's clock: YYYY-MM-DD or epoch s (default: scan time)")
     t.add_argument("--fake", action="store_true", help="deterministic stub model, no network")
     t.add_argument("--max-llm-calls", type=int)
     t.add_argument("--max-tool-calls", type=int)
     t.add_argument("--mcp", default="memory", choices=["memory", "stdio"])
+    t.add_argument(
+        "--no-carry", action="store_true", help="v2: do not carry v1 memory over (cold start)"
+    )
     sub.choices["replay"].add_argument("--run-id", required=True)
     sub.add_parser("check", help="probe every configured LLM deployment with one tool call")
+    d = sub.add_parser("drift", help="the Sentinel: what a new scan changed (no LLM)")
+    d.add_argument("--org", required=True, choices=get_settings().orgs)
+    d.add_argument("--scan", default="v2", choices=["v2"])
+    d.add_argument("--no-carry", action="store_true", help="do not carry v1 memory over")
+    d.add_argument("--out", type=Path, default=REPO_ROOT / "runs")
+    v = sub.add_parser("verdict", help="an analyst accepts or rejects a run's decision")
+    v.add_argument("--run-id", required=True)
+    v.add_argument("--finding", required=True)
+    v.add_argument("--decision", required=True, choices=["accept", "reject"])
+    v.add_argument("--reason", required=True)
+    v.add_argument(
+        "--reusable",
+        choices=["auto", "yes", "no"],
+        default="auto",
+        help="does a reject's reason generalise into a playbook rule? (auto: heuristic)",
+    )
+    r = sub.add_parser("reset-memory", help="cold start: drop memory but starter playbooks")
+    r.add_argument("--org", required=True, choices=get_settings().orgs)
+    r.add_argument("--scan", default="v1", choices=["v1", "v2"])
     args = p.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -83,7 +115,37 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(0 if rows and all(r["ok"] for r in rows) else 1)
 
     repo = MemoryRepo()
+    if args.cmd == "verdict":
+        graph = args.run_id.split(":", 1)[0]  # run ids are <graph>:run:<hex>
+        reusable = {"auto": None, "yes": True, "no": False}[args.reusable]
+        out = repo.record_analyst_verdict(
+            graph, args.run_id, args.finding, args.decision, args.reason, reusable=reusable
+        )
+        print(json.dumps(out, indent=1))
+        return
     graph = get_settings().scan_graph(args.org, args.scan)
+    if args.cmd == "reset-memory":
+        print(json.dumps({"graph": graph, "deleted": repo.reset_memory(graph)}))
+        return
+    if args.cmd == "drift":
+        res = asyncio.run(run_sentinel(args.org, args.scan, repo=repo, carry=not args.no_carry))
+        d = res["drift"]
+        md, js = dump_run(repo, res["graph"], res["run_id"], args.out)
+        print(f"run_id: {res['run_id']}  ({res['status']}, {res['stats']['wall_ms'] / 1000:.1f} s)")
+        a, b = d["from"], d["to"]
+        print(f"from {a['graph']} ({a['date']}) to {b['graph']} ({b['date']})")
+        if d["carried_memory"]:
+            print("memory carried over:", d["carried_memory"])
+        print(f"findings: {d['arrived']} arrived, {d['left']} left")
+        for f, pats in d["flagged_on_arrival"].items():
+            print(f"  FLAGGED on arrival: {f} by {[x['pattern'] for x in pats]}")
+        for k, tag in (("new_paths", "NEW"), ("closed_paths", "CLOSED"), ("cost_changed", "COST")):
+            for x in d[k]:
+                print(f"  {tag:<6} p={x['likelihood']:.3f} {' -> '.join(x['hops'])}")
+        print(f"unchanged paths: {d['unchanged']}; new_crown_path: {d['new_crown_path']}")
+        print(f"ALERT {d['alert']}" if d["alert"] else "no alert")
+        print(f"wrote {md}")
+        return
 
     if args.cmd == "replay":
         md, js = dump_run(repo, graph, args.run_id, args.out)
@@ -102,6 +164,7 @@ def main(argv: list[str] | None = None) -> None:
             max_tool_calls=args.max_tool_calls,
             transport=args.mcp,
             repo=repo,
+            carry_memory=not args.no_carry,
         )
     )
     md, js = dump_run(repo, res["graph"], res["run_id"], args.out)
