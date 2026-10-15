@@ -28,7 +28,14 @@ from dataclasses import dataclass, field
 
 import networkx as nx
 
-from reachable_core.attack_rules import RULES, VulnSignals, exploit_likelihood
+from reachable_core.attack_rules import (
+    HOP_CAP,
+    PRIVESC_MIN_CVSS,
+    READ_ACTIONS,
+    RULES,
+    VulnSignals,
+    exploit_likelihood,
+)
 from reachable_intel.products import PRODUCTS_BY_ID
 
 from .model import Dataset
@@ -172,7 +179,11 @@ def build_attack_graph(ds: Dataset) -> tuple[nx.DiGraph, _Index]:
         for sw_id in idx.runs.get(a.id, []):
             for vid in idx.has_vuln.get(sw_id, []):
                 v = idx.vuln_by_id[vid]
-                if v.av == "LOCAL" and v.cvss >= 6.0 and (vid, a.id) not in idx.mitigated:
+                if (
+                    v.av == "LOCAL"
+                    and v.cvss >= PRIVESC_MIN_CVSS
+                    and (vid, a.id) not in idx.mitigated
+                ):
                     add(
                         f"asset:{a.id}",
                         f"priv:{a.id}",
@@ -242,7 +253,7 @@ def build_attack_graph(ds: Dataset) -> tuple[nx.DiGraph, _Index]:
             )
     for i_id, perms in idx.can.items():
         for t_id, action in perms:
-            if t_id in idx.ds_by_id and action in ("read", "*", "readwrite"):
+            if t_id in idx.ds_by_id and action in READ_ACTIONS:
                 add(
                     f"ident:{i_id}",
                     f"ds:{t_id}",
@@ -341,7 +352,7 @@ def paths_exist_after_removal(ds: Dataset, cutset: set[str], hop_cap: int) -> bo
     return any(simple_paths(g, c, hop_cap) for c in crown)
 
 
-def run_oracle(ds: Dataset, *, hop_cap: int = 8) -> OracleResult:
+def run_oracle(ds: Dataset, *, hop_cap: int = HOP_CAP) -> OracleResult:
     g, idx = build_attack_graph(ds)
     crown = [f"ds:{d.id}" for d in ds.datastores if d.crown_jewel]
 

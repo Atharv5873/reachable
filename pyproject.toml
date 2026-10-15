@@ -9,25 +9,37 @@ dependencies = [
     "reachable-intel",
     "reachable-orggen",
     "reachable-api",
+    "reachable-graph",
+    "reachable-mcp",
 ]
 
 # uv workspace: each folder below is its own installable package, so the API
 # container can install core+api only and never drags the data-gen / intel
 # toolchain (networkx, httpx, pandas) along for the ride.
 [tool.uv.workspace]
-members = ["packages/core", "packages/intel", "packages/orggen", "apps/api"]
+members = [
+    "packages/core",
+    "packages/intel",
+    "packages/orggen",
+    "packages/graph",
+    "apps/api",
+    "apps/mcp",
+]
 
 [tool.uv.sources]
 reachable-core = { workspace = true }
 reachable-intel = { workspace = true }
 reachable-orggen = { workspace = true }
 reachable-api = { workspace = true }
+reachable-graph = { workspace = true }
+reachable-mcp = { workspace = true }
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "ruff>=0.7",
     "httpx>=0.27",
+    "hypothesis>=6.100",
 ]
 
 [tool.ruff]
@@ -44,4 +56,11 @@ markers = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["reachable_core", "reachable_intel", "reachable_orggen", "reachable_api"]
+known-first-party = [
+    "reachable_core",
+    "reachable_intel",
+    "reachable_orggen",
+    "reachable_graph",
+    "reachable_api",
+    "reachable_mcp",
+]

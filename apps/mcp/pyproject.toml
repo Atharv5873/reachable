@@ -1,0 +1,25 @@
+[project]
+name = "reachable-mcp"
+version = "0.1.0"
+description = "MCP server exposing Reachable's typed FalkorDB tools (stdio + streamable HTTP)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "reachable-core",
+    "reachable-graph",
+    "mcp>=1.9",
+    "uvicorn[standard]>=0.32",
+]
+
+[tool.uv.sources]
+reachable-core = { workspace = true }
+reachable-graph = { workspace = true }
+
+[project.scripts]
+reachable-mcp = "reachable_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reachable_mcp"]

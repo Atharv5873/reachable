@@ -82,14 +82,18 @@ def _sample(seed: int) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    # --seed/--scale live on a parent parser shared by every subcommand, so
+    # both `reachable_orggen seed --seed 42` (the Makefile form) and
+    # `reachable_orggen --seed 42 seed` parse.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--seed", type=int, default=get_settings().seed)
+    common.add_argument("--scale", type=float, default=1.0)
     p = argparse.ArgumentParser(prog="reachable_orggen")
-    p.add_argument("--seed", type=int, default=get_settings().seed)
-    p.add_argument("--scale", type=float, default=1.0)
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("seed")
+    s = sub.add_parser("seed", parents=[common])
     s.add_argument("--no-postgres", action="store_true", help="skip the Postgres mirror")
-    sub.add_parser("reset")
-    sub.add_parser("sample")
+    sub.add_parser("reset", parents=[common])
+    sub.add_parser("sample", parents=[common])
     args = p.parse_args(argv)
 
     if args.cmd == "seed":

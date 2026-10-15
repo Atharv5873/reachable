@@ -6,8 +6,9 @@ SCALE ?= 1.0
 PY      = uv run python
 INTEL   = $(PY) -m reachable_intel
 ORGGEN  = $(PY) -m reachable_orggen
+GRAPH   = $(PY) -m reachable_graph
 
-.PHONY: up down intel seed test reset lint fmt sample logs browser
+.PHONY: up down intel seed derive test reset lint fmt sample logs browser
 
 # Create .env from the example on first run (never overwrites an existing one).
 .env:
@@ -33,11 +34,17 @@ intel: .env
 seed: .env
 	$(ORGGEN) seed --seed $(SEED) --scale $(SCALE)
 
+## Derive the ATTACK_STEP layer (+ FLOW layer, :CrownPath) on every org graph.
+## Run after `make seed`. Re-runs once and checks the edge set is unchanged.
+derive: .env
+	$(GRAPH) derive
+
 ## Drop every graph + Postgres schema, then reload intel and regenerate orgs.
 reset: .env
 	$(ORGGEN) reset --seed $(SEED) --scale $(SCALE)
 	$(INTEL) load
 	$(ORGGEN) seed --seed $(SEED) --scale $(SCALE)
+	$(GRAPH) derive
 
 ## Unit tests + integration tests (integration tests skip if FalkorDB is down).
 test:

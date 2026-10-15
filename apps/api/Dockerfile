@@ -13,6 +13,8 @@ COPY packages/core packages/core
 # the workspace; their source is left out of the API image.
 COPY packages/intel/pyproject.toml packages/intel/pyproject.toml
 COPY packages/orggen/pyproject.toml packages/orggen/pyproject.toml
+COPY packages/graph/pyproject.toml packages/graph/pyproject.toml
+COPY apps/mcp/pyproject.toml apps/mcp/pyproject.toml
 COPY apps/api apps/api
 
 # Install only the API package and its deps (core). Intel/orggen are left out.

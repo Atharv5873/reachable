@@ -160,6 +160,17 @@ class VulnSignals:
 # exception: it needs a LOCAL vector (you're already on the box).
 NETWORK_VECTORS = {"NETWORK", "ADJACENT_NETWORK"}
 
+# local_privesc only fires for LOCAL-vector vulns at or above this CVSS score
+# (low-scoring local bugs are rarely a working root exploit).
+PRIVESC_MIN_CVSS = 6.0
+
+# CAN actions on a DataStore that let an identity read it (read_cloud_storage).
+READ_ACTIONS = ("read", "*", "readwrite")
+
+# Longest attack path we enumerate or search, in hops. Shared by the oracle,
+# the Cypher derivation and the tools so "a path" means the same thing everywhere.
+HOP_CAP = 8
+
 
 def exploit_likelihood(v: VulnSignals) -> float:
     """How likely an attacker actually pulls off exploiting this vuln (0..1).

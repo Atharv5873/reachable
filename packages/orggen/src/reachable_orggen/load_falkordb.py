@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from falkordb import FalkorDB
 
+from reachable_core.attack_rules import VulnSignals, exploit_likelihood
 from reachable_core.db import create_range_index, drop_graph, memory_usage_mb, run_batched
 from reachable_core.schema import IDENTITY_KINDS, ORG_INDEXES
+from reachable_intel.products import PRODUCTS_BY_ID
 
 from .model import Dataset
 
@@ -69,24 +71,33 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
     )
 
     # --- Software ---
+    # `ports` is stamped from the product catalog: the exploit_remote_service
+    # rule needs "does this software listen on the CAN_REACH port?" inside one
+    # Cypher pattern, so the listening ports must live on the node. [] means
+    # "unknown ports" and, as in the oracle, matches any port.
     run_batched(
         g,
         """
         UNWIND $rows AS r MERGE (s:Software {id: r.id})
-        SET s.vendor = r.vendor, s.product = r.product, s.version = r.version, s.cpe = r.cpe
+        SET s.vendor = r.vendor, s.product = r.product, s.version = r.version, s.cpe = r.cpe,
+            s.ports = r.ports
         """,
-        [vars(s) for s in ds.software],
+        [{**vars(s), "ports": _ports(s)} for s in ds.software],
     )
 
     # --- Vuln (denormalised CVE copy) ---
+    # `likelihood` is stamped with attack_rules.exploit_likelihood, the ONE place
+    # the formula lives. The S2 Cypher derivation reads it instead of
+    # re-implementing the formula, so the oracle and the graph cannot drift.
     run_batched(
         g,
         """
         UNWIND $rows AS r MERGE (v:Vuln {id: r.id})
         SET v.cve = r.cve, v.cvss = r.cvss, v.av = r.av, v.pr = r.pr, v.ui = r.ui,
-            v.epss = r.epss, v.kev = r.kev, v.ransomware = r.ransomware
+            v.epss = r.epss, v.kev = r.kev, v.ransomware = r.ransomware,
+            v.likelihood = r.likelihood
         """,
-        [vars(v) for v in ds.vulns],
+        [{**vars(v), "likelihood": _likelihood(v)} for v in ds.vulns],
     )
 
     # --- Finding ---
@@ -164,6 +175,17 @@ def load_org(db: FalkorDB, ds: Dataset, *, fresh: bool = True) -> dict:
         )
 
     return _counts(db, g, ds)
+
+
+def _ports(sw) -> list[int]:
+    spec = PRODUCTS_BY_ID.get(f"{sw.vendor}:{sw.product}")
+    return list(spec.ports) if spec else []
+
+
+def _likelihood(v) -> float:
+    return exploit_likelihood(
+        VulnSignals(av=v.av, pr=v.pr, ui=v.ui, epss=v.epss, kev=v.kev, cvss=v.cvss)
+    )
 
 
 # The property that makes two edges of a type distinct (for MERGE + counts).
