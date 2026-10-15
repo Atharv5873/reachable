@@ -28,3 +28,6 @@ runs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Eval caches (S7: embeddings by text hash; rebuilt on demand).
+evals/cache/

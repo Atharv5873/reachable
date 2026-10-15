@@ -15,6 +15,7 @@ COPY packages/agents packages/agents
 COPY apps/mcp apps/mcp
 COPY packages/intel/pyproject.toml packages/intel/pyproject.toml
 COPY packages/orggen/pyproject.toml packages/orggen/pyproject.toml
+COPY packages/eval/pyproject.toml packages/eval/pyproject.toml
 COPY apps/api apps/api
 # GET /evals serves the eval results (S6 UI); S7 refreshes them.
 COPY evals/results evals/results

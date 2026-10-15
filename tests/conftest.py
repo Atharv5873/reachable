@@ -71,3 +71,50 @@ def db():
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"FalkorDB not reachable (run `make up`): {exc}")
     return conn
+
+
+EVAL_GRAPH = "test_eval"
+
+
+@pytest.fixture(scope="session")
+def eval_env(db):
+    """S7: one org at test scale as graph AND Postgres mirror `test_eval` (derived,
+    with its eval views), the in-process MCP server pointed at it, and its truth
+    from the generator's own labels. Skips if Postgres is down."""
+    import psycopg
+
+    import reachable_mcp.server as mcp_server
+    from reachable_eval.scoring import truth_from_labels
+    from reachable_eval.store import ScanRef, ensure_eval_views, load_scan
+    from reachable_graph.derive import derive
+    from reachable_graph.tools import GraphTools
+    from reachable_orggen.labels import labels_payload
+    from reachable_orggen.load_falkordb import load_org
+    from reachable_orggen.load_postgres import drop_org_postgres, load_org_postgres
+
+    s = get_settings()
+    try:
+        psycopg.connect(s.postgres_dsn, connect_timeout=3).close()
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"Postgres not reachable (run `make up`): {exc}")
+    ob = generate_org("org_a", TEST_SEED, GenConfig(scale=TEST_SCALE))
+    labels = labels_payload(ob)
+    ob.dataset.org = EVAL_GRAPH
+    load_org(db, ob.dataset)
+    derive(db.select_graph(EVAL_GRAPH))
+    load_org_postgres(ob.dataset, s)
+    ensure_eval_views(EVAL_GRAPH, s)
+    tools = GraphTools(db, allowed_orgs=[EVAL_GRAPH])
+    ref = ScanRef("org_a", "v1", EVAL_GRAPH)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mcp_server, "_tools", lambda: tools)
+        yield {
+            "ref": ref,
+            "data": load_scan(ref, s),
+            "truth": truth_from_labels(labels),
+            "labels": labels,
+            "db": db,
+        }
+    drop(db, EVAL_GRAPH)
+    for schema in (EVAL_GRAPH, f"eval_{EVAL_GRAPH}", f"rag_{EVAL_GRAPH}"):
+        drop_org_postgres(schema, s)

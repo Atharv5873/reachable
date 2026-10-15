@@ -8,7 +8,7 @@ INTEL   = $(PY) -m reachable_intel
 ORGGEN  = $(PY) -m reachable_orggen
 GRAPH   = $(PY) -m reachable_graph
 
-.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage drift verdict reset-memory memory-lift api web web-install web-test e2e
+.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a triage drift verdict reset-memory memory-lift api web web-install web-test e2e eval ablation eval-score
 
 # Create .env from the example on first run (never overwrites an existing one).
 .env:
@@ -109,6 +109,25 @@ reset-memory: .env
 ## Writes evals/results/memory_lift.md (+ .json). FAKE=1 runs it with the stub model.
 memory-lift: .env
 	$(PY) evals/memory_lift.py --org $(ORG) $(if $(FAKE),--fake)
+
+## S7 comparison eval: severity_sort, smart_score, vector_rag, sql_agent and reachable
+## rank the same findings on every scan (v1 + held-out v2), scored against the oracle.
+## Prints a cost estimate first and refuses to start above MAX_USD (default 5). Raw
+## outputs land in evals/results/raw/ (a rerun skips what exists; FORCE=1 redoes it);
+## tables in evals/results/comparison.md (+ .json). DRY=1: estimate only. SEEDS=1 for one seed.
+SEEDS ?= 1 2 3
+EVAL_FLAGS = --seeds $(SEEDS) $(if $(MAX_USD),--max-usd $(MAX_USD)) $(if $(DRY),--dry-run) $(if $(FORCE),--force)
+eval: .env
+	$(PY) -m reachable_eval run $(EVAL_FLAGS)
+
+## The ablation: the reachable agent on ORG/SCAN with its graph tools on, then off
+## (every call answers "unavailable"). -> evals/results/ablation.md (+ .json).
+ablation: .env
+	$(PY) -m reachable_eval ablation --org $(ORG) --scan $(SCAN) $(EVAL_FLAGS)
+
+## Recompute every eval table from evals/results/raw/ + the labels (no model, no keys).
+eval-score: .env
+	$(PY) -m reachable_eval score
 
 ## The API (FastAPI + SSE) on :8001 outside docker (API_KEY or MCP_API_KEY in .env).
 api: .env

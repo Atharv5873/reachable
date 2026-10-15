@@ -15,6 +15,7 @@ COPY packages/graph packages/graph
 COPY packages/intel/pyproject.toml packages/intel/pyproject.toml
 COPY packages/orggen/pyproject.toml packages/orggen/pyproject.toml
 COPY packages/agents/pyproject.toml packages/agents/pyproject.toml
+COPY packages/eval/pyproject.toml packages/eval/pyproject.toml
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/mcp apps/mcp
 
