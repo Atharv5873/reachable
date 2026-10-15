@@ -48,7 +48,9 @@ INJECTION_NOTE = (
 
 # Keys the LLM does not need: the trace keeps them, the prompt drops them.
 _DROP_FOR_LLM = {"queries", "evidence", "labels", "cost"}
-MAX_RESULT_CHARS = 12_000  # ~3k tokens per tool result
+# ~1.5k tokens per tool result. The whole conversation is re-sent every turn, and
+# the free fallback (Groq) allows 8k tokens per MINUTE: results must stay small.
+MAX_RESULT_CHARS = 6_000
 
 
 @dataclass
@@ -251,6 +253,7 @@ class RunCtx:
                 "model": reply.model,
                 "fallback": reply.fallback,
                 "ms": reply.ms,
+                "waited_s": reply.waited_s or None,
                 "tokens_in": reply.tokens_in,
                 "tokens_out": reply.tokens_out,
                 "messages": n_messages,
@@ -295,28 +298,30 @@ def for_llm(result: dict, max_chars: int = MAX_RESULT_CHARS) -> str:
         "data": result.get("data"),
         "truncated": result.get("truncated", False),
     }
-    text = ""
-    for cap in (25, 12, 6, 3):
-        text = json.dumps(_trim(view, cap), separators=(",", ":"), default=str)
+    # Shrink list length and string length together; always valid JSON.
+    for cap, strcap in ((25, 600), (12, 300), (6, 200), (3, 120), (2, 120), (1, 120)):
+        text = json.dumps(_trim(view, cap, strcap), separators=(",", ":"), default=str)
         if len(text) <= max_chars:
             return text
-    return text[:max_chars] + "...(cut)"
+    return json.dumps(
+        {"summary": view["summary"], "data": "(omitted: too large; ask a narrower question)"}
+    )
 
 
-def _trim(x: Any, cap: int, depth: int = 0) -> Any:
+def _trim(x: Any, cap: int, strcap: int = 600, depth: int = 0) -> Any:
     """Cut long lists near the top (data.paths, data.findings, ...), but keep
     lists deeper down (one path's nodes and steps) whole up to 12: half a path
     is worse than fewer paths."""
     if isinstance(x, dict):
-        return {k: _trim(v, cap, depth + 1) for k, v in x.items() if k not in _DROP_FOR_LLM}
+        return {k: _trim(v, cap, strcap, depth + 1) for k, v in x.items() if k not in _DROP_FOR_LLM}
     if isinstance(x, list):
         n = cap if depth <= 3 else max(cap, 12)
-        out = [_trim(v, cap, depth + 1) for v in x[:n]]
+        out = [_trim(v, cap, strcap, depth + 1) for v in x[:n]]
         if len(x) > n:
             out.append(f"... {len(x) - n} more")
         return out
-    if isinstance(x, str) and len(x) > 600:
-        return x[:600] + "..."
+    if isinstance(x, str) and len(x) > strcap:
+        return x[:strcap] + "..."
     if isinstance(x, float):
         return round(x, 4)
     return x

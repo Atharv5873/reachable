@@ -242,7 +242,7 @@ def _router(primary_mock: str, fallback_mock: str) -> RouterLLM:
         Deployment("fallback", "groq/llama-3.3-70b-versatile", SecretStr("sk-fallback-not-real")),
     ]
     return RouterLLM(
-        Settings(_env_file=None),
+        Settings(_env_file=None, llm_patience_retries=0),
         deps=deps,
         extra={
             "primary": {"mock_response": primary_mock},

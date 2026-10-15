@@ -141,7 +141,15 @@ async def run_agents(
                 },
                 config={"configurable": {"thread_id": run_id}},
             )
-        status = "budget_exhausted" if budget.exhausted else "complete"
+        # complete: every agent's model answered. degraded: some LLM call failed on
+        # every deployment, so an agent finalised from its tool results alone.
+        status = (
+            "budget_exhausted"
+            if budget.exhausted
+            else "degraded"
+            if ctx.llm_failures
+            else "complete"
+        )
     finally:
         stats = {**(ctx.stats() if ctx else budget.snapshot())}
         stats["wall_ms"] = round((time.perf_counter() - t0) * 1000)

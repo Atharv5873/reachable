@@ -23,9 +23,11 @@ build the Router, and any error text is scrubbed of them before it is logged.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -66,6 +68,7 @@ class LLMReply:
     # THIS to the history (not a rebuilt one): providers attach fields to tool
     # calls (Gemini's thought signatures) that must come back unchanged.
     raw: dict | None = None
+    waited_s: float = 0.0  # time spent waiting for a rate-limit slot before the call
 
 
 class ChatModel(Protocol):
@@ -97,6 +100,47 @@ def deployments(s: Settings) -> list[Deployment]:
     return out
 
 
+def provider_params(model: str) -> dict:
+    """Per-model litellm params. Gemini 2.5 "thinks" by default and its thinking
+    tokens count against max_tokens: a long JSON answer got cut off at 2048. We
+    turn it off there (faster, cheaper, steadier at temperature 0). Gemini 3
+    always thinks (we keep it "low", ~700 tokens), and needs its thought
+    signatures passed back, which the loop does by appending the provider's raw
+    message."""
+    if model.startswith("gemini/gemini-2.5"):
+        return {"reasoning_effort": "disable"}
+    if model.startswith("gemini/gemini-3"):
+        return {"reasoning_effort": "low"}
+    return {}
+
+
+class Pacer:
+    """At most `rpm` calls in any 60 s window. A call that would exceed it waits
+    for the oldest call to age out, if that is <= max_wait seconds; otherwise it
+    goes ahead and the Router's fallback absorbs the 429."""
+
+    def __init__(self, rpm: int, max_wait: float) -> None:
+        self.rpm, self.max_wait = rpm, max_wait
+        self.times: deque[float] = deque()
+
+    async def slot(self) -> float:
+        """Wait for a slot; return the seconds waited."""
+        if self.rpm <= 0:
+            return 0.0
+        waited = 0.0
+        now = time.monotonic()
+        while self.times and now - self.times[0] >= 60:
+            self.times.popleft()
+        if len(self.times) >= self.rpm:
+            delay = 60 - (now - self.times[0]) + 0.2
+            if delay <= self.max_wait:
+                log.info("llm pacing: waiting %.1f s for a slot (%d/min)", delay, self.rpm)
+                await asyncio.sleep(delay)
+                waited = delay
+        self.times.append(time.monotonic())
+        return waited
+
+
 def build_router(
     deps: list[Deployment], s: Settings, *, extra: dict[str, dict] | None = None
 ) -> Router:
@@ -113,6 +157,7 @@ def build_router(
                     "model": d.model,
                     "api_key": d.api_key.get_secret_value(),
                     "timeout": s.llm_timeout_s,
+                    **provider_params(d.model),
                     **extra.get(d.name, {}),
                 },
                 "model_info": {"id": d.name},  # the id the response reports back
@@ -124,14 +169,16 @@ def build_router(
         retry_policy=RetryPolicy(
             RateLimitErrorRetries=0,  # 429: fall back now, don't spend quota retrying
             TimeoutErrorRetries=0,
+            # 503 "model overloaded" is usually gone a second later: retry first.
             InternalServerErrorRetries=retries,
-            ServiceUnavailableErrorRetries=retries,
+            ServiceUnavailableErrorRetries=retries + 1,
             BadRequestErrorRetries=0,
             AuthenticationErrorRetries=0,
+            NotFoundErrorRetries=0,  # a retired model id: fall back, `check` reports it
         ),
         timeout=s.llm_timeout_s,
-        allowed_fails=1,  # one failure ...
-        cooldown_time=60,  # ... and the deployment sits out a minute
+        allowed_fails=2,  # two failures in a minute ...
+        cooldown_time=30,  # ... and the deployment sits out 30 s
     )
 
 
@@ -156,6 +203,8 @@ class RouterLLM:
         self.entry = self.deps[0].name
         self.models = {d.name: d.model for d in self.deps}
         self.max_tokens = s.llm_max_tokens
+        self.pacer = Pacer(s.llm_rpm, s.llm_max_wait_s)
+        self.patience_s, self.patience_left = 35.0, s.llm_patience_retries
         self._secrets = [d.api_key.get_secret_value() for d in self.deps]
 
     def describe(self) -> list[str]:
@@ -170,6 +219,7 @@ class RouterLLM:
     async def chat(
         self, messages: list[dict], tools: list[dict], *, agent: str, tool_choice: str = "auto"
     ) -> LLMReply:
+        waited = await self.pacer.slot()
         t = time.perf_counter()
         try:
             resp = await self.router.acompletion(
@@ -182,6 +232,17 @@ class RouterLLM:
             )
         except Exception as exc:  # noqa: BLE001 - every provider error ends up here
             msg = self._scrub(f"{type(exc).__name__}: {exc}")[:400]
+            if self.patience_left > 0 and _short_lived_limit(msg):
+                # A per-minute limit or a 30 s cooldown passes; a daily quota does
+                # not. Wait once and retry rather than finalise without the model.
+                self.patience_left -= 1
+                log.warning(
+                    "llm agent=%s rate-limited on every deployment; waiting %.0f s, retrying once",
+                    agent,
+                    self.patience_s,
+                )
+                await asyncio.sleep(self.patience_s)
+                return await self.chat(messages, tools, agent=agent, tool_choice=tool_choice)
             log.warning("llm agent=%s FAILED on every deployment: %s", agent, msg)
             raise LLMUnavailable(msg) from exc
         ms = round((time.perf_counter() - t) * 1000, 1)
@@ -198,6 +259,7 @@ class RouterLLM:
             ms=ms,
             fallback=served != self.entry,
             raw=msg.model_dump(exclude_none=True),
+            waited_s=round(waited, 1),
         )
         log.info(
             "llm agent=%s served_by=%s model=%s ms=%.0f tokens=%d+%d tool_calls=%s",
@@ -210,6 +272,54 @@ class RouterLLM:
             [c.name for c in reply.tool_calls],
         )
         return reply
+
+
+async def check_deployments(s: Settings | None = None) -> list[dict]:
+    """Probe every configured deployment, directly (no fallback), with one real
+    tool-calling request. Catches a retired model id or a dead key before a demo."""
+    s = s or get_settings()
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "ping",
+            "description": "Answer a ping.",
+            "parameters": {"type": "object", "properties": {"n": {"type": "integer"}}},
+        },
+    }
+    out = []
+    for d in deployments(s):
+        t = time.perf_counter()
+        try:
+            r = await litellm.acompletion(
+                model=d.model,
+                api_key=d.api_key.get_secret_value(),
+                messages=[{"role": "user", "content": "Call ping with n=1."}],
+                tools=[tool],
+                timeout=s.llm_timeout_s,
+                max_tokens=256,
+            )
+            calls = r.choices[0].message.tool_calls or []
+            ok, note = bool(calls), (calls[0].function.name if calls else "no tool call")
+        except Exception as exc:  # noqa: BLE001
+            ok, note = False, f"{type(exc).__name__}: {exc}"
+            for sec in (x.api_key.get_secret_value() for x in deployments(s)):
+                note = note.replace(sec, "***")
+        out.append(
+            {
+                "deployment": d.name,
+                "model": d.model,
+                "ok": ok,
+                "ms": round((time.perf_counter() - t) * 1000),
+                "note": note.splitlines()[0][:200],
+            }
+        )
+    return out
+
+
+def _short_lived_limit(msg: str) -> bool:
+    """A rate limit that will pass within a minute (not Gemini's PerDay quota)."""
+    rate_limited = "RateLimit" in msg or "cooldown" in msg or "429" in msg
+    return rate_limited and "PerDay" not in msg
 
 
 def _tool_call(tc) -> ToolCall:

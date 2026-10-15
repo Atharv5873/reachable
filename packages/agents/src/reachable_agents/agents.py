@@ -251,7 +251,7 @@ PATHFINDER = AgentSpec(
 Find the real Internet -> crown-jewel attack paths and rank the triaged findings by them.
 - For EACH crown jewel in CONTEXT call attack_paths with target_id set to it (in parallel), \
 k=10.
-- why_step on the 1-3 hops that matter most (the entry exploit, any credential or role \
+- why_step on AT MOST 3 hops, the ones that matter most (the entry exploit, any credential or role \
 hop) so each claim is grounded; blast_radius on the entry asset of the most likely path \
 if it helps. exposure_surface / choke_points only if they add something.
 - Rank findings (fix_tokens that are Finding ids) by: on a path to a crown jewel, path \
@@ -412,11 +412,10 @@ Turn the attack paths into a fix plan people can act on.
 1. min_cut twice, in parallel: mode="fewest" and mode="cheapest". Compare: fewer fixes vs \
 less total effort.
 2. Choose ONE of the two sets.
-3. For each fix in the chosen set, in parallel: owners (the fix's asset id) to route it to \
-the owning team and on-call person; decision_trail on internet-facing entry assets for the \
-ADR that exposed them and who approved it.
-4. Verify the chosen set ONCE with simulate_fix (fix_tokens = exactly the chosen set). It \
-copies the graph: one call, not one per fix.
+3. Then, ALL IN ONE TURN (parallel calls): simulate_fix ONCE on exactly the chosen set (it \
+copies the graph: one call, never one per fix); owners for each fix's asset id (the owning \
+team and on-call person); decision_trail on the internet-facing entry assets (the ADR that \
+exposed them and who approved it).
 Write a ticket per fix: a title and a 2-4 sentence body naming the asset, the attack step it \
 removes, the owner, and the ADR if there is one.""",
     schema="""{"chosen": "fewest" | "cheapest", "fix_tokens": ["<fix token>"],
@@ -590,16 +589,16 @@ def finalise_fixes(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
 # ==================================================================== Reporter
 REPORTER = AgentSpec(
     name="reporter",
-    tools=("why_step", "vuln_intel"),
+    tools=(),  # the evidence is already in its CONTEXT: one call, no tool turns
     required=(),
-    max_turns=3,
+    max_turns=1,
     role="""\
 Write the one-page executive summary of this run for a non-technical reader. EVERY claim \
 must carry evidence: the node ids or ATTACK_STEP keys from CONTEXT that prove it (claims \
 whose evidence is missing or not in CONTEXT are dropped). Cover: how many findings the scan \
 had vs how many actually matter; the most likely path to the crown jewel; the fix plan (how \
 many fixes, effort, verified or not, who owns them); anything a live risk acceptance \
-suppressed or an expired one no longer covers. Plain words, no jargon. You rarely need tools.""",
+suppressed or an expired one no longer covers. Plain words, no jargon.""",
     schema="""{"headline": "<one sentence>",
  "risk": "critical" | "high" | "medium" | "low",
  "claims": [{"text": "<one sentence>", "evidence": ["<node id or step key>"]}]}""",

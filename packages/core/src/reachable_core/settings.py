@@ -50,14 +50,24 @@ class Settings(BaseSettings):
     # or a log line; only llm.py unwraps them, to hand them to LiteLLM. ---
     gemini_api_key: SecretStr | None = None  # primary (free tier)
     groq_api_key: SecretStr | None = None  # fallback 1 (free tier)
-    llm_primary_model: str = "gemini/gemini-2.5-flash"
-    llm_fallback_model: str = "groq/llama-3.3-70b-versatile"
+    # Free tier is 20 requests/DAY per model (one run is ~12 calls), so the
+    # model is an env knob: switch when one model's daily quota is spent.
+    llm_primary_model: str = "gemini/gemini-3.5-flash"
+    # (Groq retired llama-3.3-70b-versatile; `python -m reachable_agents check`
+    # probes every configured model with a real tool call.)
+    llm_fallback_model: str = "groq/qwen/qwen3.8-27b"
     # Fallback 2: a small paid model, OFF unless both are set (judging week).
     llm_reserve_model: str | None = None
     llm_reserve_api_key: SecretStr | None = None
     llm_timeout_s: float = 60.0  # per call
+    # Client-side pacing: at most this many calls per minute (Gemini's free tier
+    # answered 5 then 429'd). A call waits up to llm_max_wait_s for a slot rather
+    # than burn the fallback; 0 disables pacing.
+    llm_rpm: int = 5
+    llm_max_wait_s: float = 30.0
+    llm_patience_retries: int = 3  # per run: wait 35 s and retry on a short-lived 429
     llm_retries: int = 1  # Router retries per deployment before falling back
-    llm_max_tokens: int = 2048  # per completion
+    llm_max_tokens: int = 4096  # per completion (thinking tokens count too)
 
     # --- Agent run budgets (free-tier protection) ---
     agent_max_llm_calls: int = 30

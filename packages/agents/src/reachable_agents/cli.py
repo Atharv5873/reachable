@@ -5,6 +5,7 @@
             org graph under a new run id, then dump runs/<run_id>.md + .json.
     replay  --org org_a --scan v1 --run-id <id>
             Re-render runs/<run_id>.md + .json from the graph alone.
+    check   Probe every configured LLM deployment with one real tool call.
 
 Both files are rendered from the run as READ BACK FROM THE GRAPH, not from the
 objects the process holds.
@@ -24,7 +25,7 @@ from reachable_graph.memory import MemoryRepo
 
 from .fake import FakeLLM
 from .graph import run_agents
-from .llm import RouterLLM
+from .llm import RouterLLM, check_deployments
 from .report import render_run
 
 
@@ -62,10 +63,25 @@ def main(argv: list[str] | None = None) -> None:
     t.add_argument("--max-tool-calls", type=int)
     t.add_argument("--mcp", default="memory", choices=["memory", "stdio"])
     sub.choices["replay"].add_argument("--run-id", required=True)
+    sub.add_parser("check", help="probe every configured LLM deployment with one tool call")
     args = p.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("reachable").setLevel(logging.INFO)
+    # LiteLLM logs every failed attempt with a multi-KB debug dump; our own
+    # reachable.llm warning says the same in one line.
+    for name in ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy"):
+        logging.getLogger(name).setLevel(logging.CRITICAL)
+
+    if args.cmd == "check":
+        rows = asyncio.run(check_deployments())
+        for r in rows or [
+            {"deployment": "-", "model": "no keys set", "ok": False, "ms": 0, "note": ""}
+        ]:
+            mark = "OK  " if r["ok"] else "FAIL"
+            print(f"{mark} {r['deployment']:<9} {r['model']:<36} {r['ms']:>6} ms  {r['note']}")
+        raise SystemExit(0 if rows and all(r["ok"] for r in rows) else 1)
+
     repo = MemoryRepo()
     graph = get_settings().scan_graph(args.org, args.scan)
 
