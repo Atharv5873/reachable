@@ -3,10 +3,21 @@
     POST /runs                      {org, scan} -> starts a run in the background, returns run_id
     GET  /runs/{run_id}/stream      Server-Sent Events: the run's steps as they happen
     GET  /runs/{run_id}             the run as written to the graph (outputs + trace)
-    POST /runs/{run_id}/verdict     an analyst accepts / rejects a decision (procedural memory)
+    POST /runs/{run_id}/verdict     an analyst accepts / rejects a decision (procedural memory),
+                                    optionally accepting the finding as a risk for N days
+    GET  /runs/{run_id}/subgraph    the run's attack paths + both min cuts, for Cytoscape
+    GET  /runs/{run_id}/fixplan     one fix set (fewest | cheapest): owners, ADRs, tickets
     GET  /orgs                      orgs, their scans, recent runs and alerts
     GET  /orgs/{org}/drift          exposure_drift between two scans
+    GET  /orgs/{org}/findings       the findings board: scanner order vs reachability order
+    GET  /orgs/{org}/why_step       the evidence behind one attack step
+    POST /orgs/{org}/simulate       simulate_fix: which crown jewels a fix set disconnects
+    POST /orgs/{org}/ask            an English question -> one fixed company-brain intent
+    GET  /evals                     evals/results/*.json
     GET  /health                    both datastores (open, no key)
+
+At most API_MAX_RUNS (2) agent runs execute at once; past that POST /runs
+answers 429 with Retry-After, before any Run node is written.
 
 Two rules shape it:
 
@@ -31,6 +42,7 @@ import os
 import threading
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Literal
 
 import psycopg
@@ -41,15 +53,21 @@ from pydantic import BaseModel, Field
 
 from reachable_core.db import connect, ping
 from reachable_core.schema import THREATINTEL_GRAPH
-from reachable_core.settings import get_settings
-from reachable_graph.memory import MemoryError_, MemoryRepo
+from reachable_core.settings import REPO_ROOT, get_settings
+from reachable_graph.memory import ANALYST_DELAY_S, MemoryError_, MemoryRepo
 from reachable_graph.tools import GraphTools, ToolError
+
+from . import ask as ask_mod
+from . import views
 
 log = logging.getLogger("reachable.api")
 
 FINAL = {"complete", "degraded", "budget_exhausted", "failed"}
 POLL_S = 0.25  # how often the stream looks for new steps
 KEEPALIVE_S = 10.0  # an SSE comment when nothing happened for this long
+MAX_RUNS = 2  # agent runs at once (API_MAX_RUNS); the next POST /runs gets a 429
+RETRY_AFTER_S = 30  # a real run takes ~30-70 s, a fake one a few
+EVALS_DIR = Path(os.environ.get("EVALS_DIR") or REPO_ROOT / "evals" / "results")
 
 
 # ------------------------------------------------------------------ requests
@@ -66,6 +84,23 @@ class VerdictRequest(BaseModel):
     decision: Literal["accept", "reject"]
     reason: str = Field(min_length=3, max_length=2000)
     reusable: bool | None = Field(None, description="None: decide with the heuristic")
+    accept_risk_days: int | None = Field(
+        None, ge=1, le=365, description="also accept the finding as a risk for this long"
+    )
+    approved_by: str | None = Field(None, description="Person id (default: the security lead)")
+
+
+class SimulateRequest(BaseModel):
+    scan: Literal["v1", "v2"] = "v1"
+    fix_tokens: list[str] = Field(min_length=1, max_length=50)
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+    scan: Literal["v1", "v2"] = "v1"
+    mode: Literal["auto", "llm", "rules"] = Field(
+        "auto", description="rules: no model (replay); llm: model only; auto: model, else rules"
+    )
 
 
 # ------------------------------------------------------------------ events
@@ -230,16 +265,21 @@ def create_app(
     tools: GraphTools | None = None,
     llm_factory=None,
     scan_graph=None,
+    ask_llm=None,
+    max_runs: int | None = None,
 ) -> FastAPI:
-    """The app. Tests pass their own repo/tools (a throwaway graph's allowlist)
-    and llm_factory; production uses the shared settings."""
+    """The app. Tests pass their own repo/tools (a throwaway graph's allowlist),
+    llm_factory and ask_llm (() -> ChatModel | None); production uses the
+    shared settings."""
     settings = get_settings()
     scan_graph = scan_graph or settings.scan_graph  # (org, scan) -> graph name
     key = api_key or os.environ.get("API_KEY") or os.environ.get("MCP_API_KEY") or ""
     if len(key) < 16:
         raise RuntimeError("API_KEY (or MCP_API_KEY) must be set, >= 16 chars")
-    app = FastAPI(title="Reachable", version="0.5.0")
-    state = {"repo": repo, "tools": tools, "threads": {}}
+    app = FastAPI(title="Reachable", version="0.6.0")
+    state = {"repo": repo, "tools": tools, "threads": {}, "ask_llm": None}
+    n_runs = max_runs or int(os.environ.get("API_MAX_RUNS") or MAX_RUNS)
+    slots = threading.BoundedSemaphore(n_runs)
 
     def get_repo() -> MemoryRepo:
         if state["repo"] is None:
@@ -264,6 +304,27 @@ def create_app(
         from reachable_agents.llm import RouterLLM
 
         return FakeLLM() if fake else RouterLLM()
+
+    def get_ask_llm():
+        """The model /ask uses, made once; None when no key is configured."""
+        if ask_llm is not None:
+            return ask_llm()
+        if state["ask_llm"] is None:
+            from reachable_agents.llm import LLMUnavailable, RouterLLM
+
+            try:
+                state["ask_llm"] = RouterLLM()
+            except LLMUnavailable:
+                state["ask_llm"] = False
+        return state["ask_llm"] or None
+
+    def org_graph(org: str, scan: str = "v1") -> str:
+        if org not in settings.orgs:
+            raise HTTPException(404, f"unknown org {org!r}")
+        graph = scan_graph(org, scan)
+        if graph not in get_repo().allowed:
+            raise HTTPException(404, f"graph {graph} is not available")
+        return graph
 
     # -------------------------------------------------------------- health
     @app.get("/")
@@ -313,11 +374,22 @@ def create_app(
         info = repo.scan_info(graph)
         if info is None:
             raise HTTPException(409, f"{graph} is not loaded (make seed)")
-        as_of = req.as_of or info["ts"]
-        run_id = repo.start_agent_run(
-            graph, kind="agent_triage", scan=req.scan, as_of=as_of, budget={}
-        )
-        llm = make_llm(req.fake)
+        # The cap is taken before anything is written: a refused run leaves no trace.
+        if not slots.acquire(blocking=False):
+            raise HTTPException(
+                429,
+                f"{n_runs} agent runs are already in progress; retry in ~{RETRY_AFTER_S} s",
+                headers={"Retry-After": str(RETRY_AFTER_S)},
+            )
+        try:
+            as_of = req.as_of or info["ts"]
+            run_id = repo.start_agent_run(
+                graph, kind="agent_triage", scan=req.scan, as_of=as_of, budget={}
+            )
+            llm = make_llm(req.fake)
+        except Exception:
+            slots.release()
+            raise
 
         def work() -> None:
             try:
@@ -338,10 +410,16 @@ def create_app(
                 head = repo.run_head(graph, run_id) or {}
                 if head.get("status") not in FINAL:
                     repo.set_run_status(graph, run_id, "failed")
+            finally:
+                slots.release()
 
         t = threading.Thread(target=work, name=f"run-{run_id}", daemon=True)
         state["threads"][run_id] = t
-        t.start()
+        try:
+            t.start()
+        except Exception:
+            slots.release()
+            raise
         return {
             "run_id": run_id,
             "graph": graph,
@@ -392,13 +470,136 @@ def create_app(
 
     @app.post("/runs/{run_id}/verdict")
     def verdict(run_id: str, req: VerdictRequest) -> dict:
+        """An analyst's review. With accept_risk_days the finding is also accepted
+        as a risk (a RiskAcceptance on the synthetic clock, like the verdict): the
+        next scan's run carries it over and suppresses the finding."""
         graph = graph_of(run_id)
+        repo = get_repo()
         try:
-            return get_repo().record_analyst_verdict(
+            out = repo.record_analyst_verdict(
                 graph, run_id, req.finding, req.decision, req.reason, reusable=req.reusable
             )
+            if req.accept_risk_days:
+                created = int((repo.run_head(graph, run_id) or {}).get("as_of") or 0)
+                created += ANALYST_DELAY_S
+                acc = repo.record_risk_acceptance(
+                    graph,
+                    [req.finding],
+                    req.reason,
+                    req.approved_by or security_lead(graph),
+                    created + req.accept_risk_days * 86400,
+                    created=created,
+                )
+                out["risk_acceptance"] = {
+                    "id": acc.id,
+                    "findings": acc.findings,
+                    "approved_by": acc.approved_by,
+                    "created": acc.created,
+                    "expires": acc.expires,
+                }
+            return out
         except MemoryError_ as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    def security_lead(graph: str) -> str:
+        rows = get_tools()._q(graph, "MATCH (p:Person) RETURN p.id, p.role ORDER BY p.id", {}, [])
+        if not rows:
+            raise MemoryError_(f"no Person in {graph} to approve a risk acceptance")
+        return next((pid for pid, role in rows if "Security" in (role or "")), rows[0][0])
+
+    # ------------------------------------------------------------ UI views
+    def run_graph(run_id: str) -> str:
+        graph = graph_of(run_id)
+        if get_repo().run_head(graph, run_id) is None:
+            raise HTTPException(404, f"no run {run_id!r}")
+        return graph
+
+    @app.get("/runs/{run_id}/subgraph")
+    def run_subgraph(
+        run_id: str,
+        finding: str | None = None,
+        target: str | None = None,
+        context: bool = False,
+        max_nodes: int = views.MAX_NODES,
+    ) -> dict:
+        """The run's attack paths and both min cuts as Cytoscape elements, capped
+        (max_nodes is clamped to 5..200), most likely paths first."""
+        graph = run_graph(run_id)
+        try:
+            return views.subgraph(
+                get_tools(),
+                get_repo(),
+                graph,
+                run_id,
+                finding=finding,
+                target=target,
+                context=context,
+                max_nodes=max(5, min(max_nodes, 200)),
+            )
+        except ToolError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/runs/{run_id}/fixplan")
+    def run_fixplan(run_id: str, mode: Literal["fewest", "cheapest"] = "cheapest") -> dict:
+        graph = run_graph(run_id)
+        try:
+            return views.fix_plan(get_tools(), get_repo(), graph, run_id, mode)
+        except ToolError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/orgs/{org}/findings")
+    def findings(org: str, scan: Literal["v1", "v2"] = "v1", run_id: str | None = None) -> dict:
+        graph = org_graph(org, scan)
+        if run_id and graph_of(run_id) != graph:
+            raise HTTPException(422, f"run {run_id} is not a run of {graph}")
+        return views.findings_board(get_tools(), get_repo(), graph, run_id)
+
+    @app.get("/orgs/{org}/why_step")
+    def why_step(org: str, key: str, scan: Literal["v1", "v2"] = "v1") -> dict:
+        graph = org_graph(org, scan)
+        try:
+            return get_tools().why_step(graph, key).model_dump()
+        except (ToolError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/orgs/{org}/simulate")
+    def simulate(org: str, req: SimulateRequest) -> dict:
+        """simulate_fix on a scratch copy: crown jewels reachable before / after."""
+        graph = org_graph(org, req.scan)
+        try:
+            d = get_tools().simulate_fix(graph, req.fix_tokens).model_dump()
+        except (ToolError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        d["data"]["remaining_paths"] = d["data"].get("remaining_paths", [])[:5]
+        return d
+
+    @app.post("/orgs/{org}/ask")
+    async def ask(org: str, req: AskRequest) -> dict:
+        graph = org_graph(org, req.scan)
+        info = await asyncio.to_thread(get_repo().scan_info, graph)
+        try:
+            return await ask_mod.answer(
+                get_tools(),
+                graph,
+                req.question,
+                mode=req.mode,
+                llm=None if req.mode == "rules" else get_ask_llm(),
+                as_of=(info or {}).get("ts"),
+            )
+        except (ToolError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/evals")
+    def evals() -> dict:
+        """Every evals/results/*.json by name (S7 fills in the numbers)."""
+        out = {}
+        if EVALS_DIR.is_dir():
+            for f in sorted(EVALS_DIR.glob("*.json")):
+                try:
+                    out[f.stem] = json.loads(f.read_text(encoding="utf-8"))
+                except ValueError as exc:
+                    out[f.stem] = {"error": f"unreadable: {exc}"}
+        return {"results": out}
 
     # ---------------------------------------------------------------- orgs
     @app.get("/orgs")

@@ -60,10 +60,11 @@ class Settings(BaseSettings):
     llm_reserve_model: str | None = None
     llm_reserve_api_key: SecretStr | None = None
     llm_timeout_s: float = 60.0  # per call
-    # Client-side pacing: at most this many calls per minute (Gemini's free tier
-    # answered 5 then 429'd). A call waits up to llm_max_wait_s for a slot rather
-    # than burn the fallback; 0 disables pacing.
-    llm_rpm: int = 5
+    # Client-side pacing: at most this many calls per minute. A call waits up to
+    # llm_max_wait_s for a slot rather than burn the fallback; 0 disables pacing.
+    # Off by default since billing is on (S6: 20 concurrent calls, no 429); set
+    # LLM_RPM=5 to protect a free-tier key (it answered 5 then 429'd).
+    llm_rpm: int = 0
     llm_max_wait_s: float = 30.0
     llm_patience_retries: int = 3  # per run: wait 35 s and retry on a short-lived 429
     llm_retries: int = 1  # Router retries per deployment before falling back
