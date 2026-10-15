@@ -1,8 +1,8 @@
 {
   "org": "org_a",
-  "assets": 49,
-  "findings": 164,
-  "edges": 1063,
+  "assets": 53,
+  "findings": 168,
+  "edges": 1092,
   "crown_jewels": [
     "ds:org_a:ds:00001"
   ],
@@ -12,6 +12,9 @@
     "hard_ssh_chain",
     "hard_privesc_root_secret",
     "hard_imds_bucket",
-    "hard_cloudkey_assume"
+    "hard_cloudkey_assume",
+    "hard_shared_ci_runner_1",
+    "hard_shared_ci_runner_2",
+    "hard_shared_ci_runner_3"
   ]
 }

@@ -262,42 +262,192 @@
         "ident:org_a:ident:00005",
         "ds:org_a:ds:00001"
       ]
+    },
+    {
+      "name": "hard_shared_ci_runner_1",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00048"
+        },
+        {
+          "rule": "exploit_remote_service",
+          "technique": "T1210",
+          "from": "asset:org_a:asset:00048",
+          "to": "asset:org_a:asset:00047"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00047",
+          "to": "secret:org_a:secret:00008"
+        },
+        {
+          "rule": "use_cloud_account",
+          "technique": "T1078.004",
+          "from": "secret:org_a:secret:00008",
+          "to": "ident:org_a:ident:00006"
+        },
+        {
+          "rule": "read_cloud_storage",
+          "technique": "T1530",
+          "from": "ident:org_a:ident:00006",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00048",
+        "asset:org_a:asset:00047",
+        "secret:org_a:secret:00008",
+        "ident:org_a:ident:00006",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "hard_shared_ci_runner_2",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00049"
+        },
+        {
+          "rule": "exploit_remote_service",
+          "technique": "T1210",
+          "from": "asset:org_a:asset:00049",
+          "to": "asset:org_a:asset:00047"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00047",
+          "to": "secret:org_a:secret:00008"
+        },
+        {
+          "rule": "use_cloud_account",
+          "technique": "T1078.004",
+          "from": "secret:org_a:secret:00008",
+          "to": "ident:org_a:ident:00006"
+        },
+        {
+          "rule": "read_cloud_storage",
+          "technique": "T1530",
+          "from": "ident:org_a:ident:00006",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00049",
+        "asset:org_a:asset:00047",
+        "secret:org_a:secret:00008",
+        "ident:org_a:ident:00006",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "hard_shared_ci_runner_3",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00050"
+        },
+        {
+          "rule": "exploit_remote_service",
+          "technique": "T1210",
+          "from": "asset:org_a:asset:00050",
+          "to": "asset:org_a:asset:00047"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00047",
+          "to": "secret:org_a:secret:00008"
+        },
+        {
+          "rule": "use_cloud_account",
+          "technique": "T1078.004",
+          "from": "secret:org_a:secret:00008",
+          "to": "ident:org_a:ident:00006"
+        },
+        {
+          "rule": "read_cloud_storage",
+          "technique": "T1530",
+          "from": "ident:org_a:ident:00006",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00050",
+        "asset:org_a:asset:00047",
+        "secret:org_a:secret:00008",
+        "ident:org_a:ident:00006",
+        "ds:org_a:ds:00001"
+      ]
     }
   ],
   "new_path_v2": null,
+  "fixed_findings_v2": [],
+  "removed_paths_v2": [],
   "decoys": [
     {
       "kind": "severity",
       "note": "CVSS>=9.0 KEV vuln with no route from the Internet (isolated zone).",
-      "asset": "org_a:asset:00047",
+      "asset": "org_a:asset:00051",
       "finding_ids": [
-        "org_a:finding:00162"
+        "org_a:finding:00166"
+      ],
+      "vuln_cves": [
+        "CVE-2025-24813"
+      ]
+    },
+    {
+      "kind": "mitigated",
+      "note": "Internet-exposed critical vuln, but a WAF Control MITIGATES it on this asset.",
+      "asset": "org_a:asset:00052",
+      "finding_ids": [
+        "org_a:finding:00167"
       ],
       "vuln_cves": [
         "CVE-2016-8735"
       ]
     },
     {
-      "kind": "mitigated",
-      "note": "Internet-exposed critical vuln, but a WAF Control MITIGATES it on this asset.",
-      "asset": "org_a:asset:00048",
-      "finding_ids": [
-        "org_a:finding:00163"
-      ],
-      "vuln_cves": [
-        "CVE-2025-24813"
-      ]
-    },
-    {
       "kind": "dead_end",
       "note": "Internet-exposed, exploitable, but no onward reach and no useful secret.",
-      "asset": "org_a:asset:00049",
+      "asset": "org_a:asset:00053",
       "finding_ids": [
-        "org_a:finding:00164"
+        "org_a:finding:00168"
       ],
       "vuln_cves": [
-        "CVE-2025-24813"
+        "CVE-2016-8735"
       ]
+    }
+  ],
+  "shared_infra": [
+    {
+      "kind": "ci_runner",
+      "node": "asset:org_a:asset:00047",
+      "note": "Shared CI runner reachable from 3 internet-facing services on :8080; it holds the deploy cloud key. Patching it cuts all 3 paths.",
+      "paths": [
+        "hard_shared_ci_runner_1",
+        "hard_shared_ci_runner_2",
+        "hard_shared_ci_runner_3"
+      ],
+      "blocked_by": ""
     }
   ],
   "min_cut": [
@@ -306,9 +456,10 @@
     "step:db:org_a:secret:00004:org_a:ds:00001",
     "step:db:org_a:secret:00006:org_a:ds:00001",
     "step:read:org_a:ident:00003:org_a:ds:00001",
-    "step:read:org_a:ident:00005:org_a:ds:00001"
+    "step:read:org_a:ident:00005:org_a:ds:00001",
+    "step:read:org_a:ident:00006:org_a:ds:00001"
   ],
-  "min_cut_size": 6,
+  "min_cut_size": 7,
   "finding_priority": {
     "org_a:finding:00001": 0.0,
     "org_a:finding:00002": 0.0,
@@ -461,19 +612,23 @@
     "org_a:finding:00149": 0.0,
     "org_a:finding:00150": 0.0,
     "org_a:finding:00151": 0.0,
-    "org_a:finding:00152": 1.0,
-    "org_a:finding:00153": 1.0,
-    "org_a:finding:00154": 1.0,
-    "org_a:finding:00155": 1.0,
-    "org_a:finding:00156": 1.0,
-    "org_a:finding:00157": 1.0,
-    "org_a:finding:00158": 1.0,
-    "org_a:finding:00159": 1.0,
-    "org_a:finding:00160": 1.0,
-    "org_a:finding:00161": 1.0,
-    "org_a:finding:00162": 0.0,
-    "org_a:finding:00163": 0.0,
-    "org_a:finding:00164": 0.0
+    "org_a:finding:00152": 0.3333,
+    "org_a:finding:00153": 0.3333,
+    "org_a:finding:00154": 0.3333,
+    "org_a:finding:00155": 0.3333,
+    "org_a:finding:00156": 0.3333,
+    "org_a:finding:00157": 0.3333,
+    "org_a:finding:00158": 0.3333,
+    "org_a:finding:00159": 0.3333,
+    "org_a:finding:00160": 0.3333,
+    "org_a:finding:00161": 0.3333,
+    "org_a:finding:00162": 1.0,
+    "org_a:finding:00163": 0.3333,
+    "org_a:finding:00164": 0.3333,
+    "org_a:finding:00165": 0.3333,
+    "org_a:finding:00166": 0.0,
+    "org_a:finding:00167": 0.0,
+    "org_a:finding:00168": 0.0
   },
-  "oracle_path_count": 6
+  "oracle_path_count": 9
 }

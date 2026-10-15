@@ -63,6 +63,25 @@ def test_min_cut_removal_disconnects_all_crown_jewels(builds):
         assert not still, f"{org}: crown jewel still reachable after min-cut removal"
 
 
+def test_shared_infra_funnels_paths(builds):
+    """org_a / org_c: a shared node every listed path crosses, so min-cut < path
+    count. org_b: the funnel is blocked by a control, min-cut == path count."""
+    for org, ob in builds.items():
+        n_paths = sum(len(v) for v in ob.oracle.paths.values())
+        shared = ob.ground_truth.shared_infra
+        assert shared, f"{org}: no shared infrastructure planted"
+        by_name = {p.name: p for p in ob.ground_truth.paths}
+        for s in shared:
+            for name in s.paths:
+                assert s.node in by_name[name].node_sequence(), f"{org}: {name} misses {s.node}"
+        if org == "org_b":
+            assert all(s.blocked_by and not s.paths for s in shared)
+            assert len(ob.oracle.min_cut) == n_paths == 4
+        else:
+            assert len(ob.oracle.min_cut) < n_paths, f"{org}: shared hop did not shrink the cut"
+            assert all(len(s.paths) >= 2 for s in shared)
+
+
 def test_finding_priority_high_on_true_paths_zero_on_decoys(builds):
     for org, ob in builds.items():
         prio = ob.oracle.finding_priority

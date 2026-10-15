@@ -91,8 +91,11 @@ def test_scan_v2_fixed_finding_removes_exactly_its_paths():
         assert fixed, f"{org}: drift fixed no planted finding"
 
         def paths(ob):
-            return {tuple((h.src, h.dst, h.fix) for h in hops)
-                    for plist in ob.oracle.paths.values() for hops in plist}
+            return {
+                tuple((h.src, h.dst, h.fix) for h in hops)
+                for plist in ob.oracle.paths.values()
+                for hops in plist
+            }
 
         p1, p2 = paths(v1), paths(v2)
         survivors = {p for p in p1 if not {fix for _, _, fix in p} & fixed}

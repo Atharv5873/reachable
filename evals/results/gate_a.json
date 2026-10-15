@@ -1,10 +1,10 @@
 {
-  "generated": "2026-10-15 15:09:21",
+  "generated": "2026-10-15 15:45:16",
   "reps": 20,
   "orgs": {
     "org_a": {
       "org": "org_a",
-      "returned_paths": 6,
+      "returned_paths": 9,
       "recall_by_difficulty": {
         "easy": {
           "planted": 1,
@@ -23,9 +23,9 @@
           "recall_from_seeds": 1.0
         },
         "hard": {
-          "planted": 4,
-          "found": 4,
-          "found_from_seeds": 4,
+          "planted": 7,
+          "found": 7,
+          "found_from_seeds": 7,
           "missed": [],
           "recall": 1.0,
           "recall_from_seeds": 1.0
@@ -36,9 +36,9 @@
       "decoys_in_top_paths": 0,
       "min_cut": {
         "entry": {
-          "size": 6,
-          "max_flow": 6,
-          "oracle_size": 6,
+          "size": 7,
+          "max_flow": 7,
+          "oracle_size": 7,
           "size_le_oracle": true,
           "equals_oracle_set": false,
           "disconnects_all_crown_jewels": true,
@@ -48,13 +48,14 @@
             "org_a:finding:06850",
             "org_a:finding:06851",
             "org_a:finding:06853",
-            "org_a:finding:06855"
+            "org_a:finding:06855",
+            "org_a:finding:06856"
           ]
         },
         "crown": {
-          "size": 6,
-          "max_flow": 6,
-          "oracle_size": 6,
+          "size": 7,
+          "max_flow": 7,
+          "oracle_size": 7,
           "size_le_oracle": true,
           "equals_oracle_set": true,
           "disconnects_all_crown_jewels": true,
@@ -64,7 +65,8 @@
             "step:db:org_a:secret:00004:org_a:ds:00001",
             "step:db:org_a:secret:00006:org_a:ds:00001",
             "step:read:org_a:ident:00003:org_a:ds:00001",
-            "step:read:org_a:ident:00005:org_a:ds:00001"
+            "step:read:org_a:ident:00005:org_a:ds:00001",
+            "step:read:org_a:ident:00006:org_a:ds:00001"
           ]
         }
       },
@@ -74,11 +76,12 @@
         "step:db:org_a:secret:00004:org_a:ds:00001",
         "step:db:org_a:secret:00006:org_a:ds:00001",
         "step:read:org_a:ident:00003:org_a:ds:00001",
-        "step:read:org_a:ident:00005:org_a:ds:00001"
+        "step:read:org_a:ident:00005:org_a:ds:00001",
+        "step:read:org_a:ident:00006:org_a:ds:00001"
       ],
       "evidence": {
-        "nodes_checked": 328,
-        "edges_checked": 225,
+        "nodes_checked": 341,
+        "edges_checked": 237,
         "missing_nodes": [],
         "missing_edges": [],
         "validity": 1.0
@@ -86,56 +89,56 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 16.48,
-          "p95_ms": 17.49
+          "p50_ms": 16.9,
+          "p95_ms": 19.03
         },
         "attack_paths (from a seed asset)": {
-          "n": 37,
-          "p50_ms": 0.57,
-          "p95_ms": 0.78
+          "n": 40,
+          "p50_ms": 0.64,
+          "p95_ms": 0.99
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 2.79,
-          "p95_ms": 3.61
+          "p50_ms": 2.73,
+          "p95_ms": 3.31
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 4.82,
-          "p95_ms": 5.59
+          "p50_ms": 4.8,
+          "p95_ms": 5.95
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 5.05,
-          "p95_ms": 11.75
+          "p50_ms": 5.1,
+          "p95_ms": 6.22
         },
         "min_cut": {
           "n": 21,
           "p50_ms": 21.37,
-          "p95_ms": 24.72
+          "p95_ms": 28.46
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.85,
-          "p95_ms": 1.1
+          "p50_ms": 0.75,
+          "p95_ms": 1.4
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 358.86,
-          "p95_ms": 382.1
+          "p50_ms": 362.38,
+          "p95_ms": 381.71
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.9,
-          "p95_ms": 5.4
+          "p50_ms": 3.99,
+          "p95_ms": 5.27
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 8.18,
-          "p95_ms": 11.58
+          "p50_ms": 7.55,
+          "p95_ms": 11.57
         }
       },
-      "seeds": 37,
+      "seeds": 40,
       "top_path": [
         "internet",
         "org_a:asset:01745",
@@ -224,53 +227,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 47.21,
-          "p95_ms": 49.76
+          "p50_ms": 46.55,
+          "p95_ms": 51.68
         },
         "attack_paths (from a seed asset)": {
           "n": 41,
-          "p50_ms": 1.0,
-          "p95_ms": 1.29
+          "p50_ms": 0.58,
+          "p95_ms": 1.18
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 5.5,
-          "p95_ms": 8.96
+          "p50_ms": 5.65,
+          "p95_ms": 6.98
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 4.08,
-          "p95_ms": 5.45
+          "p50_ms": 3.79,
+          "p95_ms": 5.93
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 6.63,
-          "p95_ms": 9.25
+          "p50_ms": 6.23,
+          "p95_ms": 13.64
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 17.74,
-          "p95_ms": 25.4
+          "p50_ms": 17.77,
+          "p95_ms": 26.34
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.99,
-          "p95_ms": 1.32
+          "p50_ms": 0.81,
+          "p95_ms": 1.41
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 210.03,
-          "p95_ms": 225.75
+          "p50_ms": 206.82,
+          "p95_ms": 219.4
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 4.45,
-          "p95_ms": 6.79
+          "p50_ms": 3.97,
+          "p95_ms": 8.47
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 9.1,
-          "p95_ms": 11.55
+          "p50_ms": 8.59,
+          "p95_ms": 15.88
         }
       },
       "seeds": 41,
@@ -286,7 +289,7 @@
     },
     "org_c": {
       "org": "org_c",
-      "returned_paths": 4,
+      "returned_paths": 6,
       "recall_by_difficulty": {
         "easy": {
           "planted": 1,
@@ -297,17 +300,17 @@
           "recall_from_seeds": 1.0
         },
         "medium": {
-          "planted": 1,
-          "found": 1,
-          "found_from_seeds": 1,
+          "planted": 2,
+          "found": 2,
+          "found_from_seeds": 2,
           "missed": [],
           "recall": 1.0,
           "recall_from_seeds": 1.0
         },
         "hard": {
-          "planted": 2,
-          "found": 2,
-          "found_from_seeds": 2,
+          "planted": 3,
+          "found": 3,
+          "found_from_seeds": 3,
           "missed": [],
           "recall": 1.0,
           "recall_from_seeds": 1.0
@@ -318,9 +321,9 @@
       "decoys_in_top_paths": 0,
       "min_cut": {
         "entry": {
-          "size": 4,
-          "max_flow": 4,
-          "oracle_size": 4,
+          "size": 5,
+          "max_flow": 5,
+          "oracle_size": 5,
           "size_le_oracle": true,
           "equals_oracle_set": false,
           "disconnects_all_crown_jewels": true,
@@ -328,17 +331,19 @@
             "org_c:finding:06374",
             "org_c:finding:06376",
             "org_c:finding:06378",
-            "org_c:finding:06379"
+            "org_c:finding:06379",
+            "org_c:finding:06381"
           ]
         },
         "crown": {
-          "size": 4,
-          "max_flow": 4,
-          "oracle_size": 4,
+          "size": 5,
+          "max_flow": 5,
+          "oracle_size": 5,
           "size_le_oracle": true,
           "equals_oracle_set": true,
           "disconnects_all_crown_jewels": true,
           "fix_tokens": [
+            "org_c:finding:06381",
             "step:db:org_c:secret:00001:org_c:ds:00001",
             "step:db:org_c:secret:00002:org_c:ds:00001",
             "step:db:org_c:secret:00004:org_c:ds:00001",
@@ -347,14 +352,15 @@
         }
       },
       "oracle_cut": [
+        "org_c:finding:06381",
         "step:db:org_c:secret:00001:org_c:ds:00001",
         "step:db:org_c:secret:00002:org_c:ds:00001",
         "step:db:org_c:secret:00004:org_c:ds:00001",
         "step:db:org_c:secret:00006:org_c:ds:00001"
       ],
       "evidence": {
-        "nodes_checked": 194,
-        "edges_checked": 177,
+        "nodes_checked": 202,
+        "edges_checked": 186,
         "missing_nodes": [],
         "missing_edges": [],
         "validity": 1.0
@@ -362,56 +368,56 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 68.05,
-          "p95_ms": 71.75
+          "p50_ms": 67.02,
+          "p95_ms": 71.83
         },
         "attack_paths (from a seed asset)": {
-          "n": 11,
-          "p50_ms": 1.76,
-          "p95_ms": 3.01
+          "n": 12,
+          "p50_ms": 1.1,
+          "p95_ms": 1.86
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 6.81,
-          "p95_ms": 9.4
+          "p50_ms": 6.63,
+          "p95_ms": 10.97
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 3.9,
-          "p95_ms": 5.19
+          "p50_ms": 3.53,
+          "p95_ms": 4.56
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 2.44,
-          "p95_ms": 3.61
+          "p50_ms": 2.21,
+          "p95_ms": 4.73
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 16.81,
-          "p95_ms": 20.8
+          "p50_ms": 17.38,
+          "p95_ms": 19.37
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.76,
-          "p95_ms": 1.22
+          "p50_ms": 0.78,
+          "p95_ms": 1.28
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 229.36,
-          "p95_ms": 236.53
+          "p50_ms": 233.11,
+          "p95_ms": 249.82
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.57,
-          "p95_ms": 4.67
+          "p50_ms": 3.54,
+          "p95_ms": 4.93
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 8.82,
-          "p95_ms": 10.34
+          "p50_ms": 7.46,
+          "p95_ms": 11.76
         }
       },
-      "seeds": 11,
+      "seeds": 12,
       "top_path": [
         "internet",
         "org_c:asset:01607",
@@ -420,7 +426,7 @@
         "org_c:secret:00006",
         "org_c:ds:00001"
       ],
-      "memory_mb": 24
+      "memory_mb": 23
     }
   },
   "pass": {
@@ -446,93 +452,5 @@
       "no_decoy_in_top_paths": true
     }
   },
-  "overall_pass": true,
-  "scale": {
-    "graph": "scale_org_a",
-    "scale": 3.0,
-    "assets": 5234,
-    "nodes": 55833,
-    "edges_before_derive": 145841,
-    "attack_steps": 91201,
-    "fix_tokens": 8012,
-    "generate_s": 1.3,
-    "load_s": 5.5,
-    "derive_s": 1.77,
-    "memory_mb": 130,
-    "min_cut_size": 6,
-    "min_cut_disconnects": true,
-    "paths_found": 6,
-    "latency": {
-      "attack_paths": {
-        "n": 10,
-        "p50_ms": 46.88,
-        "p95_ms": 50.78
-      },
-      "attack_paths (from a seed asset)": {
-        "n": 97,
-        "p50_ms": 0.79,
-        "p95_ms": 1.32
-      },
-      "blast_radius": {
-        "n": 10,
-        "p50_ms": 5.07,
-        "p95_ms": 5.81
-      },
-      "choke_points": {
-        "n": 10,
-        "p50_ms": 9.04,
-        "p95_ms": 11.76
-      },
-      "exposure_surface": {
-        "n": 10,
-        "p50_ms": 17.56,
-        "p95_ms": 110.26
-      },
-      "min_cut": {
-        "n": 11,
-        "p50_ms": 43.89,
-        "p95_ms": 55.3
-      },
-      "run_cypher_readonly": {
-        "n": 9,
-        "p50_ms": 1.17,
-        "p95_ms": 1.82
-      },
-      "simulate_fix": {
-        "n": 3,
-        "p50_ms": 995.39,
-        "p95_ms": 1060.84
-      },
-      "vuln_intel": {
-        "n": 10,
-        "p50_ms": 7.46,
-        "p95_ms": 28.66
-      },
-      "why_step": {
-        "n": 14,
-        "p50_ms": 9.86,
-        "p95_ms": 12.14
-      }
-    },
-    "slowest_3": [
-      {
-        "tool": "simulate_fix",
-        "n": 3,
-        "p50_ms": 995.39,
-        "p95_ms": 1060.84
-      },
-      {
-        "tool": "exposure_surface",
-        "n": 10,
-        "p50_ms": 17.56,
-        "p95_ms": 110.26
-      },
-      {
-        "tool": "min_cut",
-        "n": 11,
-        "p50_ms": 43.89,
-        "p95_ms": 55.3
-      }
-    ]
-  }
+  "overall_pass": true
 }

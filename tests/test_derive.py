@@ -17,6 +17,7 @@ from reachable_core.attack_rules import HOP_CAP
 from reachable_core.settings import get_settings
 from reachable_graph.compat import graph_path_to_chops, oracle_path_set, planted_node_sequence
 from reachable_graph.derive import derive, edge_signature
+from reachable_graph.tools import GraphTools
 from reachable_orggen.build import drift_org, generate_org
 from reachable_orggen.generate import GenConfig
 from reachable_orggen.load_falkordb import load_org
@@ -109,6 +110,33 @@ def test_every_planted_path_is_derived(derived_small, org):
     for p in ob.ground_truth.paths:
         hops = [{"from": h.src, "to": h.dst, "rule": h.rule} for h in p.hops]
         assert planted_node_sequence({"hops": hops}) in seqs, f"{org}: {p.name} not derived"
+
+
+@pytest.mark.parametrize("org", ORGS)
+def test_min_cut_matches_oracle_on_shared_infra(db, derived_small, org):
+    """Cypher min_cut (algo.maxFlow + residual recovery) == the oracle's cut, and
+    on the funnel orgs the shared hop's own fix is in the entry-side cut."""
+    ob, g, _ = derived_small[org]
+    tools = GraphTools(db, allowed_orgs=[g.name])
+    crown = tools.min_cut(g.name, prefer="crown").data
+    entry = tools.min_cut(g.name, prefer="entry").data
+    n_paths = len(_derived_paths(g))
+    assert crown["fix_tokens"] == ob.oracle.min_cut
+    assert crown["max_flow"] == entry["max_flow"] == len(ob.oracle.min_cut)
+    if org == "org_b":
+        assert crown["max_flow"] == n_paths
+        return
+    assert crown["max_flow"] < n_paths
+    for s in ob.ground_truth.shared_infra:
+        asset = s.node.split(":", 1)[1]
+        shared_tokens = set(
+            r[0]
+            for r in g.ro_query(
+                "MATCH ()-[e:ATTACK_STEP]->(a:Asset {id: $a}) RETURN DISTINCT e.fix_token",
+                {"a": asset},
+            ).result_set
+        )
+        assert shared_tokens & set(entry["fix_tokens"]), f"{org}: shared hop not in entry cut"
 
 
 def test_derive_is_idempotent(derived_small):

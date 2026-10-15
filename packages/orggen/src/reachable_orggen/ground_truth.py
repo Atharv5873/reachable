@@ -43,6 +43,21 @@ class Decoy:
 
 
 @dataclass
+class SharedInfra:
+    """A node several planted paths could funnel through ("one fix, many paths").
+
+    `paths` names the planted paths that cross it. `blocked_by` is set when the
+    shared hop exists but a Control blocks it, so no path crosses it (the
+    contrast case: every path then needs its own fix)."""
+
+    kind: str  # ci_runner | jump_host | vpn_gateway
+    node: str  # attack-state id, e.g. "asset:org_a:asset:01234"
+    note: str
+    paths: list[str] = field(default_factory=list)
+    blocked_by: str = ""
+
+
+@dataclass
 class GroundTruth:
     org: str
     seed: int
@@ -50,6 +65,7 @@ class GroundTruth:
     paths: list[PlantedPath] = field(default_factory=list)
     decoys: list[Decoy] = field(default_factory=list)
     crown_jewels: list[str] = field(default_factory=list)  # ds node ids
+    shared_infra: list[SharedInfra] = field(default_factory=list)
     # Filled in by the oracle after the graph is built:
     min_cut: list[str] = field(default_factory=list)
     finding_priority: dict[str, float] = field(default_factory=dict)

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from .catalog import Catalog, CveRec
 from .generate import Builder
-from .ground_truth import Decoy, GroundTruth, PlantedHop, PlantedPath
+from .ground_truth import Decoy, GroundTruth, PlantedHop, PlantedPath, SharedInfra
 from .model import Asset, DataStore, Identity, Secret, Software
 from .names import role_name
 
@@ -237,6 +237,122 @@ class Planter:
         s.path.target = f"ds:{crown.id}"
         return s.path
 
+    # --- shared infrastructure ----------------------------------------------
+    # The spines above share no intermediate node, so every path needs its own
+    # fix and min-cut == path count. Real orgs have funnels: one CI runner every
+    # service can call, one jump host, one vendor VPN gateway. These templates
+    # plant such a funnel; the shared hop's single fix token then cuts several
+    # paths at once.
+
+    def _reach_existing(self, spine: Spine, src: Asset, dst: Asset, port: int) -> str:
+        """exploit_remote_service into an asset whose vulnerable software is
+        ALREADY planted: reuse its one Finding, so every path into it shares one
+        fix token (that is what makes it a funnel)."""
+        self.b.reach(src, dst, port)
+        return spine.hop(
+            "exploit_remote_service", "T1210", self._node("asset", src), self._node("asset", dst)
+        )
+
+    def paths_shared_ci_runner(self, crown: DataStore, services: int = 3) -> list[PlantedPath]:
+        """org_a. Several internet-facing services post build hooks to ONE CI
+        runner; the runner carries a deploy cloud key whose role reads the crown.
+            internet -> svc_i (exploit) -> ci runner (exploit, one shared finding)
+                     -> deploy cloud_key -> role-deploy -> crown bucket
+        """
+        runner = self._asset("ci", "ci_runner", cloud=True)
+        _, _, _, spec = self._vuln_software(runner, ["jenkins:jenkins"], network=True, min_cvss=7.0)
+        port = spec.ports[0] if spec.ports else 8080
+        key = self.b.secret("cloud_key")
+        role = self.b.identity("Role", role_name("deploy", 1))
+        self.b.holds(runner, key)
+        self.b.unlocks(key, role.id)
+        self.b.can(role, crown.id, "read")
+        runner_n, key_n, role_n = (
+            self._node("asset", runner),
+            self._node("secret", key),
+            self._node("ident", role),
+        )
+        paths = []
+        for i in range(services):
+            s = Spine(f"hard_shared_ci_runner_{i + 1}", "hard")
+            web = self._asset(self.shape.exposed_zone, "web_server", cloud=True)
+            self.start_public(s, web)
+            self._reach_existing(s, web, runner, port)
+            s.hop("creds_in_files", "T1552.001", runner_n, key_n)
+            s.hop("use_cloud_account", "T1078.004", key_n, role_n)
+            s.hop("read_cloud_storage", "T1530", role_n, self._node("ds", crown))
+            s.path.target = f"ds:{crown.id}"
+            paths.append(s.path)
+        self.gt.shared_infra.append(
+            SharedInfra(
+                kind="ci_runner",
+                node=runner_n,
+                note=f"Shared CI runner reachable from {services} internet-facing services on "
+                f":{port}; it holds the deploy cloud key. Patching it cuts all {services} paths.",
+                paths=[p.name for p in paths],
+            )
+        )
+        return paths
+
+    def shared_jump_host_blocked(self, crown: DataStore, via: list[PlantedPath]) -> None:
+        """org_b, the contrast case. The DMZ web servers of `via` can all reach
+        ONE legacy admin jump host that holds a DB password for the crown store,
+        but a WAF rule blocks the jump host's vuln. The funnel exists on the
+        network, yet no attack path crosses it, so min-cut stays == path count."""
+        jump = self._asset("admin", "jump_host")
+        sw, rec, _, spec = self._vuln_software(jump, APP + WEB, network=True, min_cvss=7.0)
+        port = spec.ports[0] if spec.ports else 8080
+        ctl = self.b.control("waf", self.b._vulns[f"{sw.id}:{rec.id}"], jump.id)
+        pw = self.b.secret("db_password")
+        self.b.holds(jump, pw)
+        self.b.unlocks(pw, crown.id)
+        for p in via:
+            self.b.reach(self.b.by_id[p.hops[0].dst.split(":", 1)[1]], jump, port)
+        self.gt.shared_infra.append(
+            SharedInfra(
+                kind="jump_host",
+                node=self._node("asset", jump),
+                note=f"Legacy admin jump host reachable from {len(via)} DMZ web servers on "
+                f":{port} and holding a crown DB password, but its vuln is blocked by WAF "
+                f"control {ctl.id}: no path crosses it.",
+                blocked_by=ctl.id,
+            )
+        )
+
+    def paths_shared_vpn_gateway(self, crown: DataStore) -> list[PlantedPath]:
+        """org_c. ONE vendor VPN gateway is the shared entry of two routes:
+            a) gateway -> on-prem server (exploit) -> db_password -> crown
+            b) gateway -> vendor-support ssh_key -> mgmt server -> db_password -> crown
+        Patching the gateway (one fix) cuts both."""
+        gw = self._asset(self.shape.exposed_zone, "gateway")
+        a = Spine("medium_shared_vpn_onprem", "medium")
+        v = Spine("hard_shared_vpn_vendor_key", "hard")
+        self.start_public(a, gw)
+        v.path.hops.append(a.path.hops[0])  # the same entry hop (same finding) for both
+        srv = self._asset("onprem", "server")
+        self.remote(a, gw, srv, products=DB)
+        pw1 = self.b.secret("db_password")
+        self.creds(a, self._node("asset", srv), srv, pw1)
+        self.db_unlock(a, pw1, crown)
+        key = self.b.secret("ssh_key")
+        self.creds(v, self._node("asset", gw), gw, key)
+        mgmt = self._asset("mgmt", "mgmt_server")
+        self.ssh(v, key, mgmt)
+        pw2 = self.b.secret("db_password")
+        self.creds(v, self._node("asset", mgmt), mgmt, pw2)
+        self.db_unlock(v, pw2, crown)
+        a.path.target = v.path.target = f"ds:{crown.id}"
+        self.gt.shared_infra.append(
+            SharedInfra(
+                kind="vpn_gateway",
+                node=self._node("asset", gw),
+                note="Vendor VPN gateway is the shared entry of two routes (on-prem exploit, "
+                "vendor-support SSH key). Patching it cuts both.",
+                paths=[a.path.name, v.path.name],
+            )
+        )
+        return [a.path, v.path]
+
     # --- decoys ------------------------------------------------------------
     def decoy_severity(self) -> Decoy:
         """Critical + KEV vuln in an isolated zone: unreachable despite the score."""
@@ -319,6 +435,15 @@ def plant_org(b: Builder, catalog: Catalog) -> GroundTruth:
     if b.shape.cloud:
         paths.append(p.path_imds_bucket(crown))
         paths.append(p.path_cloudkey_assume(crown))
+
+    # Shared infrastructure: org_a and org_c get a real funnel (min-cut < path
+    # count); org_b keeps independent paths for contrast (its funnel is blocked).
+    if b.org == "org_a":
+        paths += p.paths_shared_ci_runner(crown)
+    elif b.org == "org_b":
+        p.shared_jump_host_blocked(crown, via=paths[:2])
+    elif b.org == "org_c":
+        paths += p.paths_shared_vpn_gateway(crown)
     p.gt.paths = paths
 
     p.gt.decoys = [p.decoy_severity(), p.decoy_mitigated(), p.decoy_dead_end()]

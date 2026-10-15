@@ -1,6 +1,6 @@
 # Gate A - graph tools vs ground truth (no LLM)
 
-Generated 2026-10-15 15:09:21. attack_paths budget k=10. Latency reps per tool: 20.
+Generated 2026-10-15 15:45:16. attack_paths budget k=10. Latency reps per tool: 20.
 
 ## Verdict
 
@@ -16,53 +16,40 @@ Generated 2026-10-15 15:09:21. attack_paths budget k=10. Latency reps per tool: 
 
 | org | easy | medium | hard | hard (from seeds) | precision vs planted | decoy precision | decoys in top paths |
 |---|---|---|---|---|---|---|---|
-| org_a | 1/1 (1.00) | 1/1 (1.00) | 4/4 (1.00) | 4/4 | 1.00 | 1.00 | 0 |
+| org_a | 1/1 (1.00) | 1/1 (1.00) | 7/7 (1.00) | 7/7 | 1.00 | 1.00 | 0 |
 | org_b | 1/1 (1.00) | 1/1 (1.00) | 2/2 (1.00) | 2/2 | 1.00 | 1.00 | 0 |
-| org_c | 1/1 (1.00) | 1/1 (1.00) | 2/2 (1.00) | 2/2 | 1.00 | 1.00 | 0 |
+| org_c | 1/1 (1.00) | 2/2 (1.00) | 3/3 (1.00) | 3/3 | 1.00 | 1.00 | 0 |
 
 ## min_cut vs oracle
 
 | org | prefer | size | max flow | oracle size | size <= oracle | same set as oracle | simulate_fix disconnects all |
 |---|---|---|---|---|---|---|---|
-| org_a | entry | 6 | 6 | 6 | True | False | True |
-| org_a | crown | 6 | 6 | 6 | True | True | True |
+| org_a | entry | 7 | 7 | 7 | True | False | True |
+| org_a | crown | 7 | 7 | 7 | True | True | True |
 | org_b | entry | 4 | 4 | 4 | True | False | True |
 | org_b | crown | 4 | 4 | 4 | True | True | True |
-| org_c | entry | 4 | 4 | 4 | True | False | True |
-| org_c | crown | 4 | 4 | 4 | True | True | True |
+| org_c | entry | 5 | 5 | 5 | True | False | True |
+| org_c | crown | 5 | 5 | 5 | True | True | True |
 
 ## Evidence validity (separate Cypher pass)
 
 | org | nodes checked | edges checked | validity |
 |---|---|---|---|
-| org_a | 328 | 225 | 1.0000 |
+| org_a | 341 | 237 | 1.0000 |
 | org_b | 423 | 299 | 1.0000 |
-| org_c | 194 | 177 | 1.0000 |
+| org_c | 202 | 186 | 1.0000 |
 
 ## Latency (ms)
 
 | tool | org_a p50 / p95 | org_b p50 / p95 | org_c p50 / p95 |
 |---|---|---|---|
-| attack_paths | 16.48 / 17.49 | 47.21 / 49.76 | 68.05 / 71.75 |
-| attack_paths (from a seed asset) | 0.57 / 0.78 | 1.0 / 1.29 | 1.76 / 3.01 |
-| blast_radius | 2.79 / 3.61 | 5.5 / 8.96 | 6.81 / 9.4 |
-| choke_points | 4.82 / 5.59 | 4.08 / 5.45 | 3.9 / 5.19 |
-| exposure_surface | 5.05 / 11.75 | 6.63 / 9.25 | 2.44 / 3.61 |
-| min_cut | 21.37 / 24.72 | 17.74 / 25.4 | 16.81 / 20.8 |
-| run_cypher_readonly | 0.85 / 1.1 | 0.99 / 1.32 | 0.76 / 1.22 |
-| simulate_fix | 358.86 / 382.1 | 210.03 / 225.75 | 229.36 / 236.53 |
-| vuln_intel | 3.9 / 5.4 | 4.45 / 6.79 | 3.57 / 4.67 |
-| why_step | 8.18 / 11.58 | 9.1 / 11.55 | 8.82 / 10.34 |
-
-## Scale check (org_a x3.0)
-
-- 5234 assets, 55833 nodes, 145841 edges -> 91201 ATTACK_STEP edges, 8012 fix tokens
-- generate 1.3 s, load 5.5 s, derive 1.77 s
-- GRAPH.MEMORY USAGE: 130 MB
-- paths found 6, min_cut 6 (disconnects all: True)
-
-Three slowest tools (p95):
-
-- `simulate_fix`: p50 995.39 ms, p95 1060.84 ms
-- `exposure_surface`: p50 17.56 ms, p95 110.26 ms
-- `min_cut`: p50 43.89 ms, p95 55.3 ms
+| attack_paths | 16.9 / 19.03 | 46.55 / 51.68 | 67.02 / 71.83 |
+| attack_paths (from a seed asset) | 0.64 / 0.99 | 0.58 / 1.18 | 1.1 / 1.86 |
+| blast_radius | 2.73 / 3.31 | 5.65 / 6.98 | 6.63 / 10.97 |
+| choke_points | 4.8 / 5.95 | 3.79 / 5.93 | 3.53 / 4.56 |
+| exposure_surface | 5.1 / 6.22 | 6.23 / 13.64 | 2.21 / 4.73 |
+| min_cut | 21.37 / 28.46 | 17.77 / 26.34 | 17.38 / 19.37 |
+| run_cypher_readonly | 0.75 / 1.4 | 0.81 / 1.41 | 0.78 / 1.28 |
+| simulate_fix | 362.38 / 381.71 | 206.82 / 219.4 | 233.11 / 249.82 |
+| vuln_intel | 3.99 / 5.27 | 3.97 / 8.47 | 3.54 / 4.93 |
+| why_step | 7.55 / 11.57 | 8.59 / 15.88 | 7.46 / 11.76 |

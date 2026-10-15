@@ -46,6 +46,16 @@ def labels_payload(ob: OrgBuild, *, scan: str = "v1", new_path: PlantedPath | No
             }
             for d in gt.decoys
         ],
+        "shared_infra": [
+            {
+                "kind": s.kind,
+                "node": s.node,
+                "note": s.note,
+                "paths": s.paths,
+                "blocked_by": s.blocked_by,
+            }
+            for s in gt.shared_infra
+        ],
         "min_cut": gt.min_cut,
         "min_cut_size": len(gt.min_cut),
         "finding_priority": priorities,
