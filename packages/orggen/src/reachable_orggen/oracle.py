@@ -30,6 +30,7 @@ import networkx as nx
 
 from reachable_core.attack_rules import (
     HOP_CAP,
+    OPEN_STATUS,
     PRIVESC_MIN_CVSS,
     READ_ACTIONS,
     RULES,
@@ -110,10 +111,12 @@ class _Index:
             elif t == "OF":
                 self.finding_of[e.src] = e.dst
 
+        # Only OPEN findings count: a fixed finding no longer enables a step.
+        status = {f.id: f.status for f in ds.findings}
         for fid in self.finding_on:
             a = self.finding_on.get(fid)
             v = self.finding_of.get(fid)
-            if a and v:
+            if a and v and status.get(fid) == OPEN_STATUS:
                 self.finding_by[(a, v)] = fid
 
         self.vuln_by_id = {v.id: v for v in ds.vulns}
@@ -121,8 +124,10 @@ class _Index:
         self.secret_by_id = {s.id: s for s in ds.secrets}
         self.ds_by_id = {d.id: d for d in ds.datastores}
 
-    def finding_for(self, asset: str, vuln: str) -> str:
-        return self.finding_by.get((asset, vuln), f"step:finding:{asset}:{vuln}")
+    def finding_for(self, asset: str, vuln: str) -> str | None:
+        """The open Finding reporting `vuln` on `asset`, or None. Exploit steps
+        need one (same as the Cypher pattern `(f:Finding)-[:ON]->(a), (f)-[:OF]->(v)`)."""
+        return self.finding_by.get((asset, vuln))
 
     def software_ports(self, sw_id: str) -> tuple[int, ...]:
         sw = self.sw_by_id[sw_id]
@@ -155,8 +160,10 @@ def build_attack_graph(ds: Dataset) -> tuple[nx.DiGraph, _Index]:
                     continue
                 if (vid, asset_id) in idx.mitigated:
                     continue
-                lk = exploit_likelihood(_sig(v))
                 fid = idx.finding_for(asset_id, vid)
+                if fid is None:
+                    continue
+                lk = exploit_likelihood(_sig(v))
                 if best is None or lk > best[1]:
                     best = (fid, lk)
         return best
@@ -179,16 +186,18 @@ def build_attack_graph(ds: Dataset) -> tuple[nx.DiGraph, _Index]:
         for sw_id in idx.runs.get(a.id, []):
             for vid in idx.has_vuln.get(sw_id, []):
                 v = idx.vuln_by_id[vid]
+                fid = idx.finding_for(a.id, vid)
                 if (
                     v.av == "LOCAL"
                     and v.cvss >= PRIVESC_MIN_CVSS
                     and (vid, a.id) not in idx.mitigated
+                    and fid is not None
                 ):
                     add(
                         f"asset:{a.id}",
                         f"priv:{a.id}",
                         "local_privesc",
-                        idx.finding_for(a.id, vid),
+                        fid,
                         exploit_likelihood(_sig(v)),
                     )
 

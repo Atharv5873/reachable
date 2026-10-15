@@ -53,3 +53,7 @@ class GroundTruth:
     # Filled in by the oracle after the graph is built:
     min_cut: list[str] = field(default_factory=list)
     finding_priority: dict[str, float] = field(default_factory=dict)
+    # Scan v2 only: planted findings the drift marked fixed, and the planted
+    # paths that disappeared because they depended on one of them.
+    fixed_findings: list[str] = field(default_factory=list)
+    removed_paths: list[str] = field(default_factory=list)

@@ -2,8 +2,9 @@
 
 generate_org  -> background + planted paths/decoys, then run the oracle to fill
                  the min-cut and finding-priority ground truth and validate.
-drift_org     -> scan v2: same org a week later with some fixes applied, some
-                 new findings, and ONE config change that opens ONE new path.
+drift_org     -> scan v2: same org a week later with some fixes applied (one of
+                 them on a planted path, which disappears), some new findings,
+                 and ONE config change that opens ONE new path.
 """
 
 from __future__ import annotations
@@ -51,20 +52,33 @@ def drift_org(org: str, seed: int, cfg: GenConfig) -> tuple[OrgBuild, PlantedPat
     """
     catalog = Catalog()
     b = generate_background(org, seed, cfg, catalog)
+    bg_software = list(b.ds.software)  # before planting: never touch a planted spine
     gt = plant_org(b, catalog)
 
     drng = random.Random(f"{org}:{seed}:drift")
 
-    # 1. Some fixes applied: close a handful of open background findings.
+    # 1. Some fixes applied: close a handful of open background findings...
     open_findings = [f for f in b.ds.findings if f.status == "open"]
     for f in drng.sample(open_findings, min(20, len(open_findings))):
         f.status = "fixed"
 
-    # 2. Some new findings since last week (new CVEs on existing software).
-    bg_software = [s for s in b.ds.software]
+    # ...and the web team patched the entry point of the easy planted path. Every
+    # path that depended on that finding must disappear from v2 (the oracle and
+    # the Cypher derivation both ignore fixed findings).
+    easy = next(p for p in gt.paths if p.name == "easy_web_db")
+    entry = easy.hops[0].dst.split(":", 1)[1]  # "asset:<id>" -> "<id>"
+    on = {e.src for e in b.ds.edges if e.type == "ON" and e.dst == entry}
+    patched = [f for f in b.ds.findings if f.id in on]
+    for f in patched:
+        f.status = "fixed"
+    gt.fixed_findings = sorted(f.id for f in patched)
+
+    # 2. Some new findings since last week (new CVEs on existing background
+    #    software). A CVE the software already has is not a new finding: a
+    #    rescan reports one finding per (host, CVE), so skip it.
     for sw in drng.sample(bg_software, min(15, len(bg_software))):
         rec = catalog.pick(drng, f"{sw.vendor}:{sw.product}")
-        if rec is None:
+        if rec is None or f"{sw.id}:{rec.id}" in b._vulns:
             continue
         # Attach to one asset running this software.
         on = next((e.src for e in b.ds.edges if e.type == "RUNS" and e.dst == sw.id), None)
@@ -86,7 +100,10 @@ def drift_org(org: str, seed: int, cfg: GenConfig) -> tuple[OrgBuild, PlantedPat
     p.creds(s, p._node("asset", dbhost), dbhost, sec)
     p.db_unlock(s, sec, crown)
     s.path.target = f"ds:{crown.id}"
-    gt.paths.append(s.path)
+
+    # The planted paths through the patched entry are gone in v2.
+    gt.removed_paths = [p.name for p in gt.paths if p.hops[0].dst == easy.hops[0].dst]
+    gt.paths = [p for p in gt.paths if p.name not in gt.removed_paths] + [s.path]
 
     res = _finalise(b.ds, gt)
     return OrgBuild(dataset=b.ds, ground_truth=gt, oracle=res), s.path

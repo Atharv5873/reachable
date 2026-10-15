@@ -17,7 +17,7 @@ from reachable_core.attack_rules import HOP_CAP
 from reachable_core.settings import get_settings
 from reachable_graph.compat import graph_path_to_chops, oracle_path_set, planted_node_sequence
 from reachable_graph.derive import derive, edge_signature
-from reachable_orggen.build import generate_org
+from reachable_orggen.build import drift_org, generate_org
 from reachable_orggen.generate import GenConfig
 from reachable_orggen.load_falkordb import load_org
 
@@ -57,6 +57,49 @@ def test_derived_paths_equal_oracle_paths(derived_small, org):
     got = _derived_paths(g)
     assert want, f"{org}: oracle found no paths"
     assert got == want, f"{org}: derived != oracle\n missing={want - got}\n extra={got - want}"
+
+
+@pytest.fixture(scope="module")
+def derived_v2(db):
+    """Scan v2 (some findings fixed, one new path) of each org, derived."""
+    out = {}
+    for org in ORGS:
+        ob, new_path = drift_org(org, TEST_SEED, GenConfig(scale=TEST_SCALE))
+        name = f"test_derive_{org}_v2"
+        ob.dataset.org = name
+        load_org(db, ob.dataset)
+        g = db.select_graph(name)
+        derive(g)
+        out[org] = (ob, new_path, g)
+    yield out
+    for _, _, g in out.values():
+        g.delete()
+
+
+@pytest.mark.parametrize("org", ORGS)
+def test_status_filter_v1_unchanged_v2_shrinks(derived_small, derived_v2, org):
+    """Only OPEN findings create steps. v1 (every planted finding open) keeps
+    every planted path; in v2 the paths through a fixed finding vanish and the
+    one path opened by the config change appears, in Cypher exactly as in the oracle."""
+    ob1, g1, _ = derived_small[org]
+    ob2, new_path, g2 = derived_v2[org]
+    v1, v2 = _derived_paths(g1), _derived_paths(g2)
+    assert len(v1) == len(ob1.ground_truth.paths)
+    assert v2 == oracle_path_set(ob2.oracle.paths)
+
+    fixed = set(ob2.ground_truth.fixed_findings)
+    survivors = {p for p in v1 if not {h.fix for h in p} & fixed}
+    assert len(survivors) < len(v1)
+    new = v2 - survivors
+    assert len(new) == 1 and survivors <= v2
+    (p,) = new
+    assert (p[0].src, *[h.dst for h in p]) == tuple(new_path.node_sequence())
+    # No step anywhere is powered by a fixed finding.
+    leaked = g2.ro_query(
+        "MATCH ()-[e:ATTACK_STEP]->() MATCH (f:Finding) WHERE f.id = e.fix_token "
+        "AND f.status <> 'open' RETURN count(e)"
+    ).result_set[0][0]
+    assert leaked == 0
 
 
 @pytest.mark.parametrize("org", ORGS)

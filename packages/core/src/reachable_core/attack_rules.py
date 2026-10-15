@@ -167,6 +167,11 @@ PRIVESC_MIN_CVSS = 6.0
 # CAN actions on a DataStore that let an identity read it (read_cloud_storage).
 READ_ACTIONS = ("read", "*", "readwrite")
 
+# Only findings a scanner still reports as open power an exploit step. A fixed
+# finding is history: it stays in the graph (tickets point at it) but enables
+# nothing. Shared by the oracle and the Cypher derivation.
+OPEN_STATUS = "open"
+
 # Longest attack path we enumerate or search, in hops. Shared by the oracle,
 # the Cypher derivation and the tools so "a path" means the same thing everywhere.
 HOP_CAP = 8

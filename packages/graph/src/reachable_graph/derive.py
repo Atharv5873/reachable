@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from reachable_core.attack_rules import (
     HOP_CAP,
     NETWORK_VECTORS,
+    OPEN_STATUS,
     PRIVESC_MIN_CVSS,
     READ_ACTIONS,
     RULES,
@@ -77,13 +78,14 @@ RETURN count(e) AS n
 
 # --- exploit_public_facing (T1190) -----------------------------------------
 # Internet exposes the asset; it runs software with a network-vector vuln that a
-# scanner reported (Finding ON asset, OF vuln); no Control mitigates that vuln
-# ON THIS ASSET (MITIGATES is scoped by its `asset` property).
+# scanner reported and still reports (an OPEN Finding ON asset, OF vuln); no
+# Control mitigates that vuln ON THIS ASSET (MITIGATES is scoped by its `asset`
+# property). A fixed finding enables nothing: that is what makes drift real.
 EXPLOIT_PUBLIC_FACING = (
     """
 MATCH (src:Internet)-[:EXPOSES]->(dst:Asset)-[:RUNS]->(s:Software)-[:HAS_VULN]->(v:Vuln),
       (f:Finding)-[:ON]->(dst), (f)-[:OF]->(v)
-WHERE v.av IN $network_vectors
+WHERE v.av IN $network_vectors AND f.status = $open_status
   AND NOT (:Control)-[:MITIGATES {asset: dst.id}]->(v)
 WITH DISTINCT src, dst, f.id AS token, v.likelihood AS lk, [f.id, v.id, s.id] AS because
 """
@@ -98,7 +100,7 @@ EXPLOIT_REMOTE_SERVICE = (
     """
 MATCH (src:Asset)-[r:CAN_REACH]->(dst:Asset)-[:RUNS]->(s:Software)-[:HAS_VULN]->(v:Vuln),
       (f:Finding)-[:ON]->(dst), (f)-[:OF]->(v)
-WHERE v.av IN $network_vectors
+WHERE v.av IN $network_vectors AND f.status = $open_status
   AND (size(s.ports) = 0 OR r.port IN s.ports)
   AND NOT (:Control)-[:MITIGATES {asset: dst.id}]->(v)
 WITH DISTINCT src, dst, f.id AS token, v.likelihood AS lk, [f.id, v.id, s.id] AS because
@@ -115,7 +117,7 @@ LOCAL_PRIVESC = (
 MATCH (src:Asset)-[:RUNS]->(s:Software)-[:HAS_VULN]->(v:Vuln),
       (f:Finding)-[:ON]->(src), (f)-[:OF]->(v),
       (src)-[:HOLDS]->(dst:Secret {requires_priv: true})
-WHERE v.av = 'LOCAL' AND v.cvss >= $privesc_min_cvss
+WHERE v.av = 'LOCAL' AND v.cvss >= $privesc_min_cvss AND f.status = $open_status
   AND NOT (:Control)-[:MITIGATES {asset: src.id}]->(v)
 WITH DISTINCT src, dst, f.id AS token, v.likelihood * $creds_likelihood AS lk,
      [f.id, v.id, s.id, dst.id] AS because
@@ -228,6 +230,7 @@ def _params(rq: RuleQuery) -> dict:
         "technique": rule.technique,
         "likelihood": rule.likelihood,
         "network_vectors": sorted(NETWORK_VECTORS),
+        "open_status": OPEN_STATUS,
         "privesc_min_cvss": PRIVESC_MIN_CVSS,
         "creds_likelihood": RULES["creds_in_files"].likelihood,
         "read_actions": list(READ_ACTIONS),

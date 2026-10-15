@@ -79,3 +79,26 @@ def test_scan_v2_new_path_only_in_v2():
         ns = tuple(new_path.node_sequence())
         assert ns in seqs(v2), f"{org}: v2 new path missing from v2 oracle"
         assert ns not in seqs(v1), f"{org}: v2 new path already existed in v1"
+
+
+def test_scan_v2_fixed_finding_removes_exactly_its_paths():
+    """v2 oracle paths = v1 paths that avoid every fixed finding + the one new path."""
+    cfg = GenConfig(scale=TEST_SCALE)
+    for org in ORGS:
+        v1 = generate_org(org, TEST_SEED, cfg)
+        v2, new_path = drift_org(org, TEST_SEED, cfg)
+        fixed = set(v2.ground_truth.fixed_findings)
+        assert fixed, f"{org}: drift fixed no planted finding"
+
+        def paths(ob):
+            return {tuple((h.src, h.dst, h.fix) for h in hops)
+                    for plist in ob.oracle.paths.values() for hops in plist}
+
+        p1, p2 = paths(v1), paths(v2)
+        survivors = {p for p in p1 if not {fix for _, _, fix in p} & fixed}
+        assert survivors < p1, f"{org}: fixing {fixed} removed no v1 path"
+        added = p2 - survivors
+        assert len(added) == 1, f"{org}: expected exactly one new v2 path, got {len(added)}"
+        (only,) = added
+        assert (only[0][0], *[dst for _, dst, _ in only]) == tuple(new_path.node_sequence())
+        assert v2.ground_truth.removed_paths == ["easy_web_db"]
