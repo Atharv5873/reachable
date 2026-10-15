@@ -1,0 +1,479 @@
+{
+  "org": "org_a",
+  "seed": 42,
+  "scale": 0.02,
+  "scan": "v1",
+  "crown_jewels": [
+    "ds:org_a:ds:00001"
+  ],
+  "paths": [
+    {
+      "name": "easy_web_db",
+      "difficulty": "easy",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00036"
+        },
+        {
+          "rule": "exploit_remote_service",
+          "technique": "T1210",
+          "from": "asset:org_a:asset:00036",
+          "to": "asset:org_a:asset:00037"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00037",
+          "to": "secret:org_a:secret:00001"
+        },
+        {
+          "rule": "db_with_password",
+          "technique": "T1078",
+          "from": "secret:org_a:secret:00001",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00036",
+        "asset:org_a:asset:00037",
+        "secret:org_a:secret:00001",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "medium_start_web_db",
+      "difficulty": "medium",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00038"
+        },
+        {
+          "rule": "exploit_remote_service",
+          "technique": "T1210",
+          "from": "asset:org_a:asset:00038",
+          "to": "asset:org_a:asset:00039"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00039",
+          "to": "secret:org_a:secret:00002"
+        },
+        {
+          "rule": "db_with_password",
+          "technique": "T1078",
+          "from": "secret:org_a:secret:00002",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00038",
+        "asset:org_a:asset:00039",
+        "secret:org_a:secret:00002",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "hard_ssh_chain",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00040"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00040",
+          "to": "secret:org_a:secret:00003"
+        },
+        {
+          "rule": "ssh_with_stolen_key",
+          "technique": "T1021.004",
+          "from": "secret:org_a:secret:00003",
+          "to": "asset:org_a:asset:00041"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00041",
+          "to": "secret:org_a:secret:00004"
+        },
+        {
+          "rule": "db_with_password",
+          "technique": "T1078",
+          "from": "secret:org_a:secret:00004",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00040",
+        "secret:org_a:secret:00003",
+        "asset:org_a:asset:00041",
+        "secret:org_a:secret:00004",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "hard_privesc_root_secret",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00042"
+        },
+        {
+          "rule": "local_privesc",
+          "technique": "T1068",
+          "from": "asset:org_a:asset:00042",
+          "to": "priv:org_a:asset:00042"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "priv:org_a:asset:00042",
+          "to": "secret:org_a:secret:00005"
+        },
+        {
+          "rule": "ssh_with_stolen_key",
+          "technique": "T1021.004",
+          "from": "secret:org_a:secret:00005",
+          "to": "asset:org_a:asset:00043"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00043",
+          "to": "secret:org_a:secret:00006"
+        },
+        {
+          "rule": "db_with_password",
+          "technique": "T1078",
+          "from": "secret:org_a:secret:00006",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00042",
+        "priv:org_a:asset:00042",
+        "secret:org_a:secret:00005",
+        "asset:org_a:asset:00043",
+        "secret:org_a:secret:00006",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "hard_imds_bucket",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00044"
+        },
+        {
+          "rule": "exploit_remote_service",
+          "technique": "T1210",
+          "from": "asset:org_a:asset:00044",
+          "to": "asset:org_a:asset:00045"
+        },
+        {
+          "rule": "instance_metadata",
+          "technique": "T1552.005",
+          "from": "asset:org_a:asset:00045",
+          "to": "ident:org_a:ident:00003"
+        },
+        {
+          "rule": "read_cloud_storage",
+          "technique": "T1530",
+          "from": "ident:org_a:ident:00003",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00044",
+        "asset:org_a:asset:00045",
+        "ident:org_a:ident:00003",
+        "ds:org_a:ds:00001"
+      ]
+    },
+    {
+      "name": "hard_cloudkey_assume",
+      "difficulty": "hard",
+      "target": "ds:org_a:ds:00001",
+      "hops": [
+        {
+          "rule": "exploit_public_facing",
+          "technique": "T1190",
+          "from": "internet",
+          "to": "asset:org_a:asset:00046"
+        },
+        {
+          "rule": "creds_in_files",
+          "technique": "T1552.001",
+          "from": "asset:org_a:asset:00046",
+          "to": "secret:org_a:secret:00007"
+        },
+        {
+          "rule": "use_cloud_account",
+          "technique": "T1078.004",
+          "from": "secret:org_a:secret:00007",
+          "to": "ident:org_a:ident:00004"
+        },
+        {
+          "rule": "use_cloud_account",
+          "technique": "T1078.004",
+          "from": "ident:org_a:ident:00004",
+          "to": "ident:org_a:ident:00005"
+        },
+        {
+          "rule": "read_cloud_storage",
+          "technique": "T1530",
+          "from": "ident:org_a:ident:00005",
+          "to": "ds:org_a:ds:00001"
+        }
+      ],
+      "nodes": [
+        "internet",
+        "asset:org_a:asset:00046",
+        "secret:org_a:secret:00007",
+        "ident:org_a:ident:00004",
+        "ident:org_a:ident:00005",
+        "ds:org_a:ds:00001"
+      ]
+    }
+  ],
+  "new_path_v2": null,
+  "decoys": [
+    {
+      "kind": "severity",
+      "note": "CVSS>=9.0 KEV vuln with no route from the Internet (isolated zone).",
+      "asset": "org_a:asset:00047",
+      "finding_ids": [
+        "org_a:finding:00162"
+      ],
+      "vuln_cves": [
+        "CVE-2016-8735"
+      ]
+    },
+    {
+      "kind": "mitigated",
+      "note": "Internet-exposed critical vuln, but a WAF Control MITIGATES it on this asset.",
+      "asset": "org_a:asset:00048",
+      "finding_ids": [
+        "org_a:finding:00163"
+      ],
+      "vuln_cves": [
+        "CVE-2025-24813"
+      ]
+    },
+    {
+      "kind": "dead_end",
+      "note": "Internet-exposed, exploitable, but no onward reach and no useful secret.",
+      "asset": "org_a:asset:00049",
+      "finding_ids": [
+        "org_a:finding:00164"
+      ],
+      "vuln_cves": [
+        "CVE-2025-24813"
+      ]
+    }
+  ],
+  "min_cut": [
+    "step:db:org_a:secret:00001:org_a:ds:00001",
+    "step:db:org_a:secret:00002:org_a:ds:00001",
+    "step:db:org_a:secret:00004:org_a:ds:00001",
+    "step:db:org_a:secret:00006:org_a:ds:00001",
+    "step:read:org_a:ident:00003:org_a:ds:00001",
+    "step:read:org_a:ident:00005:org_a:ds:00001"
+  ],
+  "min_cut_size": 6,
+  "finding_priority": {
+    "org_a:finding:00001": 0.0,
+    "org_a:finding:00002": 0.0,
+    "org_a:finding:00003": 0.0,
+    "org_a:finding:00004": 0.0,
+    "org_a:finding:00005": 0.0,
+    "org_a:finding:00006": 0.0,
+    "org_a:finding:00007": 0.0,
+    "org_a:finding:00008": 0.0,
+    "org_a:finding:00009": 0.0,
+    "org_a:finding:00010": 0.0,
+    "org_a:finding:00011": 0.0,
+    "org_a:finding:00012": 0.0,
+    "org_a:finding:00013": 0.0,
+    "org_a:finding:00014": 0.0,
+    "org_a:finding:00015": 0.0,
+    "org_a:finding:00016": 0.0,
+    "org_a:finding:00017": 0.0,
+    "org_a:finding:00018": 0.0,
+    "org_a:finding:00019": 0.0,
+    "org_a:finding:00020": 0.0,
+    "org_a:finding:00021": 0.0,
+    "org_a:finding:00022": 0.0,
+    "org_a:finding:00023": 0.0,
+    "org_a:finding:00024": 0.0,
+    "org_a:finding:00025": 0.0,
+    "org_a:finding:00026": 0.0,
+    "org_a:finding:00027": 0.0,
+    "org_a:finding:00028": 0.0,
+    "org_a:finding:00029": 0.0,
+    "org_a:finding:00030": 0.0,
+    "org_a:finding:00031": 0.0,
+    "org_a:finding:00032": 0.0,
+    "org_a:finding:00033": 0.0,
+    "org_a:finding:00034": 0.0,
+    "org_a:finding:00035": 0.0,
+    "org_a:finding:00036": 0.0,
+    "org_a:finding:00037": 0.0,
+    "org_a:finding:00038": 0.0,
+    "org_a:finding:00039": 0.0,
+    "org_a:finding:00040": 0.0,
+    "org_a:finding:00041": 0.0,
+    "org_a:finding:00042": 0.0,
+    "org_a:finding:00043": 0.0,
+    "org_a:finding:00044": 0.0,
+    "org_a:finding:00045": 0.0,
+    "org_a:finding:00046": 0.0,
+    "org_a:finding:00047": 0.0,
+    "org_a:finding:00048": 0.0,
+    "org_a:finding:00049": 0.0,
+    "org_a:finding:00050": 0.0,
+    "org_a:finding:00051": 0.0,
+    "org_a:finding:00052": 0.0,
+    "org_a:finding:00053": 0.0,
+    "org_a:finding:00054": 0.0,
+    "org_a:finding:00055": 0.0,
+    "org_a:finding:00056": 0.0,
+    "org_a:finding:00057": 0.0,
+    "org_a:finding:00058": 0.0,
+    "org_a:finding:00059": 0.0,
+    "org_a:finding:00060": 0.0,
+    "org_a:finding:00061": 0.0,
+    "org_a:finding:00062": 0.0,
+    "org_a:finding:00063": 0.0,
+    "org_a:finding:00064": 0.0,
+    "org_a:finding:00065": 0.0,
+    "org_a:finding:00066": 0.0,
+    "org_a:finding:00067": 0.0,
+    "org_a:finding:00068": 0.0,
+    "org_a:finding:00069": 0.0,
+    "org_a:finding:00070": 0.0,
+    "org_a:finding:00071": 0.0,
+    "org_a:finding:00072": 0.0,
+    "org_a:finding:00073": 0.0,
+    "org_a:finding:00074": 0.0,
+    "org_a:finding:00075": 0.0,
+    "org_a:finding:00076": 0.0,
+    "org_a:finding:00077": 0.0,
+    "org_a:finding:00078": 0.0,
+    "org_a:finding:00079": 0.0,
+    "org_a:finding:00080": 0.0,
+    "org_a:finding:00081": 0.0,
+    "org_a:finding:00082": 0.0,
+    "org_a:finding:00083": 0.0,
+    "org_a:finding:00084": 0.0,
+    "org_a:finding:00085": 0.0,
+    "org_a:finding:00086": 0.0,
+    "org_a:finding:00087": 0.0,
+    "org_a:finding:00088": 0.0,
+    "org_a:finding:00089": 0.0,
+    "org_a:finding:00090": 0.0,
+    "org_a:finding:00091": 0.0,
+    "org_a:finding:00092": 0.0,
+    "org_a:finding:00093": 0.0,
+    "org_a:finding:00094": 0.0,
+    "org_a:finding:00095": 0.0,
+    "org_a:finding:00096": 0.0,
+    "org_a:finding:00097": 0.0,
+    "org_a:finding:00098": 0.0,
+    "org_a:finding:00099": 0.0,
+    "org_a:finding:00100": 0.0,
+    "org_a:finding:00101": 0.0,
+    "org_a:finding:00102": 0.0,
+    "org_a:finding:00103": 0.0,
+    "org_a:finding:00104": 0.0,
+    "org_a:finding:00105": 0.0,
+    "org_a:finding:00106": 0.0,
+    "org_a:finding:00107": 0.0,
+    "org_a:finding:00108": 0.0,
+    "org_a:finding:00109": 0.0,
+    "org_a:finding:00110": 0.0,
+    "org_a:finding:00111": 0.0,
+    "org_a:finding:00112": 0.0,
+    "org_a:finding:00113": 0.0,
+    "org_a:finding:00114": 0.0,
+    "org_a:finding:00115": 0.0,
+    "org_a:finding:00116": 0.0,
+    "org_a:finding:00117": 0.0,
+    "org_a:finding:00118": 0.0,
+    "org_a:finding:00119": 0.0,
+    "org_a:finding:00120": 0.0,
+    "org_a:finding:00121": 0.0,
+    "org_a:finding:00122": 0.0,
+    "org_a:finding:00123": 0.0,
+    "org_a:finding:00124": 0.0,
+    "org_a:finding:00125": 0.0,
+    "org_a:finding:00126": 0.0,
+    "org_a:finding:00127": 0.0,
+    "org_a:finding:00128": 0.0,
+    "org_a:finding:00129": 0.0,
+    "org_a:finding:00130": 0.0,
+    "org_a:finding:00131": 0.0,
+    "org_a:finding:00132": 0.0,
+    "org_a:finding:00133": 0.0,
+    "org_a:finding:00134": 0.0,
+    "org_a:finding:00135": 0.0,
+    "org_a:finding:00136": 0.0,
+    "org_a:finding:00137": 0.0,
+    "org_a:finding:00138": 0.0,
+    "org_a:finding:00139": 0.0,
+    "org_a:finding:00140": 0.0,
+    "org_a:finding:00141": 0.0,
+    "org_a:finding:00142": 0.0,
+    "org_a:finding:00143": 0.0,
+    "org_a:finding:00144": 0.0,
+    "org_a:finding:00145": 0.0,
+    "org_a:finding:00146": 0.0,
+    "org_a:finding:00147": 0.0,
+    "org_a:finding:00148": 0.0,
+    "org_a:finding:00149": 0.0,
+    "org_a:finding:00150": 0.0,
+    "org_a:finding:00151": 0.0,
+    "org_a:finding:00152": 1.0,
+    "org_a:finding:00153": 1.0,
+    "org_a:finding:00154": 1.0,
+    "org_a:finding:00155": 1.0,
+    "org_a:finding:00156": 1.0,
+    "org_a:finding:00157": 1.0,
+    "org_a:finding:00158": 1.0,
+    "org_a:finding:00159": 1.0,
+    "org_a:finding:00160": 1.0,
+    "org_a:finding:00161": 1.0,
+    "org_a:finding:00162": 0.0,
+    "org_a:finding:00163": 0.0,
+    "org_a:finding:00164": 0.0
+  },
+  "oracle_path_count": 6
+}

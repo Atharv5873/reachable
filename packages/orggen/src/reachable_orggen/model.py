@@ -1,0 +1,153 @@
+"""In-memory model of one synthetic org, before it is loaded into FalkorDB.
+
+These dataclasses mirror the graph schema exactly (node per dataclass, edge per
+tuple). The generator fills a Dataset; loaders (FalkorDB, Postgres) and the
+networkx oracle all consume this same object, so the graph, the relational
+mirror and the ground-truth oracle can never describe different worlds.
+
+Everything is plain data + ids. No behaviour lives here.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+# --- Nodes -----------------------------------------------------------------
+@dataclass
+class Asset:
+    id: str
+    kind: str  # server | k8s_node | workstation | gateway | ci_runner | managed_db ...
+    zone: str  # zone id
+    env: str  # prod | staging | corp
+    hostname: str
+    cloud: bool = False  # cloud asset => can carry an instance Role
+
+
+@dataclass
+class Software:
+    id: str
+    vendor: str
+    product: str
+    version: str
+    cpe: str
+
+
+@dataclass
+class Vuln:
+    """Denormalised copy of a threatintel CVE, scoped to this org's graph.
+
+    WHY denormalise instead of linking across to the `threatintel` graph:
+    FalkorDB (like Redis) keeps each graph separate; a Cypher query cannot JOIN
+    two graphs. Attack-path queries need CVSS/EPSS/KEV/vector right next to the
+    Software they sit on, in the SAME graph, or every hop would need an
+    out-of-band lookup. So we copy the handful of fields the attack rules read
+    (cvss, av, pr, ui, epss, kev, ransomware) onto a Vuln node inside the org
+    graph. `cve` keeps the link back to the canonical CVE in `threatintel`.
+    """
+
+    id: str
+    cve: str
+    cvss: float
+    av: str
+    pr: str
+    ui: str
+    epss: float
+    kev: bool
+    ransomware: bool
+
+
+@dataclass
+class Finding:
+    id: str
+    scanner: str
+    first_seen: int  # epoch seconds (int: FalkorDB timestamp gotcha)
+    status: str  # open | fixed
+
+
+@dataclass
+class Identity:
+    id: str
+    kind: str  # User | Role | ServiceAccount (becomes the node's extra label)
+    name: str
+    over_broad: bool = False  # flagged over-permissive role (realism target)
+
+
+@dataclass
+class Secret:
+    id: str
+    kind: str  # ssh_key | db_password | cloud_key | api_token
+    # Root-owned secret: reading it off a host needs privilege first, so the
+    # creds_in_files step requires a prior local_privesc (priv:<asset>) rather
+    # than mere compromise of the asset. Drives the "hard path" requirement.
+    requires_priv: bool = False
+
+
+@dataclass
+class DataStore:
+    id: str
+    kind: str  # bucket | managed_db | warehouse | fileshare
+    crown_jewel: bool
+    sensitivity: str  # low | medium | high | crown
+
+
+@dataclass
+class Control:
+    id: str
+    kind: str  # waf | patch | network_acl | mfa | edr
+
+
+@dataclass
+class Zone:
+    id: str
+    name: str
+    trust: int  # 0 (internet) .. higher = more trusted/internal
+
+
+# --- Edges (typed tuples of ids + a small property dict) -------------------
+@dataclass
+class Edge:
+    src: str
+    dst: str
+    type: str
+    props: dict = field(default_factory=dict)
+
+
+# --- Firewall / security-group rules, modelled as DATA -----------------
+@dataclass
+class ReachRule:
+    """A zone-to-zone (or internet-to-zone) allow rule.
+
+    WHY model rules as data: CAN_REACH edges between assets are *derived* from
+    these rules, not hand-placed. That mirrors reality (you write firewall /
+    security-group rules, the reachability falls out) and lets a reviewer see
+    exactly why asset X can reach asset Y: because a rule allows
+    src_zone -> dst_zone on this port. The derivation lives in generate.py.
+    """
+
+    src_zone: str  # "internet" or a zone id
+    dst_zone: str
+    port: int
+    protocol: str = "tcp"
+
+
+@dataclass
+class Dataset:
+    org: str
+    seed: int
+    scale: float
+    zones: list[Zone] = field(default_factory=list)
+    assets: list[Asset] = field(default_factory=list)
+    software: list[Software] = field(default_factory=list)
+    vulns: list[Vuln] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
+    identities: list[Identity] = field(default_factory=list)
+    secrets: list[Secret] = field(default_factory=list)
+    datastores: list[DataStore] = field(default_factory=list)
+    controls: list[Control] = field(default_factory=list)
+    reach_rules: list[ReachRule] = field(default_factory=list)
+    edges: list[Edge] = field(default_factory=list)
+    internet_id: str = "internet"
+
+    def add_edge(self, src: str, dst: str, type: str, **props) -> None:
+        self.edges.append(Edge(src, dst, type, props))

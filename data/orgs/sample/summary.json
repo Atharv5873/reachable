@@ -1,0 +1,17 @@
+{
+  "org": "org_a",
+  "assets": 49,
+  "findings": 164,
+  "edges": 1063,
+  "crown_jewels": [
+    "ds:org_a:ds:00001"
+  ],
+  "planted_paths": [
+    "easy_web_db",
+    "medium_start_web_db",
+    "hard_ssh_chain",
+    "hard_privesc_root_secret",
+    "hard_imds_bucket",
+    "hard_cloudkey_assume"
+  ]
+}
