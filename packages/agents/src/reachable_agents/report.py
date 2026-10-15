@@ -11,6 +11,9 @@ render_run        runs/<run_id>.md, rendered from the run AS READ BACK FROM THE
 
 from __future__ import annotations
 
+import json
+import re
+
 from .agents import known_evidence
 from .loop import LoopOutcome, day
 from .runtime import RunCtx
@@ -24,25 +27,34 @@ def build_report(
 ) -> dict:
     ans = outcome.final or {}
     known = known_evidence(ctx, tp, pp, fp)
+    numbers = known_numbers(tp, pp, fp, state.get("digest"))
     claims, dropped = [], []
     for c in ans.get("claims", []):
         if not isinstance(c, dict) or not str(c.get("text", "")).strip():
             continue
         ev = [e for e in c.get("evidence", []) if isinstance(e, str)]
         bad = [e for e in ev if e not in known]
-        if not ev or bad:
-            dropped.append(
-                {
-                    "text": c["text"],
-                    "evidence": ev,
-                    "why": "no evidence" if not ev else f"unknown: {bad}",
-                }
+        made_up = unsupported_numbers(str(c["text"]), numbers)
+        if not ev or bad or made_up:
+            why = (
+                "no evidence"
+                if not ev
+                else f"unknown: {bad}"
+                if bad
+                else f"numbers not in the data: {made_up}"
             )
+            dropped.append({"text": c["text"], "evidence": ev, "why": why})
         else:
             claims.append({"text": str(c["text"])[:400], "evidence": ev, "by": "llm"})
     if not claims:  # no usable answer: state the facts the handoffs prove
         claims = fact_claims(tp, pp, fp)
-    headline = str(ans.get("headline") or "").strip() or default_headline(tp, pp, fp)
+    headline = str(ans.get("headline") or "").strip()
+    if not headline or unsupported_numbers(headline, numbers):
+        if headline:
+            dropped.append(
+                {"text": headline, "evidence": [], "why": "headline: numbers not in data"}
+            )
+        headline = default_headline(tp, pp, fp)
     risk = ans.get("risk") if ans.get("risk") in RISKS else default_risk(pp, fp)
     payload = {
         "headline": headline[:300],
@@ -54,6 +66,29 @@ def build_report(
     payload["exec_md"] = exec_markdown(payload)
     payload["engineer_md"] = engineer_markdown(tp, pp, fp, ctx.as_of)
     return payload
+
+
+_NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def known_numbers(*sources) -> set[float]:
+    """Every number the Reporter's model could legitimately quote: those in its
+    context and in the three handoffs (rounded to 2 decimals)."""
+    text = json.dumps(sources, default=str)
+    return {round(float(m.replace(",", "")), 2) for m in _NUM.findall(text)}
+
+
+def unsupported_numbers(text: str, numbers: set[float]) -> list[str]:
+    """Numbers in a sentence that appear nowhere in the data. Small counts (<= 20)
+    are allowed: they are usually the length of a list ("5 steps", "7 fixes")."""
+    out = []
+    for m in _NUM.findall(text):
+        x = float(m.replace(",", "").rstrip("."))
+        if x <= 20 and x == int(x):
+            continue
+        if round(x, 2) not in numbers and round(x / 100, 2) not in numbers:  # 20% vs 0.2
+            out.append(m)
+    return out
 
 
 def _note(outcome: LoopOutcome) -> dict:

@@ -48,7 +48,7 @@ TRIAGE = AgentSpec(
     name="triage",
     tools=("scan_findings", "triage_memory", "playbooks", "vuln_intel"),
     required=("scan_findings", "triage_memory"),
-    max_turns=6,
+    max_turns=5,
     role="""\
 Decide which of this scan's open findings deserve attack-path investigation.
 1. scan_findings: what the scan holds, ranked by what each finding enables in the attack \
@@ -246,7 +246,7 @@ PATHFINDER = AgentSpec(
     name="pathfinder",
     tools=("attack_paths", "blast_radius", "why_step", "exposure_surface", "choke_points"),
     required=("attack_paths",),
-    max_turns=7,
+    max_turns=4,
     role="""\
 Find the real Internet -> crown-jewel attack paths and rank the triaged findings by them.
 - For EACH crown jewel in CONTEXT call attack_paths with target_id set to it (in parallel), \
@@ -406,12 +406,13 @@ FIXER = AgentSpec(
     name="fixer",
     tools=("min_cut", "owners", "decision_trail", "simulate_fix"),
     required=("min_cut", "simulate_fix"),
-    max_turns=7,
+    max_turns=5,
     role="""\
 Turn the attack paths into a fix plan people can act on.
 1. min_cut twice, in parallel: mode="fewest" and mode="cheapest". Compare: fewer fixes vs \
 less total effort.
-2. Choose ONE of the two sets.
+2. Choose ONE of the two sets. If both have the same number of fixes, take the cheaper \
+one (same work count, less effort); otherwise weigh fewer fixes against less effort.
 3. Then, ALL IN ONE TURN (parallel calls): simulate_fix ONCE on exactly the chosen set (it \
 copies the graph: one call, never one per fix); owners for each fix's asset id (the owning \
 team and on-call person); decision_trail on the internet-facing entry assets (the ADR that \
@@ -613,8 +614,9 @@ async def reporter_agent(ctx: RunCtx, state: dict) -> tuple[str, str]:
         for label in ("Triage", "PathAnalysis", "FixPlan")
     }
     tp, pp, fp = ((outs[k] or {}).get("payload", {}) for k in ("Triage", "PathAnalysis", "FixPlan"))
-    outcome = await run_agent(REPORTER, ctx, digest(tp, pp, fp, ctx.as_of))
-    payload = build_report(ctx, outcome, tp, pp, fp, state)
+    context = digest(tp, pp, fp, ctx.as_of)
+    outcome = await run_agent(REPORTER, ctx, context)
+    payload = build_report(ctx, outcome, tp, pp, fp, {**state, "digest": context})
     triage_id = (outs["Triage"] or {}).get("id")
     payload["verdicts"] = record_verdicts(ctx, triage_id, tp, pp, fp)
     summary = payload["headline"]
@@ -708,7 +710,7 @@ def known_evidence(ctx: RunCtx, *payloads: dict[str, Any]) -> set[str]:
         elif isinstance(x, list):
             for v in x:
                 walk(v)
-        elif isinstance(x, str) and (label_of(x) or "|" in x):
+        elif isinstance(x, str) and (label_of(x) or "|" in x or x.startswith("step:")):
             known.add(x)
 
     for p in payloads:

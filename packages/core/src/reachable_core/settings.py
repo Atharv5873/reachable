@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     groq_api_key: SecretStr | None = None  # fallback 1 (free tier)
     # Free tier is 20 requests/DAY per model (one run is ~12 calls), so the
     # model is an env knob: switch when one model's daily quota is spent.
-    llm_primary_model: str = "gemini/gemini-3.5-flash"
+    llm_primary_model: str = "gemini/gemini-3.5-flash-lite"
     # (Groq retired llama-3.3-70b-versatile; `python -m reachable_agents check`
     # probes every configured model with a real tool call.)
     llm_fallback_model: str = "groq/qwen/qwen3.8-27b"

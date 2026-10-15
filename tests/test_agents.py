@@ -317,3 +317,22 @@ def test_parse_json_object():
     assert parse_json_object('Here you go: {"a": {"b": 2}} done') == {"a": {"b": 2}}
     assert parse_json_object("no json") is None
     assert parse_json_object("[1, 2]") is None
+
+
+def test_reporter_numbers_must_come_from_the_data():
+    from reachable_agents.report import known_numbers, unsupported_numbers
+
+    nums = known_numbers({"open": 6862, "best": 0.2003}, {"cve": "CVE-2021-44228"})
+    assert unsupported_numbers("Of 9,576 scan findings, 7 matter", nums) == ["9,576"]
+    assert unsupported_numbers("6,862 open; p=0.20 (20%); 5 steps; CVE-2021-44228", nums) == []
+
+
+def test_fix_tokens_count_as_evidence():
+    from types import SimpleNamespace
+
+    from reachable_agents.agents import known_evidence
+
+    ctx = SimpleNamespace(evidence=set())
+    tok = "step:usekey:org_a:secret:00008:org_a:ident:00006"
+    known = known_evidence(ctx, {"fix_tokens": [tok, "org_a:finding:00001"]})
+    assert {tok, "org_a:finding:00001"} <= known
