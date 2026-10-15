@@ -8,7 +8,7 @@ INTEL   = $(PY) -m reachable_intel
 ORGGEN  = $(PY) -m reachable_orggen
 GRAPH   = $(PY) -m reachable_graph
 
-.PHONY: up down intel seed derive test reset lint fmt sample logs browser
+.PHONY: up down intel seed derive test reset lint fmt sample logs browser mcp mcp-http mcp-smoke gate-a
 
 # Create .env from the example on first run (never overwrites an existing one).
 .env:
@@ -61,6 +61,22 @@ fmt:
 ## Regenerate the tiny committed sample in data/orgs/sample/.
 sample:
 	$(ORGGEN) sample --seed $(SEED)
+
+## MCP server over stdio (point an MCP host at `uv run reachable-mcp`).
+mcp:
+	uv run reachable-mcp
+
+## MCP server over streamable HTTP on :8002/mcp (needs MCP_API_KEY in .env).
+mcp-http: .env
+	uv run --env-file .env reachable-mcp --http
+
+## List the MCP tools and call three (stdio). Over HTTP: URL=http://localhost:8002/mcp
+mcp-smoke: .env
+	uv run --env-file .env python scripts/mcp_smoke.py $(if $(URL),--http $(URL))
+
+## Gate A: no-LLM evaluation of the tools against the oracle labels.
+gate-a: .env
+	$(PY) evals/gate_a.py
 
 logs:
 	docker compose logs -f --tail=100

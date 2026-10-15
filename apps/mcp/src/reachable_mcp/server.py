@@ -1,0 +1,300 @@
+"""Reachable MCP server: the typed FalkorDB graph tools, over stdio or streamable HTTP.
+
+    reachable-mcp                       # stdio (Claude Desktop / Claude Code / any MCP host)
+    reachable-mcp --http --port 8002    # streamable HTTP at /mcp, API key required
+
+Every tool is a thin wrapper over reachable_graph.tools.GraphTools: the
+argument types/bounds come straight from the Pydantic input models (one source
+of truth for the caps), and every result is the standard ToolResult
+{summary, data, evidence, queries, truncated}.
+
+The descriptions below are written for the LLM that picks tools in S4: each
+says what the tool answers, when to use it, and when NOT to.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hmac
+import logging
+import os
+from functools import cache
+from typing import Annotated, Any, Literal
+
+import uvicorn
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError as MCPToolError
+from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import Field, ValidationError
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+from reachable_graph import models as M
+from reachable_graph.models import ToolResult
+from reachable_graph.tools import GraphTools, ToolError
+
+log = logging.getLogger("reachable.mcp")
+
+INSTRUCTIONS = """\
+Reachable answers "what can an attacker actually reach?" over FalkorDB graphs of
+synthetic orgs (org_a, org_b, org_c). Each org graph has a materialised
+ATTACK_STEP layer: one edge per attacker step (exploit, stolen credential,
+role assumption, ...), each with a likelihood and a fix_token (the Finding id or
+step:* token that removes it if fixed).
+
+Typical flow: exposure_surface -> attack_paths -> why_step on surprising hops ->
+min_cut for the smallest fix set -> simulate_fix to PROVE it before proposing.
+vuln_intel explains a CVE. run_cypher_readonly is a last resort.
+Every result carries `evidence` (ids that exist in the graph): cite them.
+"""
+
+
+def arg(model: type, name: str, tp: Any) -> Any:
+    """Annotated[tp, description + bounds] taken from a Pydantic input model field,
+    so the MCP schema the LLM sees carries exactly the caps the tools enforce.
+    (Defaults are written in each signature, never copied from the model.)"""
+    fi = model.model_fields[name]
+    return Annotated[(tp, Field(description=fi.description), *fi.metadata)]
+
+
+@cache
+def _tools() -> GraphTools:
+    return GraphTools()
+
+
+def _call(fn, *args, **kwargs) -> ToolResult:
+    """Run a tool; turn anticipated failures into MCP tool errors the model can read."""
+    try:
+        return fn(*args, **kwargs)
+    except (ToolError, ValidationError, NotImplementedError) as exc:
+        raise MCPToolError(str(exc)) from exc
+
+
+Org = arg(M.OrgInput, "org", str)
+
+server = MCPServer(name="reachable", instructions=INSTRUCTIONS, version="0.2.0")
+
+
+@server.tool(
+    name="exposure_surface",
+    description=(
+        "List the org's internet-exposed assets and, for each, the vulns an attacker on the "
+        "Internet can actually exploit (finding id, CVE, CVSS, EPSS, KEV, step likelihood) plus "
+        "vulns that are exposed but blocked by a Control. USE FIRST to see where an attack "
+        "starts. Do NOT use it to judge impact: exposure says nothing about what lies behind "
+        "the asset (use attack_paths / blast_radius)."
+    ),
+)
+def exposure_surface(org: Org, limit: arg(M.ExposureInput, "limit", int) = 50) -> ToolResult:
+    return _call(_tools().exposure_surface, org, limit=limit)
+
+
+@server.tool(
+    name="attack_paths",
+    description=(
+        "Top-k MOST LIKELY attack paths from the Internet (or from source_id) to the org's crown "
+        "jewels (or to target_id), via weighted shortest paths over ATTACK_STEP with "
+        "cost = -ln(likelihood). Each path lists hops (rule, ATT&CK technique, likelihood, "
+        "fix_token, edge key) and its overall likelihood. USE to answer 'can an attacker reach X, "
+        "and how?' and to rank findings by real risk. Do NOT use for 'what is the smallest set of "
+        "fixes' (min_cut) or 'what does one compromised host expose' (blast_radius). "
+        "truncated=true means more paths exist beyond k."
+    ),
+)
+def attack_paths(
+    org: Org,
+    target_id: arg(M.AttackPathsInput, "target_id", str | None) = None,
+    k: arg(M.AttackPathsInput, "k", int) = 5,
+    source_id: arg(M.AttackPathsInput, "source_id", str | None) = None,
+    max_hops: arg(M.AttackPathsInput, "max_hops", int) = M.HOP_CAP,
+) -> ToolResult:
+    return _call(
+        _tools().attack_paths,
+        org,
+        target_id=target_id,
+        k=k,
+        source_id=source_id,
+        max_hops=max_hops,
+    )
+
+
+@server.tool(
+    name="blast_radius",
+    description=(
+        "Everything an attacker can reach from ONE compromised node (asset, identity or secret): "
+        "BFS over ATTACK_STEP up to max_depth, with counts by type and any crown jewels reached. "
+        "USE for incident response ('host X is popped, what now?') or to size the impact of one "
+        "finding. Do NOT use to find paths FROM the Internet (attack_paths) or to rank fixes."
+    ),
+)
+def blast_radius(
+    org: Org,
+    asset_id: arg(M.BlastRadiusInput, "asset_id", str),
+    max_depth: arg(M.BlastRadiusInput, "max_depth", int) = M.HOP_CAP,
+) -> ToolResult:
+    return _call(_tools().blast_radius, org, asset_id, max_depth=max_depth)
+
+
+@server.tool(
+    name="min_cut",
+    description=(
+        "The MINIMUM set of fixes (fix_tokens: Finding ids and step:* tokens) that disconnects "
+        "the Internet from every crown jewel (or from target_ids), computed with max-flow/min-cut "
+        "(algo.maxFlow on a node-split graph where each fix has capacity 1), plus a "
+        "human-readable action per fix. max_flow = number of fixes needed. prefer='entry' picks "
+        "fixes nearest the Internet, prefer='crown' nearest the data. USE when asked 'what should "
+        "we fix first?' or 'smallest remediation plan'. ALWAYS confirm with simulate_fix before "
+        "recommending. Do NOT use to list every risky finding (attack_paths)."
+    ),
+)
+def min_cut(
+    org: Org,
+    target_ids: arg(M.MinCutInput, "target_ids", list[str] | None) = None,
+    prefer: arg(M.MinCutInput, "prefer", Literal["entry", "crown"]) = "entry",
+) -> ToolResult:
+    return _call(_tools().min_cut, org, target_ids=target_ids, prefer=prefer)
+
+
+@server.tool(
+    name="choke_points",
+    description=(
+        "Nodes that many crown-jewel attack paths funnel through: betweenness centrality "
+        "(algo.betweenness) over the ATTACK_STEP subgraph lying on Internet->crown-jewel paths, "
+        "with the share of crown paths through each and the steps (fix tokens) leading into it. "
+        "USE to explain WHY a fix matters structurally or to suggest defensive monitoring points. "
+        "Do NOT treat as the fix list: the provably minimal fix set comes from min_cut."
+    ),
+)
+def choke_points(org: Org, top: arg(M.ChokePointsInput, "top", int) = 10) -> ToolResult:
+    return _call(_tools().choke_points, org, top=top)
+
+
+@server.tool(
+    name="why_step",
+    description=(
+        "Explain ONE attack step (by its ATTACK_STEP edge key from attack_paths/blast_radius/"
+        "min_cut): the rule and its plain-English precondition, the ATT&CK technique, the "
+        "likelihood, the fix that removes it, and the evidence nodes (finding, vuln, software, "
+        "secret, role) with the real structural edges that satisfied the rule. USE whenever you "
+        "state that a step is possible, so the claim is grounded. Do NOT guess edge keys."
+    ),
+)
+def why_step(org: Org, edge_key: arg(M.WhyStepInput, "edge_key", str)) -> ToolResult:
+    return _call(_tools().why_step, org, edge_key)
+
+
+@server.tool(
+    name="vuln_intel",
+    description=(
+        "Public threat intel for a CVE from the threatintel graph: CVSS + vector, EPSS (+"
+        "percentile), CISA KEV and ransomware use, CWEs, affected products, the ATT&CK "
+        "techniques our attack rules map it to, and the step likelihood we assign it. Pass org to "
+        "also see how many findings in that org carry it and how many enable an attack step. "
+        "USE to explain why a finding is (or is not) urgent. Do NOT use it to decide "
+        "reachability: a KEV 9.8 can still be unreachable (check attack_paths)."
+    ),
+)
+def vuln_intel(
+    cve: arg(M.VulnIntelInput, "cve", str),
+    org: arg(M.VulnIntelInput, "org", str | None) = None,
+) -> ToolResult:
+    return _call(_tools().vuln_intel, cve, org=org)
+
+
+@server.tool(
+    name="simulate_fix",
+    description=(
+        "PROVE a fix before proposing it: in a throwaway copy of the org graph, remove every "
+        "attack step enabled by the given fix_tokens, re-run attack_paths, and report which crown "
+        "jewels became unreachable and which paths remain. Never modifies the real graph. USE "
+        "after min_cut, or to test any remediation idea ('what if we patch these 3 findings?'). "
+        "Do NOT use for discovery; it costs a graph copy (~0.3 s)."
+    ),
+)
+def simulate_fix(
+    org: Org,
+    fix_tokens: arg(M.SimulateFixInput, "fix_tokens", list[str]),
+    k: arg(M.SimulateFixInput, "k", int) = 5,
+) -> ToolResult:
+    return _call(_tools().simulate_fix, org, fix_tokens, k=k)
+
+
+@server.tool(
+    name="run_cypher_readonly",
+    description=(
+        "LAST RESORT escape hatch: run a read-only openCypher query (FalkorDB dialect) on an org "
+        "graph. Writes are rejected by the server (GRAPH.RO_QUERY), a LIMIT is forced, a timeout "
+        "applies, and the call is logged. Labels: Internet, Asset, Software, Vuln, Finding, "
+        "Identity, Secret, DataStore, Control, Zone; attack layer: ATTACK_STEP {key, rule, "
+        "technique, likelihood, cost, fix_token, because}. USE only when no typed tool answers "
+        "the question. Do NOT use for paths, cuts or blast radius: the typed tools are capped, "
+        "faster and return evidence."
+    ),
+)
+def run_cypher_readonly(
+    org: Org,
+    query: arg(M.RunCypherInput, "query", str),
+    params: arg(M.RunCypherInput, "params", dict[str, Any] | None) = None,
+    limit: arg(M.RunCypherInput, "limit", int) = 50,
+) -> ToolResult:
+    return _call(_tools().run_cypher_readonly, org, query, params or {}, limit=limit)
+
+
+# --------------------------------------------------------------------- HTTP
+@server.custom_route("/health", methods=["GET"])
+async def health(_: Request) -> JSONResponse:
+    return JSONResponse(
+        {"status": "ok", "tools": sorted(t.name for t in await server.list_tools())}
+    )
+
+
+class ApiKeyMiddleware:
+    """Require `Authorization: Bearer <key>` or `X-API-Key: <key>` on every HTTP
+    request except /health. Constant-time comparison; fails closed."""
+
+    def __init__(self, app, api_key: str) -> None:
+        self.app, self.key = app, api_key.encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path") == "/health":
+            return await self.app(scope, receive, send)
+        headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+        given = headers.get("x-api-key") or headers.get("authorization", "").removeprefix("Bearer ")
+        if not hmac.compare_digest(given.encode(), self.key):
+            resp = JSONResponse({"error": "missing or invalid API key"}, status_code=401)
+            return await resp(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+
+def http_app(api_key: str, allowed_hosts: list[str]):
+    security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=[f"http://{h}" for h in allowed_hosts],
+    )
+    app = server.streamable_http_app(transport_security=security, stateless_http=True)
+    return ApiKeyMiddleware(app, api_key)
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(prog="reachable-mcp")
+    p.add_argument("--http", action="store_true", help="serve streamable HTTP instead of stdio")
+    p.add_argument("--host", default=os.environ.get("MCP_HOST", "127.0.0.1"))
+    p.add_argument("--port", type=int, default=int(os.environ.get("MCP_PORT", "8002")))
+    args = p.parse_args(argv)
+    logging.basicConfig(level=logging.INFO)
+
+    if not args.http:
+        server.run("stdio")
+        return
+    key = os.environ.get("MCP_API_KEY", "")
+    if len(key) < 16:
+        raise SystemExit("MCP_API_KEY must be set (>= 16 chars) to serve HTTP")
+    hosts = os.environ.get("MCP_ALLOWED_HOSTS", "localhost:*,127.0.0.1:*").split(",")
+    uvicorn.run(
+        http_app(key, [h.strip() for h in hosts if h.strip()]), host=args.host, port=args.port
+    )
+
+
+if __name__ == "__main__":
+    main()
