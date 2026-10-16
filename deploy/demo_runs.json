@@ -1,0 +1,19 @@
+{
+  "api": "https://reachable-api.devarv.dev",
+  "runs": {
+    "org_a_v1": "org_a:run:d83515921bd8",
+    "org_b_v1": "org_b:run:8fdd1f960d65",
+    "org_c_v1": "org_c:run:f973097ae0e6",
+    "org_a_v2": "org_a_v2:run:6fe91bc3bdbf"
+  },
+  "risk_acceptance": {
+    "id": "org_a:riskacc:01034b717cfa",
+    "findings": [
+      "org_a:finding:06859"
+    ],
+    "approved_by": "org_a:person:00021",
+    "created": 1704070800,
+    "expires": 1711846800
+  },
+  "recorded_at": "2026-10-16T07:19:55Z"
+}
