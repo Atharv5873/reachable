@@ -1,340 +1,294 @@
 # Reachable
 
-Triage security-scanner findings by **what an attacker can actually reach**.
+**Security triage by what an attacker can actually reach, not by CVSS.**
+Reachable loads a company's infrastructure, identities, secrets and scanner findings into
+FalkorDB, derives every attacker step as a graph edge, and has agents find the real
+Internet -> crown-jewel attack paths and the smallest set of fixes that cuts all of them.
 
-Reachable puts a company's infrastructure in a graph — assets and network
-reachability, software and vulnerabilities, identities/permissions/secrets, and
-crown-jewel data stores — alongside real public threat intelligence (CISA KEV,
-FIRST EPSS, NVD, MITRE ATT&CK®). Agents then find real attack paths from the
-Internet to crown jewels, and the minimum set of fixes that cuts them all.
+**Live demo: https://reachable-web.vercel.app** (replay mode: plays recorded agent runs, no model call needed)
 
-The same graph holds the **company layer** (teams, people, on-call, decision
-records, tickets: who owns it, why is it exposed, who approved it) and the
-agents' **memory** (runs, verdicts, risk acceptances with expiry, learned
-patterns, versioned playbooks).
+![The findings screen: a CVSS 9.8 KEV the scanner ranks #1,488 is unreachable; a CVSS 7.5 the scanner ranks #4,175 is Reachable's #1](docs/findings.png)
 
-> Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB).
-> **FalkorDB is the primary datastore and does the real work.** Postgres +
-> pgvector exists only as the baselines' store in the S7 comparison eval. All company
-> infrastructure, people and findings are **synthetic and fictional**; only the
-> threat intelligence is real public data (see
-> [`data/threatintel/ATTRIBUTION.md`](data/threatintel/ATTRIBUTION.md)).
+## The problem, and the result
 
-**Live:** https://reachable-web.vercel.app (replay mode by default: no model in
-the loop). API: `https://reachable-api.devarv.dev/health`. Deploy and operations:
-[`deploy/RUNBOOK.md`](deploy/RUNBOOK.md).
+A scanner sorts 6,862 findings by severity. But severity is a property of one bug, and
+risk is a property of *paths*: can an attacker get from the Internet, through your hosts,
+keys and roles, to the data that matters? Answering that is a graph problem.
 
-## Stack
+In the demo org, only 14 of 6,862 open findings lie on an attack path, scattered between
+scanner ranks #1,487 and #5,581: a CVSS-sorted list puts about 1,500 findings ahead of the
+first of them. Reachable's #1 is a **CVSS 7.5 the scanner ranks #4,175**: a bug on an
+internal CI runner that three separate attack paths funnel through, so one patch closes
+three paths. And the same 9.8 KEV bug (Ghostcat, CVE-2020-1938) appears at scanner ranks
+#1,487 and #1,488: one copy starts an attack path, the other sits in a quarantine zone that
+nothing leads to. Same CVE, same score, opposite answers.
 
-- Python 3.12 + [uv](https://docs.astral.sh/uv/) workspace, ruff, pytest.
-- FalkorDB (`falkordb/falkordb:latest`) — primary graph store, Browser UI on
-  `:3001`.
-- pgvector Postgres — baseline mirror only (S7: the SQL and vector-RAG baselines).
-- FastAPI backend: start a run, stream it live (SSE), read it back, drift, verdicts.
-- Next.js 16 web app (`apps/web`): TypeScript, Tailwind 4, shadcn/ui, Cytoscape.js
-  (dagre layout); talks to the API only through its own server-side proxy.
+**Take the graph away and the product stops working.** Same agent, same model, same prompt,
+with the FalkorDB tools answering "unavailable": attack-path recall in the top 10 goes from
+**100% to 0%** ([ablation](evals/results/ablation.md)).
 
-Host ports are offset from the defaults (FalkorDB `6380`, Browser `3001`,
-Postgres `5434`, API `8001`) so this runs beside other local stacks.
+## Tracks entered
 
-## Quick start
+All three:
 
-```bash
-cp .env.example .env          # set passwords; add NVD_API_KEY (recommended)
-make up                       # FalkorDB + Postgres + API, waits until healthy
-make intel                    # load the committed threat-intel snapshot
-make seed                     # generate + load the 3 orgs, write labels, derive ATTACK_STEP
-make test                     # unit + integration tests
-make gate-a                   # no-LLM evaluation of the graph tools -> evals/results/
-make mcp-smoke                # MCP server: list tools, call three
-make triage FAKE=1            # the four agents with a stub model (no keys, no network)
-make triage ORG=org_a SCAN=v1 # the four agents with real LLMs (GEMINI/GROQ keys in .env)
-make drift ORG=org_a          # the Sentinel: what scan v2 changed for an attacker (no LLM)
-make triage ORG=org_a SCAN=v2 # the rescan, with v1's memory (COLD=1: without it)
-make verdict RUN=<run id> FINDING=<finding id> DECISION=reject REASON="..."
-make memory-lift ORG=org_a    # Gate B: cold vs warm on the rescan -> evals/results/
-make api                      # FastAPI + SSE on :8001 (or `docker compose up -d api`)
-make web-install && make web  # the UI on http://localhost:3000 (copy apps/web/.env.example to .env.local)
-make web-test && make e2e     # proxy tests, client-bundle key scan, Playwright smoke
-make eval                     # S7: five prioritisers x six scans vs the oracle -> evals/results/comparison.md
-make ablation                 # S7: the same agent with its graph tools on vs off -> evals/results/ablation.md
-make eval-score               # recompute both tables from evals/results/raw/ (no model, no keys)
-```
-
-Then open the FalkorDB Browser at <http://localhost:3001> and try the queries in
-[`learning/S01.md`](learning/S01.md).
-
-To refetch threat intel from the network instead of using the committed
-snapshot (needs `NVD_API_KEY`):
-
-```bash
-make intel REFETCH=1
-```
-
-## Layout
-
-```
-reachable/
-  apps/api/            FastAPI: runs, live SSE stream, drift, verdicts (S5); UI views, ask (S6)
-  apps/web/            Next.js UI: seven screens, key-injecting proxy, Cytoscape graph (S6)
-  apps/mcp/            MCP server (stdio + streamable HTTP) over the graph tools
-  packages/core/       settings, schema, FalkorDB helpers, attack_rules.py
-  packages/intel/      fetch + normalise KEV/EPSS/NVD/ATT&CK; load `threatintel`
-  packages/orggen/     synthetic org generator, planters, networkx oracle, loaders
-  packages/graph/      ATTACK_STEP derivation (derive.py), typed read-only tools (tools.py,
-                       company_tools.py) and the agent memory repositories (memory.py)
-  packages/agents/     LiteLLM router, MCP -> LLM tools, LangGraph agents, Sentinel, CLI
-  packages/eval/       S7 comparison eval: five prioritisers, read-only baseline views, scoring
-  evals/               Gate A, Gate B (memory lift), S7 comparison + ablation: results/ (raw/ per run)
-  scripts/             mcp_smoke.py
-  data/threatintel/    committed filtered snapshot + ATTRIBUTION.md
-  data/orgs/           generated (gitignored except a tiny sample)
-  tests/               pytest (unit + integration + property)
-  learning/            teaching notes (S01.md ... S07.md)
-  runs/                agent run dumps (gitignored; the run itself lives in the graph)
-```
-
-## How it fits together
-
-1. **`make intel`** fetches public threat intel, filters it to a committed
-   snapshot, and loads a FalkorDB graph `threatintel`
-   (`CVE`, `CWE`, `Product`, `Technique`, `Tactic`).
-2. **`make seed`** generates three fictional orgs (`org_a` cloud-native SaaS,
-   `org_b` retail web, `org_c` hybrid), each its own FalkorDB graph. Real CVE
-   ids from the snapshot are denormalised onto `Vuln` nodes in each org graph.
-3. **Ground truth** (planted attack paths, decoys, min-cut, finding priority) is
-   computed by an independent networkx **oracle** and written to
-   `data/orgs/<org>/labels.json` — never loaded into FalkorDB.
-
-4. **`make derive`** (run by `make seed`) materialises the **attack layer**:
-   one Cypher query per attack rule MATCHes the rule's precondition and MERGEs an
-   `ATTACK_STEP` edge carrying `rule`, ATT&CK `technique`, `likelihood`,
-   `cost = -ln(likelihood)`, the `fix_token` that removes it, and `because`
-   (the evidence node ids). It also builds a node-split `FLOW` layer for
-   `algo.maxFlow` and labels nodes on crown-jewel paths `:CrownPath`.
-   A test asserts the derived Internet -> crown-jewel paths equal the oracle's,
-   hop for hop and fix token for fix token.
-5. **Tools** (`packages/graph/tools.py`, served by `apps/mcp`) answer questions
-   with FalkorDB doing the work. All are read-only (`GRAPH.RO_QUERY`), capped,
-   and return `{summary, data, evidence, queries, truncated}`:
-
-   | tool | how |
-   |---|---|
-   | `exposure_surface` | internet-exposed assets + exploitable / control-blocked vulns |
-   | `attack_paths` | `algo.SPpaths` over `ATTACK_STEP`, weight = -ln p: the k most likely paths |
-   | `blast_radius` | `algo.bfs` from a compromised node |
-   | `min_cut` | `algo.maxFlow` on the node-split FLOW layer + residual-graph cut recovery; `mode="fewest"` (count) or `"cheapest"` (effort 1-5 as capacity) |
-   | `choke_points` | `algo.betweenness` restricted to `:CrownPath` |
-   | `why_step` | one step's rule, technique, fix, and the structural edges behind it |
-   | `vuln_intel` | CVSS/EPSS/KEV/ransomware/CWE/ATT&CK from `threatintel` |
-   | `simulate_fix` | `GRAPH.COPY` to a scratch graph, drop the fixed steps, re-run paths |
-   | `run_cypher_readonly` | logged escape hatch: read-only, forced LIMIT, timeout |
-   | `owners` | owning team(s), members, and who is on call now |
-   | `decision_trail` | the ADRs that changed an asset (approver, date) + its live exposure |
-   | `company_query` | fixed intents: who_owns / who_is_on_call / why_exposed / who_approved / fix_history |
-   | `triage_memory` | live vs expired risk acceptances, past verdicts, patterns reaching the findings |
-   | `scan_findings` | the scan (version, time), crown jewels, open findings ranked by what they enable |
-   | `playbooks` | the versioned playbook in force per ATT&CK technique at `as_of` |
-   | `exposure_drift` | diff two scans' Internet -> crown-jewel path sets: new / closed / cost-changed; `new_crown_path` only for a brand-new path |
-
-   A derivation query, for flavour (`exploit_remote_service`, T1210):
-
-   ```cypher
-   MATCH (src:Asset)-[r:CAN_REACH]->(dst:Asset)-[:RUNS]->(s:Software)-[:HAS_VULN]->(v:Vuln),
-         (f:Finding)-[:ON]->(dst), (f)-[:OF]->(v)
-   WHERE v.av IN $network_vectors
-     AND (size(s.ports) = 0 OR r.port IN s.ports)
-     AND NOT (:Control)-[:MITIGATES {asset: dst.id}]->(v)
-   WITH DISTINCT src, dst, f.id AS token, v.likelihood AS lk, [f.id, v.id, s.id] AS because
-   MERGE (src)-[e:ATTACK_STEP {key: $rule + '|' + token + '|' + src.id + '|' + dst.id}]->(dst)
-   SET e.rule = $rule, e.technique = $technique, e.fix_token = token,
-       e.likelihood = lk, e.cost = -log(lk), e.because = because
-   ```
-
-6. **Company layer and memory** (S3). The generator also plants teams, people
-   (invented names), weekly on-call slots, an ADR for every planted entry point
-   and shared funnel, and ticket history; and a little synthetic prior memory.
-   At runtime, `reachable_graph/memory.py` is the only code that writes to an
-   org graph: fixed, parameterised CREATE/MERGE queries on memory labels only
-   (a test proves infrastructure is untouched). Derivation only uses findings
-   with `status = 'open'`, so a fixed finding stops being an attack step.
-
-7. **Gate A** (`make gate-a`) grades the tools against the oracle labels with no
-   LLM: planted-path recall by difficulty, decoys in top paths, min-cut vs the
-   oracle (each cut proven by `simulate_fix`), evidence validity, latency. See
-   [`evals/results/gate_a.md`](evals/results/gate_a.md).
-
-8. **Agents** (S4, `packages/agents`): Triage -> Pathfinder -> Fixer -> Reporter as
-   a LangGraph StateGraph. Each agent is an LLM shown the MCP tool schemas; it
-   **chooses** the tools, every call goes over MCP, and the model's answer is
-   grounded against the real tool results (made-up ids, claims and numbers are
-   dropped). Agents hand off through the graph: each writes its output on the
-   `Run` node and the next reads it back; every tool and model call is an
-   `AgentStep` carrying the Cypher it ran. A run reasons at the scan's time
-   (`as_of`, from the `Scan` node), never the wall clock. LiteLLM routes Gemini
-   Flash -> Groq -> an optional paid reserve, with per-run budgets and a cache.
-
-   ```bash
-   python -m reachable_agents check                 # probe each configured model
-   make triage ORG=org_a SCAN=v1 [AS_OF=2023-12-01] # writes runs/<run_id>.md + .json
-   python -m reachable_agents replay --org org_a --run-id <id>   # re-render from the graph
-   ```
-
-   Free tiers are tight (Gemini: 20 requests/day per model; a run is ~12): set
-   `LLM_RESERVE_MODEL` + `LLM_RESERVE_API_KEY` for demos. See
-   [`learning/S04.md`](learning/S04.md).
-
-9. **Memory that changes behaviour, drift, and a live stream** (S5).
-   A v2 run starts with the **Sentinel** (no LLM): it carries the org's memory into
-   the rescan's graph, flags arriving findings a learned pattern matches (before
-   any path search), diffs the two scans' crown-jewel path sets
-   (`exposure_drift`) and raises an `Alert` only for a brand-new crown path.
-   Then the agents use the three kinds of memory:
-
-   * **episodic**: a finding whose earlier verdict still stands is carried, not
-     re-investigated; the last run's owner routing is reused while the on-call
-     slot covers the clock;
-   * **semantic**: the Reporter learns "image X was the way in" patterns; the next
-     scan's Sentinel flags new hosts built from it on arrival;
-   * **procedural**: an analyst's rejected verdict with a reusable reason becomes a
-     new playbook version (old one kept, `SUPERSEDES`) whose rule later runs apply.
-
-   Gate B ([`evals/results/memory_lift.md`](evals/results/memory_lift.md)): on the
-   same rescan, warm (v1's memory) vs cold (fresh) investigates fewer findings with
-   fewer calls and reaches the same verified, minimal fix set. A run is ~26k input
-   tokens and 7 LLM calls (S4: ~61k, 12). See [`learning/S05.md`](learning/S05.md).
-
-10. **The UI** (S6, `apps/web`). Seven screens in demo order, every one reading
-    the real graph: **01 Findings** (the same findings sorted by CVSS and by
-    reachability: a CVSS 5.0 that starts the most likely path ranks #1, a 9.8 KEV
-    in quarantine ranks nowhere), **02 Attack paths** (Cytoscape, Internet on the
-    left, each edge an ATT&CK technique; click it for the `why_step` evidence),
-    **03 Fix plan** (fewest vs cheapest cut, owners, on-call, ADRs, drafted
-    tickets, "one fix, many paths"; *Simulate* flips the crown jewels to SAFE),
-    **04 Investigation** (the run's steps live over SSE, or replayed from the
-    graph at their real pace), **05 Company brain** (English -> one fixed intent),
-    **06 Drift** (v1 -> v2: the one new path, what memory recognised, Gate B), and
-    **07 Evals**. **Replay** is the default mode: it reads a finished run from the
-    graph and never calls a model, which is what the demo video is recorded
-    against. The browser never sees the API key: it calls `/api/r/*` on its own
-    origin, and a server-only route handler adds the key and relays the SSE
-    stream (with `Last-Event-ID`). One colour rule carries the design: ember red
-    means "an attacker can get there", and nothing else is red. See
-    [`learning/S06.md`](learning/S06.md).
-
-11. **Does the graph earn its place?** (S7, `packages/eval`, `make eval`). The same
-    labelled findings, ranked five ways and scored against the oracle: **severity_sort**
-    (CVSS), **smart_score** (CVSS + EPSS + KEV + Internet exposure, a WAF discount; no
-    graph), **vector_rag** and **sql_agent** (the same LLM, prompt, budgets and output
-    schema as reachable, with pgvector search or read-only SQL over the Postgres mirror
-    instead of graph tools), and **reachable** (the FalkorDB tools over MCP). Metrics:
-    NDCG@10, P@10, attack-path recall@10, decoys@10, paths cut per fix vs the oracle min
-    cut, cost and wall time, on the three v1 scans and the three held-out v2 scans, over
-    three provider seeds (S9: one by default). The **ablation** (`make ablation`) runs the reachable agent with
-    its graph tools answering "unavailable": the cleanest test of "take FalkorDB out and
-    the product breaks". The baselines read only `eval_<scan>` views through a read-only
-    role (no company layer, no memory, no label or path field; a test proves it). Results:
-    [`evals/results/comparison.md`](evals/results/comparison.md),
-    [`evals/results/ablation.md`](evals/results/ablation.md); every number recomputes from
-    `evals/results/raw/` with `make eval-score`. See [`learning/S07.md`](learning/S07.md).
-    Headline (66 runs): reachable NDCG@10 1.00, path recall@10 100% (held-out v2:
-    1.00 / 100%; S7 was 0.82 / 0.81 before S8's ranking step); severity_sort and
-    smart_score 0 / 0% (smart_score puts a decoy in every top 10); vector_rag 0.04 / 3%;
-    sql_agent 0.03 / 4%. Ablation: graph off drops path recall@10 from 100% to 0%.
-
-12. **Polish, guarded by the eval** (S8). Findings rank by **path-criticality**: the
-    sensitivity-weighted number of distinct Internet -> crown-jewel paths their step
-    lies on, ties going to a route not yet covered
-    ([`criticality.py`](packages/graph/src/reachable_graph/criticality.py), computed
-    from the graph at runtime, never from labels; `scan_findings`, the Pathfinder and
-    the eval's ranking step all use it). The fix plan defaults to `min_cut`'s
-    `simulate_fix`-verified set. Gates and the eval only say PASS about a **healthy**
-    run (complete, traced, LLM tokens > 0, no tool outage): a 0-token outage run is
-    DEGRADED. The LLM rate limiter is on by default (`LLM_RPM=60`; 0 disables).
-    `test_mcp` runs on its own seeded graphs. Eval: NDCG@10 0.82 -> 1.00, P@10 78% ->
-    87% (the oracle's ceiling), paths cut per fix 1.09 -> 1.16 (the oracle's), path
-    recall 100%, held-out v2 0.81 -> 1.00. See [`learning/S08.md`](learning/S08.md)
-    for why that is not overfitting.
-
-13. **A credible eval** (S9). Crown jewels now carry a **sensitivity tier**
-    (critical: customer / payment data; high: credentials, source, deploy secrets;
-    medium: ops / log stores), two or three per org, so the ground truth's priority
-    is a real gradient instead of a wall of ties. Only the target of some routes'
-    last hop moved: the attack paths and the min cut are identical to S8's
-    (`tests/test_sensitivity.py` pins the pre-S9 fingerprints; Gate A unchanged).
-    The baselines never see the tier (the eval views drop the column; the leakage
-    test checks it). [`comparison.md`](evals/results/comparison.md) now **leads with
-    the structural metrics**, which cannot be won by sharing the oracle's definition
-    of priority: path recall@10 (reachable 100%, baselines 0-10%), decoys@10 (0% vs
-    smart_score's 33%), paths cut per fix (1.16 = the oracle's min cut, vs 0-0.30),
-    plus the ablation (graph off: 100% -> 0%). NDCG@10 (reachable 1.00; the same
-    ranker ignoring tiers would score 0.95) is secondary, with the caveat stated:
-    our ranker and the ground truth both define importance as reachability to the
-    crown jewels. The findings, fix plan and graph show each target's tier as a
-    badge. See [`learning/S09.md`](learning/S09.md).
-14. **Deployed** (S10, `deploy/`). The API, FalkorDB and Postgres run on a VPS
-    behind **Caddy** (automatic Let's Encrypt TLS, http -> https, the only public
-    listener); the databases and the API have no host port at all (Docker's
-    iptables rules bypass ufw, so an unpublished port is the only private one).
-    The UI is on **Vercel** (fra1, next to the VPS); its route handler holds the
-    API key server-side, and a crawl of the deployed site's JS proves the key is
-    in none of it. Replay plays a run from one `GET /runs/{id}/events` (now ending
-    in `report_ready`), never a long-lived stream, so a Vercel function timeout
-    cannot touch the demo; a live run streams best-effort and falls back to
-    polling `/events?after=<seq>`. The demo runs were recorded once on the VPS
-    (`deploy/demo_runs.json`), FalkorDB's AOF volume keeps them across restarts,
-    and Gate C (`tests/e2e/gate-c.spec.ts`) runs the seven demo steps against the
-    live site, at desktop size and emulating a phone. See
-    [`learning/S10.md`](learning/S10.md).
-
-## API
-
-```bash
-make api                                    # or: docker compose up -d api   (:8001)
-curl -X POST localhost:8001/runs -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
-     -d '{"org": "org_a", "scan": "v2"}'    # -> {"run_id": ..., "stream": "/runs/<id>/stream"}
-curl -N localhost:8001/runs/<id>/stream -H "X-API-Key: $KEY"   # Server-Sent Events
-```
-
-| endpoint | |
+| Track | How Reachable fits |
 |---|---|
-| `POST /runs` `{org, scan, fake?, cold?}` | start a run in the background; returns `run_id` |
-| `GET /runs/{id}/stream` | SSE: `agent_entered`, `tool_called` (with the Cypher + timing), `llm_called`, `memory`, `drift_checked`, `alert_raised`, `triage_done`, `path_found`, `finding_ranked`, `fix_chosen`, `report_written`, `report_ready`; resumable with `Last-Event-ID` |
-| `GET /runs/{id}` | the run read back from the graph (outputs + trace) |
-| `POST /runs/{id}/verdict` | an analyst's accept / reject (procedural memory) |
-| `GET /orgs`, `GET /orgs/{org}/drift` | orgs, scans, recent runs and alerts; the v1 -> v2 drift |
-| `GET /orgs/{org}/findings?scan=&run_id=` | the findings board: scanner order vs reachability order, a reason per row |
-| `GET /runs/{id}/subgraph?finding=&context=&max_nodes=` | the run's attack paths + both min cuts as Cytoscape elements (capped) |
-| `GET /runs/{id}/fixplan?mode=fewest\|cheapest` | a fix set with owners, on-call, ADRs and drafted tickets |
-| `POST /orgs/{org}/simulate`, `GET /orgs/{org}/why_step` | `simulate_fix` on a scratch copy; one step's evidence |
-| `POST /orgs/{org}/ask` `{question, mode}` | English -> one fixed `company_query` intent (model, or rules with no model) |
-| `GET /evals` | `evals/results/*.json` |
+| **01 Agents That Act on Connected Data** | Agents pick graph tools over MCP (`algo.SPpaths`, `algo.maxFlow`, `algo.bfs`, `algo.betweenness`), rank findings by multi-hop reachability, choose a min-cut fix set, verify it on a copy of the graph, and show the evidence for every hop. |
+| **02 Agent Memory and Coordination** | Episodic, semantic and procedural memory live in each tenant's graph; agents hand off only through the `Run` node; a rescan starts from the last scan's memory (8 verdicts carried, 1 finding investigated vs 9 cold, 16 tool calls vs 28: [Gate B](evals/results/memory_lift.md)). |
+| **03 Company Brain** | Teams, people, on-call rotas, ADRs and tickets sit in the same graph as the infrastructure, so every fix comes with its owner, who is on call now, and the decision that opened the exposure (who approved it, when). |
 
-The stream reads the run's trace in the graph; it never talks to the agents, so a
-slow or late client never slows a run. At most two agent runs execute at once
-(`API_MAX_RUNS`); a third `POST /runs` gets `429` with `Retry-After`. Auth: `Authorization: Bearer <key>` or
-`X-API-Key` (`API_KEY`, else `MCP_API_KEY`); `/health` is open.
+## Quickstart (local, from a clean clone)
 
-## MCP server
+**Prerequisites:** Docker with Compose v2, [uv](https://docs.astral.sh/uv/) (it installs
+Python 3.12 for you), Node.js 20.9+ with npm, and GNU make (Windows: `winget install
+ezwinports.make`). Free host ports 6380, 3001, 5434, 8001, 8002 and 3000.
+
+**Keys:** `MCP_API_KEY` in `.env` protects the API and the MCP server (any random string
+of 16+ characters; the UI uses the same key). `GEMINI_API_KEY` is needed only for runs
+with a real model ([free key](https://aistudio.google.com/apikey)); everything else,
+including a full agent run with the stub model, works without it.
 
 ```bash
-make mcp                                   # stdio: point an MCP host at `uv run reachable-mcp`
-make mcp-http                              # streamable HTTP on :8002/mcp (MCP_API_KEY in .env)
-docker compose up -d mcp                   # same, containerised
-make mcp-smoke URL=http://localhost:8002/mcp
+git clone https://github.com/Atharv5873/reachable.git && cd reachable
+cp .env.example .env    # set MCP_API_KEY and the two passwords; add GEMINI_API_KEY if you have one
 ```
 
-HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is open.
+| step | what it does | what you should see |
+|---|---|---|
+| `make up` | builds and starts FalkorDB (+ Browser), Postgres, the API and the MCP server; waits until healthy | four containers `Healthy` (first build: a few minutes) |
+| `make intel` | loads the committed threat-intel snapshot into graph `threatintel` (offline) | `{'cves': 3136, ... 'techniques': 9, 'tactics': 7}` |
+| `make seed` | generates the three synthetic orgs (v1 + v2 scans), writes the oracle's labels, loads FalkorDB + Postgres, derives the attack layer | per-org counts, then `derive` lines with `ATTACK_STEP` counts (about 1-2 min) |
+| `make triage FAKE=1` | the agents (Triage, Pathfinder, Fixer, Reporter) on org_a scan v1 with a deterministic stub model: no key, no network | a run id, then the report path `runs/<run_id>.md` |
+| `make triage ORG=org_a` | the same with the real model (needs `GEMINI_API_KEY`; about a cent) | a run id, a handful of model calls, the report |
 
-See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md),
-[`learning/S03.md`](learning/S03.md), [`learning/S04.md`](learning/S04.md),
-[`learning/S05.md`](learning/S05.md), [`learning/S06.md`](learning/S06.md), [`learning/S07.md`](learning/S07.md) and [`learning/S08.md`](learning/S08.md) for the concepts, the Cypher, the
-max-flow / min-cut idea, the company brain and agent memory, and Browser
-queries to run now.
+Then the UI:
 
-## Attack rules
+```bash
+cp apps/web/.env.example apps/web/.env.local   # set REACHABLE_API_KEY to your MCP_API_KEY
+make web-install && make web                   # http://localhost:3000
+```
 
-The nine attacker-step rules (precondition → ATT&CK technique) live in
-[`packages/core/attack_rules.py`](packages/core/src/reachable_core/attack_rules.py).
-Both the oracle and the later Cypher derivation implement this one spec, so they
-can't silently disagree.
+Open <http://localhost:3000/findings>. The screens are in demo order (01 Findings ...
+07 Evals). The FalkorDB Browser is at <http://localhost:3001> (password: `FALKORDB_PASSWORD`).
+
+> **Try the live site instead.** https://reachable-web.vercel.app needs no setup. To
+> see exactly what the demo video shows, pin the recorded runs: org_a
+> [findings](https://reachable-web.vercel.app/findings?org=org_a&scan=v1&run=org_a:run:d83515921bd8),
+> [attack paths](https://reachable-web.vercel.app/paths?org=org_a&scan=v1&run=org_a:run:d83515921bd8&f=org_a:finding:06856),
+> [fix plan](https://reachable-web.vercel.app/fixes?org=org_a&scan=v1&run=org_a:run:d83515921bd8),
+> [drift v1 -> v2](https://reachable-web.vercel.app/drift?org=org_a&scan=v2&run=org_a_v2:run:6fe91bc3bdbf).
+> Best on a laptop screen.
+
+More: `make test` (185 tests; integration tests skip if FalkorDB is down), `make gate-a`
+(grades the graph tools against the oracle, no LLM), `make drift ORG=org_a` then
+`make triage ORG=org_a SCAN=v2` (the rescan with memory), `make eval-score` (recomputes
+every eval table from the committed raw outputs, no keys).
+
+## The graph data model
+
+![Graph data model](docs/data-model.svg)
+
+**One graph per tenant and scan.** Each org is its own FalkorDB graph (`org_a`, and the
+week-later rescan `org_a_v2`), holding that org's infrastructure, attack layer, company
+layer and agent memory together. Tenants cannot see each other, and a rescan is a new
+graph that memory is carried into, so v1 and v2 can be diffed. A shared `threatintel`
+graph holds the public intel (`CVE`, `CWE`, `Product`, `Technique`, `Tactic`); FalkorDB
+does not join across graphs, so the facts a step needs (CVSS, EPSS, KEV, CWE, attack
+vector) are copied onto each org's `Vuln` nodes at load time.
+
+* **Infrastructure:** `Internet -[:EXPOSES]-> Asset`, `Asset -[:CAN_REACH {port}]-> Asset`,
+  `Asset -[:RUNS]-> Software -[:HAS_VULN]-> Vuln`, `Finding -[:ON]-> Asset`,
+  `Finding -[:OF]-> Vuln`, `Control -[:MITIGATES {asset}]-> Vuln`, `Asset -[:HOLDS]-> Secret
+  -[:UNLOCKS]-> Asset|Identity|DataStore`, `Asset -[:ASSUMES]-> Identity`,
+  `Identity -[:CAN_ASSUME]-> Identity`, `Identity -[:CAN]-> DataStore {crown_jewel, tier}`.
+* **The attack layer (`ATTACK_STEP`).** Nine rules ([`attack_rules.py`](packages/core/src/reachable_core/attack_rules.py)),
+  each one Cypher query, turn structural facts into attacker steps: an edge between attack
+  states (`Internet`, `Asset`, `Secret`, `Identity`, `DataStore`) carrying the rule, its
+  ATT&CK technique, `likelihood`, `cost = -ln(likelihood)` (so the shortest path is the most
+  likely one), the `fix_token` that removes it, and `because` (the evidence node ids). Only
+  `status = 'open'` findings produce steps, so fixing one removes it. Next to it,
+  a node-split `FLOW` layer (each fix token becomes a `FixIn -> FixOut` gate of capacity 1,
+  or its effort) for max-flow, and a `:CrownPath` label on nodes that lie on some
+  Internet -> crown-jewel path.
+* **Company layer:** `Team -[:OWNS]-> Asset|DataStore`, `Person -[:MEMBER_OF]-> Team`,
+  `Person -[:ON_CALL]-> OnCall -[:FOR]-> Team`, `ADR -[:CHANGED]-> Asset`,
+  `ADR -[:APPROVED_BY]-> Person`, `Ticket -[:FIXES]-> Finding`, and a `Scan` node whose time
+  is the clock every run reasons at (`as_of`).
+* **Agent memory:** `Run -[:HAS_STEP]-> AgentStep -[:NEXT]-> AgentStep -[:RESULT]-> ToolOutput`;
+  `Run -[:HAS_OUTPUT]-> Triage | PathAnalysis | FixPlan | Report`, each `-[:BUILT_ON]->` the
+  previous agent's output; `Triage -[:HAS_VERDICT]-> Verdict -[:ON]-> Finding`;
+  `RiskAcceptance {expires} -[:ON]-> Finding`; `Pattern -[:ABOUT]-> Software|Vuln`;
+  `Technique -[:HANDLED_BY]-> Playbook -[:SUPERSEDES]-> Playbook`; `Verdict -[:LED_TO]-> Playbook`;
+  `Run -[:RAISED]-> Alert`, and `Drift`.
+
+org_a v1 at a glance: 1,758 assets, 6,862 open findings, 3,453 software instances, ~30,600
+`ATTACK_STEP` edges, 14 findings on a crown-jewel path, 9 attack paths, min cut 7.
+
+## The Cypher and graph algorithms it depends on
+
+All tools are in [`packages/graph/src/reachable_graph/tools.py`](packages/graph/src/reachable_graph/tools.py)
+(and `company_tools.py`), run read-only (`GRAPH.RO_QUERY`), and return the Cypher they ran
+with their result, so every answer in the UI can show its query.
+
+| what | FalkorDB feature | what it does for the product |
+|---|---|---|
+| attack paths | `algo.SPpaths` over `ATTACK_STEP`, `weightProp: 'cost'` | the k most likely Internet -> crown-jewel paths (cost = -ln p, so lowest total cost = highest probability) |
+| minimum fix set | `algo.maxFlow` over the node-split `FLOW` layer | max flow = the minimum number of fixes (or minimum effort); the cut itself is recovered from the residual graph and must equal the max flow, or the tool refuses to answer |
+| blast radius | `algo.bfs(a, depth, 'ATTACK_STEP')` | everything an attacker holding one node can reach next |
+| choke points | `algo.betweenness` restricted to `:CrownPath` nodes | the hops most attack paths go through |
+| fix verification | `GRAPH.COPY` to a scratch graph, delete the fixed steps, re-run `algo.SPpaths` | proves a fix set disconnects every crown jewel before it is recommended |
+| derivation | 9 `MATCH ... MERGE (src)-[:ATTACK_STEP]->(dst)` rules, then 3 `CREATE` passes for `FLOW` | builds the attack layer and the max-flow network from the raw facts |
+| ranking | path-criticality over the paths above | a finding's rank = the tier-weighted number of distinct crown paths its step lies on ([`criticality.py`](packages/graph/src/reachable_graph/criticality.py)) |
+| drift | `algo.SPpaths` on v1 and v2 | new / closed / cost-changed crown paths between two scans; an alert only for a brand-new path |
+| company + memory | parameterised `MATCH` on the company and memory labels | owners and on-call at the scan's time, the ADR that opened an exposure, live vs expired risk acceptances, the playbook version in force |
+
+One derivation rule (`exploit_remote_service`, T1210):
+
+```cypher
+MATCH (src:Asset)-[r:CAN_REACH]->(dst:Asset)-[:RUNS]->(s:Software)-[:HAS_VULN]->(v:Vuln),
+      (f:Finding)-[:ON]->(dst), (f)-[:OF]->(v)
+WHERE v.av IN $network_vectors
+  AND (size(s.ports) = 0 OR r.port IN s.ports)
+  AND NOT (:Control)-[:MITIGATES {asset: dst.id}]->(v)
+WITH DISTINCT src, dst, f.id AS token, v.likelihood AS lk, [f.id, v.id, s.id] AS because
+MERGE (src)-[e:ATTACK_STEP {key: $rule + '|' + token + '|' + src.id + '|' + dst.id}]->(dst)
+SET e.rule = $rule, e.technique = $technique, e.fix_token = token,
+    e.likelihood = lk, e.cost = -log(lk), e.because = because
+```
+
+The attack paths and the min cut:
+
+```cypher
+MATCH (s:Internet {id: $source}) MATCH (t:DataStore {crown_jewel: true})
+CALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['ATTACK_STEP'],
+                   weightProp: 'cost', pathCount: $k, maxLen: $max_hops})
+YIELD path, pathWeight
+RETURN t.id, pathWeight, path ORDER BY pathWeight
+
+MATCH (s:Internet) MATCH (t:DataStore) WHERE t.id IN $targets
+WITH s, collect(t) AS ts
+CALL algo.maxFlow({sourceNodes: [s], targetNodes: ts,
+                   capacityProperty: $cap_prop, relationshipTypes: ['FLOW']})
+YIELD edges, edgeFlows, maxFlow
+RETURN maxFlow, edges, edgeFlows
+```
+
+Not used: WCC and community detection (the product's questions are about paths and cuts,
+not clusters). The derivation is checked against an independent networkx oracle: a test
+asserts the two produce identical Internet -> crown-jewel path sets, hop for hop.
+
+## How the agents and memory work
+
+![Architecture](docs/architecture.svg)
+
+A run is a LangGraph pipeline of up to five agents: **Sentinel** (no LLM, first on a rescan: it carries
+memory into the new graph, flags arrivals a learned pattern matches, diffs the crown paths
+and raises an alert only for a new one), **Triage**, **Pathfinder**, **Fixer** and
+**Reporter**. The run itself makes the deterministic graph calls (findings, paths, both
+min cuts, owners, the fix simulation); each LLM agent is shown the MCP schemas of its own
+tool subset (Pathfinder: `attack_paths`, `blast_radius`, `why_step`; Fixer: `owners`,
+`decision_trail`, `simulate_fix`), chooses its follow-up calls, and judges. Every call goes
+over MCP. The model's answer is grounded against the real tool results: ids, numbers and
+claims that are not in them are dropped.
+
+Agents never call each other. Each writes its output to the `Run` node and the next reads
+it back; every tool and model call is an `AgentStep` with the Cypher it ran, which is what
+the UI streams (SSE) and replays. `memory.py` is the only code that writes to an org graph
+at runtime (fixed, parameterised queries on memory labels; a test proves infrastructure is
+never touched). Three kinds of memory change what the next run does:
+
+* **episodic:** a finding whose earlier verdict still stands is carried, not re-investigated; a risk acceptance suppresses its finding until it expires;
+* **semantic:** the Reporter learns "image X was the way in" patterns, and the next scan's Sentinel flags new hosts built from that image on arrival;
+* **procedural:** an analyst's rejected verdict with a reusable reason becomes a new playbook version (the old one kept, `SUPERSEDES`) that later runs apply.
+
+Models: Gemini 3.5 Flash-Lite through LiteLLM (Groq fallback), with per-run budgets. A real
+run is about 6 model calls and one or two cents.
+
+## The eval: does the graph earn its place?
+
+The same labelled findings, ranked five ways on six scans (three development v1, three
+held-out v2) and scored against an independent networkx oracle
+([`comparison.md`](evals/results/comparison.md), every number recomputable with `make eval-score`):
+
+| prioritiser | path recall@10 | decoys@10 (lower is better) | paths cut / fix | NDCG@10 (secondary) |
+|---|---|---|---|---|
+| severity_sort (CVSS) | 0% | 0% | 0.00 | 0.00 |
+| smart_score (CVSS + EPSS + KEV + exposure) | 0% | 33% | 0.00 | 0.00 |
+| vector_rag (same LLM, pgvector search) | 0% | 0% | 0.00 | 0.00 |
+| sql_agent (same LLM, read-only SQL) | 10% | 11% | 0.30 | 0.08 |
+| **reachable (FalkorDB tools over MCP)** | **100%** | **0%** | **1.16** | **1.00** |
+| *oracle* | 100% | 0% | 1.16 | 1.00 |
+
+We lead with the structural metrics because they cannot be won by sharing the oracle's
+definition of priority: did the top 10 cover the planted attack paths, stay off the planted
+decoys, and come with a fix set that cuts every path with as few fixes as the oracle's min
+cut? **NDCG caveat:** our ranker and the ground truth both define importance as weighted
+reachability to the crown jewels, so 1.00 checks the derivation, not a discovery
+([why](evals/comparison_notes.md)). Held-out v2 scores the same as v1; the baselines never
+see labels, paths, memory or tiers (`tests/test_eval_leakage.py`).
+
+**Ablation** (org_a v1, [`ablation.md`](evals/results/ablation.md)): the same agent with its graph tools answering "unavailable".
+
+| | path recall@10 | NDCG@10 | decoys@10 | fix set cuts every path |
+|---|---|---|---|---|
+| graph on | 100% | 1.00 | 0% | 100% |
+| graph off | 0% | 0.00 | 0% | 0% |
+
+Limits, stated: three synthetic estates, one provider seed for the headline (S8 ran three:
+reachable had zero spread), and the deterministic baselines are free and instant while a
+reachable run costs about $0.007.
+
+## Data and attribution
+
+**No real or private data.** Every company, host, person, team, secret, finding and
+attack path is synthetic and fictional, generated by `packages/orggen` (invented names, no
+real companies or people). Only the threat intelligence is real public data, committed
+as a filtered snapshot ([`data/threatintel/ATTRIBUTION.md`](data/threatintel/ATTRIBUTION.md)):
+
+* **CISA KEV** (U.S. Government work, public domain).
+* **FIRST EPSS**: EPSS data courtesy of FIRST.org (https://www.first.org/epss), free to use with attribution.
+* **NIST NVD CVE API 2.0**: this product uses data from the NVD API but is not endorsed or certified by the NVD.
+* **MITRE ATT&CK®** (techniques and tactics only): © The MITRE Corporation, under MITRE's Terms of Use; ATT&CK® is a registered trademark of The MITRE Corporation. Reachable is not affiliated with or endorsed by MITRE.
+
+## AI-use disclosure
+
+Reachable was built with AI coding assistants, as the rules allow. The author used Claude
+to draft a detailed implementation prompt for each build session (S1-S11) and Claude Code
+(Claude Opus) to implement each session against it. The author set the scope and the
+design decisions (the attack-graph model, one graph per tenant and scan, cost = -ln p,
+node-split max-flow for the min cut, the independent networkx oracle, the structural-first
+eval and the ablation), reviewed every session's output and results, and directed the
+fixes. Each session has a teaching note in [`learning/`](learning/) that the author worked
+through, so they can explain the graph model, the Cypher, the algorithms and the
+architecture. Automated code review (also AI) caught real bugs along the way, e.g. a
+cross-site request hole in the UI's API proxy, fixed in S6.
+
+## Deployment and fallback
+
+The live stack: the API, FalkorDB and Postgres on a VPS behind Caddy (TLS; the databases
+and the API have no public port), the UI on Vercel (its server-side route handler holds the
+API key; a crawl of the deployed JS proves the key is not in it). Every command, check and
+the fallback are in [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md). If the live site is ever down,
+the local quickstart above reproduces the whole demo with no network beyond the model
+(or none at all with `FAKE=1`).
+
+## Repository map
+
+```
+apps/api/          FastAPI: runs, SSE stream, views for the UI, verdicts, ask
+apps/web/          Next.js 16 UI: seven screens, key-holding proxy, Cytoscape attack graph
+apps/mcp/          MCP server (stdio + streamable HTTP) over the graph tools
+packages/core/     settings, schema, attack_rules.py (the one rule spec)
+packages/intel/    fetch + normalise KEV / EPSS / NVD / ATT&CK
+packages/orggen/   synthetic org generator, planted paths and decoys, networkx oracle, loaders
+packages/graph/    ATTACK_STEP derivation, typed read-only tools, criticality, memory.py
+packages/agents/   LiteLLM router, MCP -> LLM adapter, LangGraph agents, Sentinel, CLI
+packages/eval/     the comparison eval: five prioritisers, baseline views, scoring
+evals/             Gate A (tools vs oracle), Gate B (memory lift), comparison + ablation results
+deploy/            VPS compose, Caddyfile, prod.sh, RUNBOOK.md, demo_runs.json
+learning/          S01-S11 teaching notes: concepts, Cypher, gotchas, judge Q&A
+```
+
+API endpoints, the MCP server and every make target are documented in the
+[`Makefile`](Makefile), [`learning/S05.md`](learning/S05.md) (API) and
+[`learning/S02.md`](learning/S02.md) (MCP).
