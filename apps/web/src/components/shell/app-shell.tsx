@@ -65,15 +65,16 @@ function Sidebar() {
   const pathname = usePathname();
   const ws = useWorkspace();
   return (
-    <aside className="flex w-[228px] shrink-0 flex-col border-r border-line bg-panel">
-      <div className="flex items-center gap-2.5 px-5 pt-5 pb-6">
+    // Below md (a phone) the sidebar is an icon rail, so the screen keeps its width.
+    <aside className="flex w-14 shrink-0 flex-col border-r border-line bg-panel md:w-[228px]">
+      <div className="flex items-center gap-2.5 px-4 pt-5 pb-6 md:px-5">
         <Logo />
-        <div>
+        <div className="hidden md:block">
           <p className="text-[17px] leading-none font-semibold tracking-tight">Reachable</p>
           <p className="mt-1 text-2xs text-fg-3">Decisions you can trace</p>
         </div>
       </div>
-      <nav className="flex flex-col gap-0.5 px-3" aria-label="Screens">
+      <nav className="flex flex-col gap-0.5 px-1.5 md:px-3" aria-label="Screens">
         {NAV.map((item) => {
           const active = pathname === item.href || (pathname === "/" && item.href === "/findings");
           const Icon = item.icon;
@@ -81,14 +82,15 @@ function Sidebar() {
             <Link
               key={item.href}
               href={ws.href(item.href)}
+              aria-label={item.label}
               className={cn(
                 "group flex items-center gap-3 rounded-md px-2.5 py-2 transition-colors",
                 active ? "bg-raised text-fg" : "text-fg-2 hover:bg-panel-2 hover:text-fg",
               )}
             >
-              <span className={cn("mono w-5 text-2xs", active ? "text-ember" : "text-fg-3")}>{item.n}</span>
-              <Icon className="size-4 shrink-0 opacity-80" aria-hidden />
-              <span className="min-w-0">
+              <span className={cn("mono hidden w-5 text-2xs md:inline", active ? "text-ember" : "text-fg-3")}>{item.n}</span>
+              <Icon className={cn("size-4 shrink-0 opacity-80", active && "max-md:text-ember")} aria-hidden />
+              <span className="hidden min-w-0 md:block">
                 <span className="block text-sm leading-tight font-medium">{item.label}</span>
                 <span className="block text-2xs leading-tight text-fg-3">{item.sub}</span>
               </span>
@@ -96,7 +98,7 @@ function Sidebar() {
           );
         })}
       </nav>
-      <div className="mt-auto space-y-3 border-t border-line px-5 py-4">
+      <div className="mt-auto hidden space-y-3 border-t border-line px-5 py-4 md:block">
         <Health />
         <p className="text-2xs leading-relaxed text-fg-3">
           Synthetic, fictional orgs. Threat intel is real public data (CISA KEV, FIRST EPSS, NVD,
@@ -136,7 +138,7 @@ function TopBar() {
   const ws = useWorkspace();
   const orgs = ws.orgs?.map((o) => o.org) ?? ["org_a", "org_b", "org_c"];
   return (
-    <header className="flex h-[60px] shrink-0 items-center gap-5 border-b border-line bg-bg/80 px-6 backdrop-blur">
+    <header className="flex h-[60px] shrink-0 items-center gap-5 overflow-x-auto border-b border-line bg-bg/80 px-3 backdrop-blur md:px-6">
       <Seg
         testid="org-picker"
         value={ws.org}
@@ -209,7 +211,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 export function ShellFallback() {
   return (
     <div className="flex h-dvh">
-      <div className="w-[228px] border-r border-line bg-panel" />
+      <div className="w-14 border-r border-line bg-panel md:w-[228px]" />
       <div className="flex-1" />
     </div>
   );
