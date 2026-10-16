@@ -102,6 +102,15 @@ def test_run_streams_ordered_events_ending_in_report_ready(client):
     assert set(got["outputs"]) == {"Triage", "PathAnalysis", "FixPlan", "Report"}
     assert all("result" not in s for s in got["steps"])
 
+    # S10: replay and the polling fallback read one JSON list instead of the
+    # stream: the same events, ending in the same report_ready.
+    listed = c.get(f"/runs/{run_id}/events", headers=H).json()
+    assert [e["type"] for e in listed] == types
+    assert listed[-1]["status"] == "complete" and listed[-1]["headline"]
+    seq = events[len(events) // 2]["_id"]
+    tail = c.get(f"/runs/{run_id}/events", params={"after": seq}, headers=H).json()
+    assert tail and all(e["seq"] > seq for e in tail[:-1]) and tail[-1]["type"] == "report_ready"
+
     # resume: Last-Event-ID replays only what came after it
     mid = events[len(events) // 2]["_id"]
     again = read_stream(c, run_id, {"Last-Event-ID": str(mid)})

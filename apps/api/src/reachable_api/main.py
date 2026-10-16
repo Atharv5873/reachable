@@ -2,6 +2,7 @@
 
     POST /runs                      {org, scan} -> starts a run in the background, returns run_id
     GET  /runs/{run_id}/stream      Server-Sent Events: the run's steps as they happen
+    GET  /runs/{run_id}/events      the same events as one JSON list (?after=<seq>), for replay
     GET  /runs/{run_id}             the run as written to the graph (outputs + trace)
     POST /runs/{run_id}/verdict     an analyst accepts / rejects a decision (procedural memory),
                                     optionally accepting the finding as a risk for N days
@@ -233,6 +234,21 @@ def output_events(repo: MemoryRepo, graph: str, run_id: str, label: str, base: d
     return []
 
 
+def final_event(repo: MemoryRepo, graph: str, run_id: str, head: dict) -> dict:
+    """The last event of a finished run: report_ready, or run_failed if it wrote no Report."""
+    report = repo.read_output(graph, run_id, "Report")
+    p = (report or {}).get("payload") or {}
+    return {
+        "type": "report_ready" if report else "run_failed",
+        "run_id": run_id,
+        "status": head.get("status"),
+        "headline": p.get("headline"),
+        "risk": p.get("risk"),
+        "report": (report or {}).get("id"),
+        "stats": head.get("stats"),
+    }
+
+
 # ------------------------------------------------------------------ the app
 class ApiKeyMiddleware:
     """`Authorization: Bearer <key>` or `X-API-Key: <key>` on every request except
@@ -458,15 +474,23 @@ def create_app(
         )
 
     @app.get("/runs/{run_id}/events")
-    def all_events(run_id: str) -> list[dict]:
-        """Every event so far, as one JSON list (what the stream would replay)."""
+    def all_events(run_id: str, after: int = -1) -> list[dict]:
+        """The events after trace step `after` (default: all), as one JSON list:
+        what the stream would send, ending with report_ready / run_failed once
+        the run is final. Replay plays this list; live polls it when a proxy
+        cuts the stream (S10: Vercel functions time out)."""
         graph = graph_of(run_id)
         repo = get_repo()
-        return [
-            e
-            for s in repo.steps_after(graph, run_id, -1, 2000)
-            for e in step_events(repo, graph, run_id, s)
-        ]
+        head = repo.run_head(graph, run_id)
+        if head is None:
+            raise HTTPException(404, f"no run {run_id!r}")
+        steps = repo.steps_after(graph, run_id, after, 2000)
+        out = [e for s in steps for e in step_events(repo, graph, run_id, s)]
+        # The head was read first: a run that finished after it is reported
+        # final on the next poll, never with steps still missing.
+        if head.get("status") in FINAL:
+            out.append(final_event(repo, graph, run_id, head))
+        return out
 
     @app.post("/runs/{run_id}/verdict")
     def verdict(run_id: str, req: VerdictRequest) -> dict:
@@ -661,17 +685,7 @@ def create_app(
                 # The run may have written steps between our read and its finish.
                 if await asyncio.to_thread(repo.steps_after, graph, run_id, after):
                     continue
-                report = await asyncio.to_thread(repo.read_output, graph, run_id, "Report")
-                p = (report or {}).get("payload") or {}
-                final = {
-                    "type": "report_ready" if report else "run_failed",
-                    "run_id": run_id,
-                    "status": head.get("status"),
-                    "headline": p.get("headline"),
-                    "risk": p.get("risk"),
-                    "report": (report or {}).get("id"),
-                    "stats": head.get("stats"),
-                }
+                final = await asyncio.to_thread(final_event, repo, graph, run_id, head)
                 yield sse(final, after)
                 return
             if time.monotonic() - quiet > KEEPALIVE_S:
