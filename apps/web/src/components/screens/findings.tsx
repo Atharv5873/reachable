@@ -185,7 +185,7 @@ export function FindingsScreen() {
   const F = b.findings;
   const hiReach = Object.values(F).find((r) => r.headline === "reachable");
   const hiUnreach = Object.values(F).find((r) => r.headline === "unreachable");
-  const crown = b.crown_jewels.map((c) => c.name).join(", ");
+  const crown = [...new Set(b.crown_jewels.map((c) => c.name))].join(", ");
   const crownTiers = b.crown_jewels.map((c) => (c.tier ? `${c.name} (${c.tier})` : c.name)).join(", ");
 
   return (

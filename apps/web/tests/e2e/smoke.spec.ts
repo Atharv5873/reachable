@@ -10,6 +10,10 @@ test("headline finding -> its path -> the min cut -> simulate makes the crown je
   await expect(page.getByTestId("headline-pair")).toBeVisible();
   const rows = page.getByTestId("finding-row");
   await expect(rows.first()).toHaveAttribute("data-status", "reachable");
+  // S9: a reachable row names its target's sensitivity tier; org_a has two tiers.
+  const tiers = page.getByTestId("findings-table").getByTestId("tier-badge");
+  await expect(tiers.first()).toBeVisible();
+  expect(new Set(await tiers.evaluateAll((els) => els.map((e) => e.getAttribute("data-tier")))).size).toBeGreaterThan(1);
   await page.getByTestId("order-toggle").getByRole("radio", { name: "Sorted by severity" }).click();
   await expect(page.getByTestId("findings-table")).toHaveAttribute("data-order", "severity");
   await expect(rows.first()).not.toHaveAttribute("data-status", "reachable"); // CVSS-first puts noise on top
@@ -40,6 +44,8 @@ test("headline finding -> its path -> the min cut -> simulate makes the crown je
   await page.getByTestId("cut-mode").getByRole("radio").first().click(); // fewest
   await expect(page.getByTestId("fix-graph")).toHaveAttribute("data-cut", "fewest");
   await expect(page.getByTestId("fix-card").first()).toBeVisible();
+  await expect(page.getByTestId("fix-card").first().getByTestId("tier-badge")).toBeVisible();
+  await expect(page.getByTestId("crown-status").first().getByTestId("tier-badge")).toBeVisible();
   await expect(page.getByTestId("convergence")).toBeVisible(); // one fix, many paths
 
   // Simulate: every crown jewel goes from reachable to safe.
