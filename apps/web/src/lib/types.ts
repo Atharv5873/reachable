@@ -43,6 +43,8 @@ export type BoardRow = {
   status: RowStatus;
   why: string;
   targets: string[];
+  /** The most sensitive tier among the crown jewels its paths reach (S9). */
+  target_tier: Tier | null;
   attack_steps: number;
   verdict: string | null;
   headline: "reachable" | "unreachable" | null;
@@ -54,11 +56,16 @@ export type Board = {
   source: "run" | "live";
   total_open: number;
   on_crown_path: number;
-  crown_jewels: { id: string; name: string }[];
+  crown_jewels: CrownJewel[];
   by_severity: string[];
   by_reachability: string[];
   findings: Record<string, BoardRow>;
 };
+
+/** Crown-jewel sensitivity tier (S9); "crown" is pre-S9 data. */
+export type Tier = "critical" | "high" | "medium" | "crown";
+
+export type CrownJewel = { id: string; name: string; tier: Tier | null };
 
 export type NodeKind = "internet" | "asset" | "identity" | "secret" | "datastore";
 
@@ -68,6 +75,7 @@ export type GNode = {
   kind: NodeKind;
   sub: string | null;
   crown: boolean;
+  tier?: Tier | null;
   paths: number[];
   shared: number;
   entry: boolean;
@@ -134,6 +142,8 @@ export type Fix = {
   routed_by?: string | null;
   accepted_risk?: unknown;
   paths_cut: number;
+  targets?: string[];
+  target_tier?: Tier | null;
 };
 
 export type FixPlan = {
@@ -149,6 +159,7 @@ export type FixPlan = {
   fixes: Fix[];
   paths: number;
   reachable_before: string[];
+  crown_jewels?: CrownJewel[];
 };
 
 export type SimResult = {

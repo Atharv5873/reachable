@@ -227,7 +227,7 @@ function hopDepths(nodes: GNode[], edges: GEdge[]): Map<string, number> {
 
 function nodeLabel(n: GNode): string {
   if (n.kind === "internet") return "Internet";
-  if (n.crown) return `${n.name}\ncrown jewel`;
+  if (n.crown) return `${n.name}\ncrown jewel${n.tier && n.tier !== "crown" ? ` · ${n.tier}` : ""}`;
   const sub = n.sub && n.sub !== n.name ? `\n${n.sub.replace(/_/g, " ")}` : "";
   const shared = n.shared > 1 ? `  ×${n.shared}` : "";
   return `${n.name}${shared}${sub}`;

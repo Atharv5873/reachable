@@ -4,7 +4,7 @@ import { ArrowRight, MoveRight } from "lucide-react";
 import Link from "next/link";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { Cvss, Epss, Id, Kev, Seg, Stat, Verdict, shortRun } from "@/components/bits";
+import { Cvss, Epss, Id, Kev, Seg, Stat, Tier, Verdict, shortRun } from "@/components/bits";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/states";
 import { useApi } from "@/lib/api";
 import type { Board, BoardRow } from "@/lib/types";
@@ -71,6 +71,7 @@ function HeadlineCard({
       <p className={cn("mt-3 text-base", reach ? "text-fg" : "text-fg-2")}>
         {reach && <span className="mr-2 inline-block size-2 rounded-full bg-ember align-middle" />}
         {row.why}
+        {reach && <Tier tier={row.target_tier} className="ml-2 align-middle" />}
       </p>
       <p className="mt-3 text-xs text-fg-3">
         {reach
@@ -136,6 +137,7 @@ function Row({
       <p className={cn("min-w-0 truncate", reach ? "text-fg" : "text-fg-3")} title={row.why}>
         {reach && <span className="mr-2 inline-block size-1.5 rounded-full bg-ember align-middle" />}
         {row.why}
+        {reach && <Tier tier={row.target_tier} className="ml-2" />}
         {row.headline && (
           <span className="mono ml-2 rounded-sm border border-line-2 px-1 py-px text-2xs text-fg-2">headline</span>
         )}
@@ -184,6 +186,7 @@ export function FindingsScreen() {
   const hiReach = Object.values(F).find((r) => r.headline === "reachable");
   const hiUnreach = Object.values(F).find((r) => r.headline === "unreachable");
   const crown = b.crown_jewels.map((c) => c.name).join(", ");
+  const crownTiers = b.crown_jewels.map((c) => (c.tier ? `${c.name} (${c.tier})` : c.name)).join(", ");
 
   return (
     <div className="mx-auto max-w-[1500px] px-8 pt-7 pb-16">
@@ -199,7 +202,7 @@ export function FindingsScreen() {
       <div className="mt-6 flex flex-wrap gap-x-12 gap-y-4">
         <Stat label="Open findings" value={fmt(b.total_open)} sub={`scan ${ws.scan}`} />
         <Stat label="On a crown-jewel path" value={b.on_crown_path} tone="ember" sub={`${((b.on_crown_path / b.total_open) * 100).toFixed(2)}% of the scan`} />
-        <Stat label="Crown jewels" value={b.crown_jewels.length} sub={crown} />
+        <Stat label="Crown jewels" value={b.crown_jewels.length} sub={crownTiers} />
         <Stat
           label="Ranked by"
           value={<span className="mono text-xl">{b.source === "run" ? shortRun(b.run_id) : "live"}</span>}

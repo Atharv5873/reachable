@@ -32,6 +32,25 @@ KIND = {
     "Secret": "secret",
     "DataStore": "datastore",
 }
+# Crown-jewel sensitivity tiers (S9), most sensitive first; "crown" is pre-S9 data.
+TIER_ORDER = {"critical": 0, "crown": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def crown_jewels(tools: GraphTools, graph: str) -> dict[str, dict]:
+    """Crown jewel id -> {name, tier}."""
+    rows = _q(
+        tools,
+        graph,
+        "MATCH (d:DataStore {crown_jewel: true}) "
+        "RETURN d.id, coalesce(d.name, d.kind, d.id), d.sensitivity ORDER BY d.id",
+    )
+    return {i: {"name": n, "tier": t} for i, n, t in rows}
+
+
+def top_tier(targets, crown: dict[str, dict]) -> str | None:
+    """The most sensitive tier among `targets` (crown jewel ids), for the badge."""
+    tiers = [crown[t]["tier"] for t in targets if t in crown and crown[t]["tier"]]
+    return min(tiers, key=lambda t: TIER_ORDER.get(t, 9), default=None)
 
 
 def _q(tools: GraphTools, graph: str, cypher: str, params: dict | None = None) -> list[list]:
@@ -97,14 +116,8 @@ def findings_board(
     row says why it ranks where it does."""
     outputs = run_outputs(repo, graph, run_id) if run_id else {}
     paths = run_paths(tools, graph, outputs)
-    crown = {
-        r[0]: r[1]
-        for r in _q(
-            tools,
-            graph,
-            "MATCH (d:DataStore {crown_jewel: true}) RETURN d.id, coalesce(d.name, d.kind, d.id)",
-        )
-    }
+    jewels = crown_jewels(tools, graph)
+    crown = {k: v["name"] for k, v in jewels.items()}
 
     # Every open finding, in the scanner's order: CVSS, then KEV, then EPSS.
     allf = _q(
@@ -279,6 +292,7 @@ def findings_board(
                 "status": status,
                 "why": why,
                 "targets": targets,
+                "target_tier": top_tier(targets, jewels),
                 "attack_steps": n_steps,
                 "verdict": verdicts.get(fid),
                 "headline": None,
@@ -320,7 +334,7 @@ def findings_board(
         "source": "run" if outputs.get("PathAnalysis") else "live",
         "total_open": len(allf),
         "on_crown_path": len(reach),
-        "crown_jewels": [{"id": k, "name": v} for k, v in crown.items()],
+        "crown_jewels": [{"id": k, **v} for k, v in jewels.items()],
         "by_severity": [x["finding"] for x in by_sev],
         "by_reachability": [x["finding"] for x in by_reach],
         "findings": {x["finding"]: x for x in rows},
@@ -454,9 +468,11 @@ def subgraph(
     for n in nodes.values():
         label = label_of(n["id"]) or "Asset"
         pr = props.get(n["id"], {})
+        crown = bool(pr.get("crown_jewel"))
         n.update(
             kind=KIND.get(label, "asset"),
-            crown=bool(pr.get("crown_jewel")),
+            crown=crown,
+            tier=pr.get("sensitivity") if crown else None,
             sub=pr.get("kind") or pr.get("zone") or pr.get("sensitivity"),
             shared=len(set(n["paths"])),
             new=n["id"] in new_nodes,
@@ -568,11 +584,14 @@ def fix_plan(
             f["ticket"] = _template_ticket(f)
             fixes.append(f)
         source = "tools"
-    # How many of the run's paths each fix cuts: "one fix, many paths".
+    # How many of the run's paths each fix cuts ("one fix, many paths"), and the
+    # crown jewels those paths reach, with the most sensitive tier among them.
+    jewels = crown_jewels(tools, graph)
     for f in fixes:
-        f["paths_cut"] = sum(
-            1 for p in paths if any(s.get("fix_token") == f["token"] for s in p["steps"])
-        )
+        cut = [p for p in paths if any(s.get("fix_token") == f["token"] for s in p["steps"])]
+        f["paths_cut"] = len(cut)
+        f["targets"] = sorted({p["target"] for p in cut})
+        f["target_tier"] = top_tier(f["targets"], jewels)
     return {
         "graph": graph,
         "run_id": run_id,
@@ -586,4 +605,5 @@ def fix_plan(
         "fixes": fixes,
         "paths": len(paths),
         "reachable_before": reach_before,
+        "crown_jewels": [{"id": k, **v} for k, v in jewels.items()],
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { Tier as TierName } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Small, consistent pieces: ids, KEV, CVSS, effort, stats. */
@@ -143,6 +144,40 @@ export function Seg<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+const TIER_HINT: Record<TierName, string> = {
+  critical: "Critical crown jewel: customer or payment data",
+  crown: "Crown jewel",
+  high: "High-sensitivity crown jewel: internal credentials, source or deploy secrets",
+  medium: "Medium-sensitivity crown jewel: an ops or log store",
+};
+
+/** The sensitivity tier of the crown jewel a path reaches (S9). */
+export function Tier({ tier, className }: { tier: TierName | null | undefined; className?: string }) {
+  if (!tier) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          data-testid="tier-badge"
+          data-tier={tier}
+          className={cn(
+            "mono inline-flex h-5 items-center rounded-sm border px-1.5 text-2xs tracking-wider whitespace-nowrap",
+            tier === "critical" || tier === "crown"
+              ? "border-ember/60 text-ember"
+              : tier === "high"
+                ? "border-fg-2/60 text-fg-2"
+                : "border-line-2 text-fg-3",
+            className,
+          )}
+        >
+          {tier}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{TIER_HINT[tier]}</TooltipContent>
+    </Tooltip>
   );
 }
 

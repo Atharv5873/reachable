@@ -3,7 +3,7 @@
 import { Check, ChevronRight, FlaskConical, GitMerge, RotateCcw, ShieldCheck, Ticket, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { Effort, Seg, shortId } from "@/components/bits";
+import { Effort, Seg, Tier, shortId } from "@/components/bits";
 import { CypherBlock } from "@/components/evidence";
 import { AttackGraph, GraphLegend } from "@/components/graph/attack-graph";
 import { ErrorState, LoadingRows, Shimmer } from "@/components/states";
@@ -53,6 +53,7 @@ function FixCard({ fix, i, active, onClick }: { fix: Fix; i: number; active: boo
             >
               cuts {fix.paths_cut} path{fix.paths_cut === 1 ? "" : "s"}
             </span>
+            <Tier tier={fix.target_tier} />
             <Effort n={fix.effort} />
           </div>
         </div>
@@ -176,6 +177,8 @@ function FixesView() {
   const convergent = p?.fixes.filter((f) => f.paths_cut > 1) ?? [];
   const crown = p?.reachable_before ?? [];
   const crownName = (id: string) => g?.nodes.find((n) => n.id === id)?.name ?? shortId(id);
+  const crownTier = (id: string) =>
+    p?.crown_jewels?.find((c) => c.id === id)?.tier ?? g?.nodes.find((n) => n.id === id)?.tier ?? null;
 
   const simulate = async () => {
     if (!p) return;
@@ -270,6 +273,7 @@ function FixesView() {
                   >
                     {safe ? <ShieldCheck className="size-4 text-safe" /> : <span className="size-2.5 animate-pulse-ember rounded-full bg-ember" />}
                     <span className="text-sm font-medium">{crownName(c)}</span>
+                    <Tier tier={crownTier(c)} />
                     <span className={cn("mono text-xs font-semibold tracking-wider", safe ? "text-safe" : "text-ember")}>
                       {safe ? "SAFE" : "REACHABLE"}
                     </span>
