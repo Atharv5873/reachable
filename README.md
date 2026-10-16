@@ -226,7 +226,7 @@ reachable/
     instead of graph tools), and **reachable** (the FalkorDB tools over MCP). Metrics:
     NDCG@10, P@10, attack-path recall@10, decoys@10, paths cut per fix vs the oracle min
     cut, cost and wall time, on the three v1 scans and the three held-out v2 scans, over
-    three provider seeds. The **ablation** (`make ablation`) runs the reachable agent with
+    three provider seeds (S9: one by default). The **ablation** (`make ablation`) runs the reachable agent with
     its graph tools answering "unavailable": the cleanest test of "take FalkorDB out and
     the product breaks". The baselines read only `eval_<scan>` views through a read-only
     role (no company layer, no memory, no label or path field; a test proves it). Results:
@@ -251,6 +251,23 @@ reachable/
     87% (the oracle's ceiling), paths cut per fix 1.09 -> 1.16 (the oracle's), path
     recall 100%, held-out v2 0.81 -> 1.00. See [`learning/S08.md`](learning/S08.md)
     for why that is not overfitting.
+
+13. **A credible eval** (S9). Crown jewels now carry a **sensitivity tier**
+    (critical: customer / payment data; high: credentials, source, deploy secrets;
+    medium: ops / log stores), two or three per org, so the ground truth's priority
+    is a real gradient instead of a wall of ties. Only the target of some routes'
+    last hop moved: the attack paths and the min cut are identical to S8's
+    (`tests/test_sensitivity.py` pins the pre-S9 fingerprints; Gate A unchanged).
+    The baselines never see the tier (the eval views drop the column; the leakage
+    test checks it). [`comparison.md`](evals/results/comparison.md) now **leads with
+    the structural metrics**, which cannot be won by sharing the oracle's definition
+    of priority: path recall@10 (reachable 100%, baselines 0-10%), decoys@10 (0% vs
+    smart_score's 33%), paths cut per fix (1.16 = the oracle's min cut, vs 0-0.30),
+    plus the ablation (graph off: 100% -> 0%). NDCG@10 (reachable 1.00; the same
+    ranker ignoring tiers would score 0.95) is secondary, with the caveat stated:
+    our ranker and the ground truth both define importance as reachability to the
+    crown jewels. The findings, fix plan and graph show each target's tier as a
+    badge. See [`learning/S09.md`](learning/S09.md).
 
 ## API
 
