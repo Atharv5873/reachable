@@ -7,20 +7,20 @@
   "fallback=groq/qwen/qwen3.8-27b"
  ],
  "v1_run": {
-  "run_id": "lift_org_a:run:ce51959db04e",
+  "run_id": "lift_org_a:run:061568cb50b8",
   "status": "complete",
   "stats": {
    "max_llm_calls": 30,
    "max_tool_calls": 45,
    "llm_calls": 6,
-   "tool_calls": 24,
+   "tool_calls": 25,
    "cache_hits": 0,
    "refused": 0,
    "per_tool": {
     "scan_findings": 1,
     "triage_memory": 1,
     "playbooks": 1,
-    "attack_paths": 1,
+    "attack_paths": 2,
     "why_step": 3,
     "min_cut": 2,
     "owners": 7,
@@ -28,18 +28,18 @@
     "simulate_fix": 2
    },
    "exhausted": null,
-   "tool_results": 24,
+   "tool_results": 25,
    "fallbacks": 0,
    "llm_failures": 0,
-   "tokens_in": 22389,
-   "tokens_out": 3126,
+   "tokens_in": 24519,
+   "tokens_out": 3018,
    "models": {
     "primary=gemini/gemini-3.5-flash-lite": 6
    },
    "memory": {
     "patterns_learned": 1
    },
-   "wall_ms": 15514
+   "wall_ms": 15629
   },
   "health": []
  },
@@ -60,7 +60,7 @@
    "Playbook(learned)": 0
   },
   "before_warm": {
-   "AgentStep": 46.0,
+   "AgentStep": 45.0,
    "ToolOutput": 28.0,
    "Report": 1.0,
    "FixPlan": 1.0,
@@ -86,7 +86,7 @@
   ]
  },
  "cold": {
-  "run_id": "lift_org_a_v2:run:15bf291ed335",
+  "run_id": "lift_org_a_v2:run:f8161bb153f2",
   "status": "complete",
   "health": [],
   "findings_investigated": 9,
@@ -104,15 +104,15 @@
   "skipped_by_memory": 0,
   "carried": {},
   "flagged_on_arrival": [],
-  "alert": "lift_org_a_v2:alert:ce8cd1ecf549",
-  "llm_calls": 7,
+  "alert": "lift_org_a_v2:alert:9c3dadab5f0e",
+  "llm_calls": 6,
   "tool_calls": 28,
   "cache_hits": 0,
-  "tokens_in": 25349,
-  "tokens_out": 3000,
-  "wall_s": 16.5,
+  "tokens_in": 24601,
+  "tokens_out": 3088,
+  "wall_s": 15.1,
   "models": {
-   "primary=gemini/gemini-3.5-flash-lite": 7
+   "primary=gemini/gemini-3.5-flash-lite": 6
   },
   "memory_events": {
    "patterns_learned": 1
@@ -124,24 +124,24 @@
     "tokens_in": 0
    },
    "triage": {
-    "llm": 3,
-    "tool": 4,
-    "tokens_in": 9026
+    "llm": 2,
+    "tool": 3,
+    "tokens_in": 5971
    },
    "pathfinder": {
     "llm": 2,
-    "tool": 4,
-    "tokens_in": 8748
+    "tool": 5,
+    "tokens_in": 10970
    },
    "fixer": {
     "llm": 1,
     "tool": 17,
-    "tokens_in": 4515
+    "tokens_in": 4571
    },
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3060
+    "tokens_in": 3089
    }
   },
   "usd": 0.0151,
@@ -162,7 +162,7 @@
   "correct": true
  },
  "warm": {
-  "run_id": "lift_org_a_v2:run:7f2ab450e786",
+  "run_id": "lift_org_a_v2:run:50b3704f7e01",
   "status": "complete",
   "health": [],
   "findings_investigated": 1,
@@ -186,13 +186,13 @@
    "org_a:finding:06876",
    "org_a:finding:06879"
   ],
-  "alert": "lift_org_a_v2:alert:3de8b3de7eed",
+  "alert": "lift_org_a_v2:alert:59a99324a028",
   "llm_calls": 6,
-  "tool_calls": 15,
+  "tool_calls": 16,
   "cache_hits": 0,
-  "tokens_in": 20293,
-  "tokens_out": 2031,
-  "wall_s": 13.1,
+  "tokens_in": 22644,
+  "tokens_out": 2383,
+  "wall_s": 13.8,
   "models": {
    "primary=gemini/gemini-3.5-flash-lite": 6
   },
@@ -212,25 +212,25 @@
    "triage": {
     "llm": 2,
     "tool": 3,
-    "tokens_in": 5128
+    "tokens_in": 5172
    },
    "pathfinder": {
     "llm": 2,
-    "tool": 2,
-    "tokens_in": 7255
+    "tool": 3,
+    "tokens_in": 9477
    },
    "fixer": {
     "llm": 1,
     "tool": 7,
-    "tokens_in": 4539
+    "tokens_in": 4595
    },
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3371
+    "tokens_in": 3400
    }
   },
-  "usd": 0.01117,
+  "usd": 0.01275,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",
