@@ -105,7 +105,8 @@ def eval_env(db):
     load_org_postgres(ob.dataset, s)
     ensure_eval_views(EVAL_GRAPH, s)
     # Session-scoped: the patched server outlives the eval tests, so keep every
-    # configured org allowed too (test_mcp runs against org_a afterwards).
+    # configured org allowed too (other modules' agents run on the demo graphs;
+    # test_mcp points the server at its own graphs for its module, S8).
     tools = GraphTools(db, allowed_orgs=[*s.graphs, EVAL_GRAPH])
     ref = ScanRef("org_a", "v1", EVAL_GRAPH)
     with pytest.MonkeyPatch.context() as mp:
