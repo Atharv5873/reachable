@@ -20,6 +20,10 @@ patterns, versioned playbooks).
 > threat intelligence is real public data (see
 > [`data/threatintel/ATTRIBUTION.md`](data/threatintel/ATTRIBUTION.md)).
 
+**Live:** https://reachable-web.vercel.app (replay mode by default: no model in
+the loop). API: `https://reachable-api.devarv.dev/health`. Deploy and operations:
+[`deploy/RUNBOOK.md`](deploy/RUNBOOK.md).
+
 ## Stack
 
 - Python 3.12 + [uv](https://docs.astral.sh/uv/) workspace, ruff, pytest.
@@ -268,6 +272,20 @@ reachable/
     our ranker and the ground truth both define importance as reachability to the
     crown jewels. The findings, fix plan and graph show each target's tier as a
     badge. See [`learning/S09.md`](learning/S09.md).
+14. **Deployed** (S10, `deploy/`). The API, FalkorDB and Postgres run on a VPS
+    behind **Caddy** (automatic Let's Encrypt TLS, http -> https, the only public
+    listener); the databases and the API have no host port at all (Docker's
+    iptables rules bypass ufw, so an unpublished port is the only private one).
+    The UI is on **Vercel** (fra1, next to the VPS); its route handler holds the
+    API key server-side, and a crawl of the deployed site's JS proves the key is
+    in none of it. Replay plays a run from one `GET /runs/{id}/events` (now ending
+    in `report_ready`), never a long-lived stream, so a Vercel function timeout
+    cannot touch the demo; a live run streams best-effort and falls back to
+    polling `/events?after=<seq>`. The demo runs were recorded once on the VPS
+    (`deploy/demo_runs.json`), FalkorDB's AOF volume keeps them across restarts,
+    and Gate C (`tests/e2e/gate-c.spec.ts`) runs the seven demo steps against the
+    live site, at desktop size and emulating a phone. See
+    [`learning/S10.md`](learning/S10.md).
 
 ## API
 
