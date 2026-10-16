@@ -99,9 +99,37 @@ def test_ablation_graph_off_loses_path_recall(eval_env):
     # graph-off answer is the model's alone (its head and fix set unchanged).
     run_calls = [t for t in off.tool_log if t.get("by") == "run"]
     assert run_calls and all(t["error"] == UNAVAILABLE for t in run_calls)
-    assert off.meta["ranking"] == "model"
+    assert off.meta["ranking"] == "model" and off.meta["fix_set_source"] == "model"
     assert off.head == [f for f in off.meta["model_head"] if f in data.by_id]
-    assert on.meta["ranking"] == "graph"
+    assert on.meta["ranking"] == "graph" and on.meta["fix_set_verified"] is True
+    assert len(on.fix_set) == len(eval_env["labels"]["min_cut"])  # min_cut, not one per path
     s_on, s_off = score_order(on.order, truth), score_order(off.order, truth)
     assert s_off["path_recall@10"] < s_on["path_recall@10"]
     assert s_off["ndcg@10"] < s_on["ndcg@10"]
+
+
+def test_min_cut_fix_set_expands_only_if_a_crown_jewel_stays_reachable():
+    """S8: the fix plan is min_cut's set; the model's tokens are added (and the union
+    re-proved) only when simulate_fix says min_cut's set left a crown jewel reachable."""
+    from reachable_eval.reachable import min_cut_fix_set
+
+    class Calls:
+        def __init__(self, disconnects):
+            self.disconnects, self.sims = disconnects, []
+
+        async def __call__(self, name, args):
+            if name == "min_cut":
+                toks = ["a", "b"] if args["mode"] == "fewest" else ["c", "d"]
+                return {"fix_tokens": toks, "total_effort": 6 if args["mode"] == "fewest" else 4}
+            self.sims.append(args["fix_tokens"])
+            return {"all_crown_jewels_disconnected": self.disconnects(args["fix_tokens"])}
+
+    ok = Calls(lambda t: True)
+    toks, meta = asyncio.run(min_cut_fix_set(ok, ["x", "y", "z"]))
+    # same size, less effort: the cheapest cut; the model's larger set is not used
+    assert toks == ["c", "d"] and meta["fix_set_source"] == "min_cut:cheapest"
+    assert meta["fix_set_verified"] and not meta["fix_set_expanded"] and ok.sims == [["c", "d"]]
+    short = Calls(lambda t: "x" in t)
+    toks, meta = asyncio.run(min_cut_fix_set(short, ["x", "c"]))
+    assert toks == ["c", "d", "x"] and meta["fix_set_expanded"] and meta["fix_set_verified"]
+    assert short.sims == [["c", "d"], ["c", "d", "x"]]

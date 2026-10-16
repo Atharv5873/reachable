@@ -227,3 +227,4 @@ def test_ranking_step_runs_with_the_answer_key_unreadable(eval_env, monkeypatch)
         reachable(llm_factory=lambda s: Policy(FIRST_CALL["reachable"])).rank(eval_env["data"])
     )
     assert r.meta["ranking"] == "graph" and r.meta["graph_ranked"] > 0
+    assert r.meta["fix_set_source"].startswith("min_cut:") and r.meta["fix_set_verified"]

@@ -132,6 +132,39 @@ async def graph_order(call: RunCalls, head: list[str]) -> tuple[list[str], dict,
     return new_head, why, {"ranking": "graph", "graph_ranked": len(crit)}
 
 
+async def min_cut_fix_set(call: RunCalls, fix_set: list[str]) -> tuple[list[str] | None, dict]:
+    """The fix plan is min_cut's set: the fewest fixes, or the cheapest cut when it
+    has as few. simulate_fix proves it. Only if a crown jewel stayed reachable
+    (it should not: the max-flow/min-cut self-check runs inside min_cut) would the
+    model's own tokens be added and the union proved again. S7: the model wrote
+    one fix per path (6-9) instead of min_cut's 5 on some scans."""
+    cuts = {m: await call("min_cut", {"mode": m}) for m in ("fewest", "cheapest")}
+    few, cheap = cuts["fewest"], cuts["cheapest"]
+    if not (few and few.get("fix_tokens")):
+        return None, {"fix_set_source": "model"}
+    chosen = "fewest"
+    if (
+        cheap
+        and len(cheap.get("fix_tokens") or []) == len(few["fix_tokens"])
+        and cheap["total_effort"] < few["total_effort"]
+    ):
+        chosen = "cheapest"
+    tokens = list(cuts[chosen]["fix_tokens"])
+    sim = await call("simulate_fix", {"fix_tokens": tokens})
+    verified = bool(sim and sim.get("all_crown_jewels_disconnected"))
+    expanded = False
+    extra = [t for t in fix_set if t not in tokens]
+    if sim is not None and not verified and extra:  # min_cut left a crown jewel reachable
+        sim = await call("simulate_fix", {"fix_tokens": tokens + extra})
+        if sim and sim.get("all_crown_jewels_disconnected"):
+            tokens, verified, expanded = tokens + extra, True, True
+    return tokens, {
+        "fix_set_source": f"min_cut:{chosen}",
+        "fix_set_verified": verified,
+        "fix_set_expanded": expanded,
+    }
+
+
 async def graph_finalise(box, data: ScanData, head: list[str], fix_set: list[str]) -> Finalised:
     """The ranking step after the model answers (S8): what the product's run does
     deterministically, here through the SAME toolbox the model had. Label-free:
@@ -139,8 +172,9 @@ async def graph_finalise(box, data: ScanData, head: list[str], fix_set: list[str
     every call answers "unavailable" and the model's answer is kept unchanged."""
     call = RunCalls(box, data.ref.graph)
     new_head, why, meta = await graph_order(call, head)
-    meta["run_tool_calls"] = len(call.log)
-    return Finalised(new_head, None, why, meta, call.log)
+    new_fix, fix_meta = await min_cut_fix_set(call, fix_set)
+    meta.update(fix_meta, run_tool_calls=len(call.log))
+    return Finalised(new_head, new_fix, why, meta, call.log)
 
 
 def reachable(llm_factory=None, *, graph_off: bool = False) -> LLMPrioritiser:
