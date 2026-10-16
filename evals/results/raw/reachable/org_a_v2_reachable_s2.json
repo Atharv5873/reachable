@@ -4,19 +4,26 @@
   "scan": "v2",
   "graph": "org_a_v2",
   "seed": 2,
-  "created": "2026-10-16T03:54:59+00:00",
+  "created": "2026-10-16T04:36:10+00:00",
   "universe": {
     "open_findings": 6855,
     "sha": "7e5c4e25e765e537"
   },
   "head": [
+    "org_a:finding:06856",
     "org_a:finding:06850",
     "org_a:finding:06851",
-    "org_a:finding:06853",
     "org_a:finding:06855",
     "org_a:finding:06848",
-    "org_a:finding:06856",
     "org_a:finding:06879",
+    "org_a:finding:06853",
+    "org_a:finding:06852",
+    "org_a:finding:06857",
+    "org_a:finding:06849",
+    "org_a:finding:06880",
+    "org_a:finding:06854",
+    "org_a:finding:06858",
+    "org_a:finding:06859",
     "org_a:finding:05873",
     "org_a:finding:06554",
     "org_a:finding:05740",
@@ -102,42 +109,49 @@
     "org_a:finding:04937",
     "org_a:finding:05729",
     "org_a:finding:01815",
-    "org_a:finding:00198",
-    "org_a:finding:00051",
-    "org_a:finding:03261",
-    "org_a:finding:00491",
-    "org_a:finding:06540",
-    "org_a:finding:06665",
-    "org_a:finding:05239",
-    "org_a:finding:05505"
+    "org_a:finding:00198"
   ],
   "named": [
+    "org_a:finding:06856",
     "org_a:finding:06850",
     "org_a:finding:06851",
-    "org_a:finding:06853",
     "org_a:finding:06855",
     "org_a:finding:06848",
-    "org_a:finding:06856",
-    "org_a:finding:06879"
+    "org_a:finding:06879",
+    "org_a:finding:06853",
+    "org_a:finding:06852",
+    "org_a:finding:06857",
+    "org_a:finding:06849",
+    "org_a:finding:06880",
+    "org_a:finding:06854",
+    "org_a:finding:06858",
+    "org_a:finding:06859"
   ],
-  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the graph's ranking step and the model's picks",
   "fix_set": [
     "org_a:finding:06848",
     "org_a:finding:06850",
     "org_a:finding:06851",
     "org_a:finding:06853",
     "org_a:finding:06855",
-    "org_a:finding:06856",
-    "org_a:finding:06879"
+    "org_a:finding:06879",
+    "step:usekey:org_a:secret:00008:org_a:ident:00006"
   ],
   "why": {
+    "org_a:finding:06856": "Facilitates remote service exploitation from compromised edge assets to internal CI nodes.",
     "org_a:finding:06850": "Enables internet-exposed access to ember-basalt-edge-183, leading directly to crown jewel data via stolen SSH credentials.",
     "org_a:finding:06851": "Provides an entry point on cobalt-sol-edge-184 that permits local privilege escalation and subsequent database access.",
-    "org_a:finding:06853": "Serves as an internet-facing vulnerability on fjord-basalt-edge-185 that forms part of an active attack path to crown jewels.",
     "org_a:finding:06855": "Exposes ember-tessera-edge-186 to the internet, allowing attackers to leverage exposed cloud credentials against storage.",
     "org_a:finding:06848": "Acts as the initial internet-facing vulnerability on larch-meadow-edge-182, bridging to internal database compromise.",
-    "org_a:finding:06856": "Facilitates remote service exploitation from compromised edge assets to internal CI nodes.",
-    "org_a:finding:06879": "Constitutes an internet-facing edge vulnerability on vireo-basalt-edge-192 participating in attack paths toward sensitive data."
+    "org_a:finding:06879": "Constitutes an internet-facing edge vulnerability on vireo-basalt-edge-192 participating in attack paths toward sensitive data.",
+    "org_a:finding:06853": "Serves as an internet-facing vulnerability on fjord-basalt-edge-185 that forms part of an active attack path to crown jewels.",
+    "org_a:finding:06852": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06857": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06849": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06880": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06854": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06858": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06859": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph."
   },
   "invalid_ids": [],
   "reasoning": "We prioritized findings that lie directly on attack paths originating from the Internet and leading to the crown jewel data store (org_a:ds:00001). Using attack path analysis and min-cut simulation, we identified the minimal set of seven internet-facing and internal vulnerabilities whose remediation completely disconnects external attacker access to the crown jewels.",
@@ -149,16 +163,41 @@
     "turns": 3,
     "llm_calls": 3,
     "llm_failures": 0,
-    "tool_calls": 3,
+    "tool_calls": 7,
+    "model_tool_calls": 3,
     "cache_hits": 0,
     "refused": 0,
     "tokens_in": 16623,
     "tokens_out": 744,
     "usd": 0.006847,
-    "wall_s": 4.8,
+    "wall_s": 6.8,
     "waited_s": 0.0,
-    "active_s": 4.8,
-    "fix_tokens_dropped": []
+    "active_s": 6.8,
+    "fix_tokens_dropped": [],
+    "ranking": "graph",
+    "graph_ranked": 14,
+    "fix_set_source": "min_cut:cheapest",
+    "fix_set_verified": true,
+    "fix_set_expanded": false,
+    "run_tool_calls": 4,
+    "model_head": [
+      "org_a:finding:06850",
+      "org_a:finding:06851",
+      "org_a:finding:06853",
+      "org_a:finding:06855",
+      "org_a:finding:06848",
+      "org_a:finding:06856",
+      "org_a:finding:06879"
+    ],
+    "model_fix_set": [
+      "org_a:finding:06848",
+      "org_a:finding:06850",
+      "org_a:finding:06851",
+      "org_a:finding:06853",
+      "org_a:finding:06855",
+      "org_a:finding:06856",
+      "org_a:finding:06879"
+    ]
   },
   "tool_log": [
     {
@@ -173,8 +212,8 @@
     {
       "tool": "min_cut",
       "input": {
-        "prefer": "entry",
-        "mode": "fewest"
+        "mode": "fewest",
+        "prefer": "entry"
       },
       "ok": true,
       "cached": false,
@@ -195,6 +234,55 @@
       },
       "ok": true,
       "cached": false,
+      "error": null
+    },
+    {
+      "tool": "scan_findings",
+      "input": {
+        "view": "ranked",
+        "limit": 20
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "fewest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "cheapest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "simulate_fix",
+      "input": {
+        "fix_tokens": [
+          "org_a:finding:06848",
+          "org_a:finding:06850",
+          "org_a:finding:06851",
+          "org_a:finding:06853",
+          "org_a:finding:06855",
+          "org_a:finding:06879",
+          "step:usekey:org_a:secret:00008:org_a:ident:00006"
+        ]
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
       "error": null
     }
   ]

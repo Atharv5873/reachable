@@ -4,21 +4,21 @@
   "scan": "v2",
   "graph": "org_c_v2",
   "seed": 1,
-  "created": "2026-10-16T03:55:03+00:00",
+  "created": "2026-10-16T04:36:13+00:00",
   "universe": {
     "open_findings": 6380,
     "sha": "294ba2a5aa68bc2e"
   },
   "head": [
-    "org_c:finding:06379",
-    "org_c:finding:06380",
-    "org_c:finding:06378",
     "org_c:finding:06381",
-    "org_c:finding:06404",
+    "org_c:finding:06379",
+    "org_c:finding:06378",
     "org_c:finding:06376",
-    "org_c:finding:06377",
-    "org_c:finding:06382",
+    "org_c:finding:06404",
+    "org_c:finding:06380",
     "org_c:finding:06405",
+    "org_c:finding:06382",
+    "org_c:finding:06377",
     "org_c:finding:05606",
     "org_c:finding:02566",
     "org_c:finding:00339",
@@ -112,41 +112,37 @@
     "org_c:finding:05899"
   ],
   "named": [
-    "org_c:finding:06379",
-    "org_c:finding:06380",
-    "org_c:finding:06378",
     "org_c:finding:06381",
-    "org_c:finding:06404",
+    "org_c:finding:06379",
+    "org_c:finding:06378",
     "org_c:finding:06376",
-    "org_c:finding:06377",
+    "org_c:finding:06404",
+    "org_c:finding:06380",
+    "org_c:finding:06405",
     "org_c:finding:06382",
-    "org_c:finding:06405"
+    "org_c:finding:06377"
   ],
-  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the graph's ranking step and the model's picks",
   "fix_set": [
-    "org_c:finding:06379",
-    "org_c:finding:06380",
-    "org_c:finding:06378",
-    "org_c:finding:06381",
-    "org_c:finding:06404",
     "org_c:finding:06376",
-    "org_c:finding:06377",
-    "org_c:finding:06382",
-    "org_c:finding:06405"
+    "org_c:finding:06378",
+    "org_c:finding:06379",
+    "org_c:finding:06381",
+    "org_c:finding:06404"
   ],
   "why": {
-    "org_c:finding:06379": "Enables internet-facing exploitation on amber-meadow-vpn-44 on the primary attack path to the crown-jewel warehouse.",
-    "org_c:finding:06380": "Provides local privilege escalation on amber-meadow-vpn-44, advancing the highest-likelihood attack path.",
-    "org_c:finding:06378": "Exposes amber-willow-vpn-43 to internet exploitation along an active crown-jewel path.",
-    "org_c:finding:06381": "Exposes vireo-sol-vpn-45 to internet exploitation leading toward the warehouse crown jewel.",
-    "org_c:finding:06404": "Exposes swift-meadow-vpn-48 to internet exploitation on a valid crown-jewel attack path.",
-    "org_c:finding:06376": "Exposes onyx-vane-vpn-42 to internet exploitation on an alternate crown-jewel path.",
-    "org_c:finding:06377": "Enables lateral movement or internal attack steps on vireo-willow-data-162 along a crown-jewel path.",
-    "org_c:finding:06382": "Enables internal service exploitation from vireo-sol-vpn-45 to larch-basalt-onprem-401 on a crown-jewel path.",
-    "org_c:finding:06405": "Enables internal service exploitation on ember-tessera-data-165 along a crown-jewel path."
+    "org_c:finding:06381": "Enables an internet-facing vulnerability on vireo-sol-vpn-45 on an alternate path to the warehouse.",
+    "org_c:finding:06379": "Enables an internet-facing RCE vulnerability on the critical asset amber-meadow-vpn-44 on the primary attack path to the warehouse.",
+    "org_c:finding:06378": "Enables an internet-facing vulnerability on amber-willow-vpn-43 leading toward the crown-jewel warehouse.",
+    "org_c:finding:06376": "Enables an internet-facing vulnerability on onyx-vane-vpn-42 on an attacker path to the warehouse.",
+    "org_c:finding:06404": "Enables an internet-facing vulnerability on swift-meadow-vpn-48 on an attacker path to the warehouse.",
+    "org_c:finding:06380": "Enables local privilege escalation on amber-meadow-vpn-44, allowing an attacker to steal SSH keys for lateral movement.",
+    "org_c:finding:06405": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_c:finding:06382": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_c:finding:06377": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph."
   },
   "invalid_ids": [],
-  "reasoning": "We prioritized all findings lying directly on attack paths leading from the internet to the crown-jewel warehouse. Fixing these nine findings completely severs all viable attack paths and neutralizes unauthorized access to the crown jewels. Other high-CVSS findings not on these paths were excluded because they do not currently enable reachable attack chains.",
+  "reasoning": "We prioritized findings that actively appear on attack paths leading from the internet to the crown-jewel warehouse data store. By fixing the internet-facing entry points (findings 06376, 06378, 06379, 06381, 06404) and local privilege escalation steps on the critical paths, we completely sever all viable attacker routes.",
   "meta": {
     "model": "gemini/gemini-3.5-flash-lite",
     "seed": 1,
@@ -155,16 +151,38 @@
     "turns": 2,
     "llm_calls": 2,
     "llm_failures": 0,
-    "tool_calls": 3,
+    "tool_calls": 7,
+    "model_tool_calls": 3,
     "cache_hits": 0,
     "refused": 0,
-    "tokens_in": 12444,
-    "tokens_out": 660,
-    "usd": 0.005383,
-    "wall_s": 4.1,
+    "tokens_in": 11483,
+    "tokens_out": 498,
+    "usd": 0.00469,
+    "wall_s": 4.0,
     "waited_s": 0.0,
-    "active_s": 4.1,
-    "fix_tokens_dropped": []
+    "active_s": 4.0,
+    "fix_tokens_dropped": [],
+    "ranking": "graph",
+    "graph_ranked": 9,
+    "fix_set_source": "min_cut:fewest",
+    "fix_set_verified": true,
+    "fix_set_expanded": false,
+    "run_tool_calls": 4,
+    "model_head": [
+      "org_c:finding:06379",
+      "org_c:finding:06380",
+      "org_c:finding:06378",
+      "org_c:finding:06381",
+      "org_c:finding:06376",
+      "org_c:finding:06404"
+    ],
+    "model_fix_set": [
+      "org_c:finding:06376",
+      "org_c:finding:06378",
+      "org_c:finding:06379",
+      "org_c:finding:06381",
+      "org_c:finding:06404"
+    ]
   },
   "tool_log": [
     {
@@ -188,11 +206,58 @@
     {
       "tool": "min_cut",
       "input": {
-        "mode": "fewest",
-        "prefer": "entry"
+        "prefer": "entry",
+        "mode": "fewest"
       },
       "ok": true,
       "cached": false,
+      "error": null
+    },
+    {
+      "tool": "scan_findings",
+      "input": {
+        "view": "ranked",
+        "limit": 20
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "fewest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "cheapest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "simulate_fix",
+      "input": {
+        "fix_tokens": [
+          "org_c:finding:06376",
+          "org_c:finding:06378",
+          "org_c:finding:06379",
+          "org_c:finding:06381",
+          "org_c:finding:06404"
+        ]
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
       "error": null
     }
   ]

@@ -4,21 +4,21 @@
   "scan": "v1",
   "graph": "org_c",
   "seed": 3,
-  "created": "2026-10-16T03:54:56+00:00",
+  "created": "2026-10-16T04:36:04+00:00",
   "universe": {
     "open_findings": 6385,
     "sha": "a6fce1ef5aa26440"
   },
   "head": [
-    "org_c:finding:06379",
-    "org_c:finding:06380",
-    "org_c:finding:06374",
-    "org_c:finding:06378",
     "org_c:finding:06381",
+    "org_c:finding:06379",
+    "org_c:finding:06378",
+    "org_c:finding:06374",
     "org_c:finding:06376",
+    "org_c:finding:06380",
     "org_c:finding:06375",
-    "org_c:finding:06377",
     "org_c:finding:06382",
+    "org_c:finding:06377",
     "org_c:finding:05606",
     "org_c:finding:02566",
     "org_c:finding:00339",
@@ -112,35 +112,34 @@
     "org_c:finding:05899"
   ],
   "named": [
-    "org_c:finding:06379",
-    "org_c:finding:06380",
-    "org_c:finding:06374",
-    "org_c:finding:06378",
     "org_c:finding:06381",
+    "org_c:finding:06379",
+    "org_c:finding:06378",
+    "org_c:finding:06374",
     "org_c:finding:06376",
+    "org_c:finding:06380",
     "org_c:finding:06375",
-    "org_c:finding:06377",
-    "org_c:finding:06382"
+    "org_c:finding:06382",
+    "org_c:finding:06377"
   ],
-  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the graph's ranking step and the model's picks",
   "fix_set": [
     "org_c:finding:06374",
     "org_c:finding:06376",
     "org_c:finding:06378",
     "org_c:finding:06379",
-    "org_c:finding:06382",
-    "step:creds:org_c:asset:01609:org_c:secret:00008"
+    "org_c:finding:06381"
   ],
   "why": {
-    "org_c:finding:06379": "Enables internet access to amber-meadow-vpn-44 leading directly to crown jewel paths via local privesc.",
-    "org_c:finding:06380": "Provides local privilege escalation to a stolen SSH key on the critical attack path.",
-    "org_c:finding:06374": "Exposes larch-basalt-vpn-41 to remote exploitation from the internet on an active attack path.",
-    "org_c:finding:06378": "Provides an internet entry point via amber-willow-vpn-43 on a valid crown jewel path.",
     "org_c:finding:06381": "Exposes vireo-sol-vpn-45 to internet attacks leading to credential theft and database access.",
+    "org_c:finding:06379": "Enables internet access to amber-meadow-vpn-44 leading directly to crown jewel paths via local privesc.",
+    "org_c:finding:06378": "Provides an internet entry point via amber-willow-vpn-43 on a valid crown jewel path.",
+    "org_c:finding:06374": "Exposes larch-basalt-vpn-41 to remote exploitation from the internet on an active attack path.",
     "org_c:finding:06376": "Allows initial internet access to onyx-vane-vpn-42 on an active attack path.",
+    "org_c:finding:06380": "Provides local privilege escalation to a stolen SSH key on the critical attack path.",
     "org_c:finding:06375": "Facilitates remote service exploitation from larch-basalt-vpn-41 to downstream assets.",
-    "org_c:finding:06377": "Facilitates remote service exploitation from onyx-vane-vpn-42 to downstream assets.",
-    "org_c:finding:06382": "Identified as a critical choke point and removal candidate in the minimum cut fix set."
+    "org_c:finding:06382": "Identified as a critical choke point and removal candidate in the minimum cut fix set.",
+    "org_c:finding:06377": "Facilitates remote service exploitation from onyx-vane-vpn-42 to downstream assets."
   },
   "invalid_ids": [],
   "reasoning": "We prioritized findings and fix tokens lying directly on active attack paths from the internet to the crown-jewel warehouse. Using min_cut and attack_paths analysis, we identified the specific internet-facing entry points and local privilege escalation vulnerabilities that enable lateral movement. Fixing this precise set of vulnerabilities completely disconnects all paths to the warehouse with minimal effort.",
@@ -152,16 +151,42 @@
     "turns": 2,
     "llm_calls": 2,
     "llm_failures": 0,
-    "tool_calls": 2,
+    "tool_calls": 6,
+    "model_tool_calls": 2,
     "cache_hits": 0,
     "refused": 0,
     "tokens_in": 9740,
     "tokens_out": 581,
     "usd": 0.004374,
-    "wall_s": 3.2,
+    "wall_s": 5.6,
     "waited_s": 0.0,
-    "active_s": 3.2,
-    "fix_tokens_dropped": []
+    "active_s": 5.6,
+    "fix_tokens_dropped": [],
+    "ranking": "graph",
+    "graph_ranked": 9,
+    "fix_set_source": "min_cut:fewest",
+    "fix_set_verified": true,
+    "fix_set_expanded": false,
+    "run_tool_calls": 4,
+    "model_head": [
+      "org_c:finding:06379",
+      "org_c:finding:06380",
+      "org_c:finding:06374",
+      "org_c:finding:06378",
+      "org_c:finding:06381",
+      "org_c:finding:06376",
+      "org_c:finding:06375",
+      "org_c:finding:06377",
+      "org_c:finding:06382"
+    ],
+    "model_fix_set": [
+      "org_c:finding:06374",
+      "org_c:finding:06376",
+      "org_c:finding:06378",
+      "org_c:finding:06379",
+      "org_c:finding:06382",
+      "step:creds:org_c:asset:01609:org_c:secret:00008"
+    ]
   },
   "tool_log": [
     {
@@ -176,11 +201,58 @@
     {
       "tool": "min_cut",
       "input": {
-        "prefer": "entry",
+        "mode": "cheapest",
+        "prefer": "entry"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "scan_findings",
+      "input": {
+        "view": "ranked",
+        "limit": 20
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "fewest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
         "mode": "cheapest"
       },
       "ok": true,
       "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "simulate_fix",
+      "input": {
+        "fix_tokens": [
+          "org_c:finding:06374",
+          "org_c:finding:06376",
+          "org_c:finding:06378",
+          "org_c:finding:06379",
+          "org_c:finding:06381"
+        ]
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
       "error": null
     }
   ]

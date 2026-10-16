@@ -4,19 +4,26 @@
   "scan": "v2",
   "graph": "org_a_v2",
   "seed": 3,
-  "created": "2026-10-16T03:54:59+00:00",
+  "created": "2026-10-16T04:36:08+00:00",
   "universe": {
     "open_findings": 6855,
     "sha": "7e5c4e25e765e537"
   },
   "head": [
+    "org_a:finding:06856",
     "org_a:finding:06850",
     "org_a:finding:06851",
-    "org_a:finding:06853",
     "org_a:finding:06855",
     "org_a:finding:06848",
     "org_a:finding:06879",
-    "org_a:finding:06856",
+    "org_a:finding:06853",
+    "org_a:finding:06852",
+    "org_a:finding:06857",
+    "org_a:finding:06849",
+    "org_a:finding:06880",
+    "org_a:finding:06854",
+    "org_a:finding:06858",
+    "org_a:finding:06859",
     "org_a:finding:05873",
     "org_a:finding:06554",
     "org_a:finding:05740",
@@ -102,42 +109,49 @@
     "org_a:finding:04937",
     "org_a:finding:05729",
     "org_a:finding:01815",
-    "org_a:finding:00198",
-    "org_a:finding:00051",
-    "org_a:finding:03261",
-    "org_a:finding:00491",
-    "org_a:finding:06540",
-    "org_a:finding:06665",
-    "org_a:finding:05239",
-    "org_a:finding:05505"
+    "org_a:finding:00198"
   ],
   "named": [
+    "org_a:finding:06856",
     "org_a:finding:06850",
     "org_a:finding:06851",
-    "org_a:finding:06853",
     "org_a:finding:06855",
     "org_a:finding:06848",
     "org_a:finding:06879",
-    "org_a:finding:06856"
+    "org_a:finding:06853",
+    "org_a:finding:06852",
+    "org_a:finding:06857",
+    "org_a:finding:06849",
+    "org_a:finding:06880",
+    "org_a:finding:06854",
+    "org_a:finding:06858",
+    "org_a:finding:06859"
   ],
-  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the graph's ranking step and the model's picks",
   "fix_set": [
     "org_a:finding:06848",
     "org_a:finding:06850",
     "org_a:finding:06851",
     "org_a:finding:06853",
     "org_a:finding:06855",
-    "org_a:finding:06856",
-    "org_a:finding:06879"
+    "org_a:finding:06879",
+    "step:usekey:org_a:secret:00008:org_a:ident:00006"
   ],
   "why": {
+    "org_a:finding:06856": "Enables lateral movement between internal assets on a critical attack path to the crown jewels.",
     "org_a:finding:06850": "Enables the most likely attack path from the internet to the crown-jewel bucket.",
     "org_a:finding:06851": "Enables an internet-facing entry point on a high-likelihood attack path to the crown jewels.",
-    "org_a:finding:06853": "Provides an internet-facing entry point on an attack path leading to the crown-jewel bucket.",
     "org_a:finding:06855": "Serves as an internet-facing entry point for an attack path targeting the crown-jewel data store.",
     "org_a:finding:06848": "Acts as an internet-facing entry point on another viable attack route to the crown jewels.",
     "org_a:finding:06879": "Provides an internet-facing entry point on an attack path to the crown jewels.",
-    "org_a:finding:06856": "Enables lateral movement between internal assets on a critical attack path to the crown jewels."
+    "org_a:finding:06853": "Provides an internet-facing entry point on an attack path leading to the crown-jewel bucket.",
+    "org_a:finding:06852": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06857": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06849": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06880": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06854": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06858": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06859": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph."
   },
   "invalid_ids": [],
   "reasoning": "We identified the specific internet-facing vulnerabilities that form the choke points and entry steps on attack paths leading to the crown-jewel data store (org_a:ds:00001). By mitigating these 7 findings, we completely sever all viable attack paths from the internet to the crown jewels with the minimum set of fixes.",
@@ -149,16 +163,41 @@
     "turns": 3,
     "llm_calls": 3,
     "llm_failures": 0,
-    "tool_calls": 3,
+    "tool_calls": 7,
+    "model_tool_calls": 3,
     "cache_hits": 0,
     "refused": 0,
     "tokens_in": 18981,
     "tokens_out": 487,
     "usd": 0.006912,
-    "wall_s": 4.2,
+    "wall_s": 4.6,
     "waited_s": 0.0,
-    "active_s": 4.2,
-    "fix_tokens_dropped": []
+    "active_s": 4.6,
+    "fix_tokens_dropped": [],
+    "ranking": "graph",
+    "graph_ranked": 14,
+    "fix_set_source": "min_cut:cheapest",
+    "fix_set_verified": true,
+    "fix_set_expanded": false,
+    "run_tool_calls": 4,
+    "model_head": [
+      "org_a:finding:06850",
+      "org_a:finding:06851",
+      "org_a:finding:06853",
+      "org_a:finding:06855",
+      "org_a:finding:06848",
+      "org_a:finding:06879",
+      "org_a:finding:06856"
+    ],
+    "model_fix_set": [
+      "org_a:finding:06848",
+      "org_a:finding:06850",
+      "org_a:finding:06851",
+      "org_a:finding:06853",
+      "org_a:finding:06855",
+      "org_a:finding:06856",
+      "org_a:finding:06879"
+    ]
   },
   "tool_log": [
     {
@@ -184,6 +223,55 @@
       "input": {},
       "ok": true,
       "cached": false,
+      "error": null
+    },
+    {
+      "tool": "scan_findings",
+      "input": {
+        "view": "ranked",
+        "limit": 20
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "fewest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "cheapest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "simulate_fix",
+      "input": {
+        "fix_tokens": [
+          "org_a:finding:06848",
+          "org_a:finding:06850",
+          "org_a:finding:06851",
+          "org_a:finding:06853",
+          "org_a:finding:06855",
+          "org_a:finding:06879",
+          "step:usekey:org_a:secret:00008:org_a:ident:00006"
+        ]
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
       "error": null
     }
   ]

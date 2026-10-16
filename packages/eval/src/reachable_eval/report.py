@@ -155,7 +155,7 @@ def _row(cells: list) -> str:
 def comparison_md(doc: dict) -> str:
     agg = doc["aggregate"]
     L = [
-        "# Comparison eval (S7): five prioritisers, one oracle",
+        "# Comparison eval: five prioritisers, one oracle",
         "",
         f"Generated {doc['generated']} by `make eval`. Model for the three LLM prioritisers: "
         f"`{doc['model']}` (temperature 0, provider seeds {doc['seeds']}). Dataset seed "
@@ -448,7 +448,7 @@ def build_ablation(scored: list[dict], **meta) -> dict:
 def ablation_md(doc: dict) -> str:
     on, off, d = doc["graph_on"], doc["graph_off"], doc["drop"]
     L = [
-        "# Ablation (S7): the same agent, graph tools on vs off",
+        "# Ablation: the same agent, graph tools on vs off",
         "",
         f"Generated {doc['generated']} by `make ablation`. {doc['org']} scan {doc['scan']}, "
         f"model `{doc['model']}`, seeds {doc['seeds']}. Identical prompt, CONTEXT, budgets and "

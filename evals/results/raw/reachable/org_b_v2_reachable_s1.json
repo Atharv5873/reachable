@@ -4,17 +4,19 @@
   "scan": "v2",
   "graph": "org_b_v2",
   "seed": 1,
-  "created": "2026-10-16T03:55:01+00:00",
+  "created": "2026-10-16T04:36:10+00:00",
   "universe": {
     "open_findings": 6524,
     "sha": "5fe1583bc11c9a8c"
   },
   "head": [
     "org_b:finding:06524",
-    "org_b:finding:06525",
     "org_b:finding:06523",
     "org_b:finding:06521",
     "org_b:finding:06548",
+    "org_b:finding:06525",
+    "org_b:finding:06522",
+    "org_b:finding:06549",
     "org_b:finding:02499",
     "org_b:finding:04102",
     "org_b:finding:00802",
@@ -107,30 +109,32 @@
     "org_b:finding:05649",
     "org_b:finding:03848",
     "org_b:finding:04730",
-    "org_b:finding:06025",
-    "org_b:finding:04553",
-    "org_b:finding:04099"
+    "org_b:finding:06025"
   ],
   "named": [
     "org_b:finding:06524",
+    "org_b:finding:06523",
+    "org_b:finding:06521",
+    "org_b:finding:06548",
     "org_b:finding:06525",
-    "org_b:finding:06523",
-    "org_b:finding:06521",
-    "org_b:finding:06548"
+    "org_b:finding:06522",
+    "org_b:finding:06549"
   ],
-  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the graph's ranking step and the model's picks",
   "fix_set": [
-    "org_b:finding:06524",
-    "org_b:finding:06523",
     "org_b:finding:06521",
+    "org_b:finding:06523",
+    "org_b:finding:06524",
     "org_b:finding:06548"
   ],
   "why": {
     "org_b:finding:06524": "Enables internet-exposed remote code execution on zephyr-harbor-dmz-224 leading directly to crown jewel paths.",
-    "org_b:finding:06525": "Provides local privilege escalation on the initial access host to steal SSH credentials.",
     "org_b:finding:06523": "Provides an alternative internet-exposed attack path to the crown jewel warehouse.",
     "org_b:finding:06521": "Provides a third internet-exposed entry point into the network leading toward the crown jewels.",
-    "org_b:finding:06548": "Provides a fourth internet-exposed entry point into the network leading toward the crown jewels."
+    "org_b:finding:06548": "Provides a fourth internet-exposed entry point into the network leading toward the crown jewels.",
+    "org_b:finding:06525": "Provides local privilege escalation on the initial access host to steal SSH credentials.",
+    "org_b:finding:06522": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_b:finding:06549": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph."
   },
   "invalid_ids": [],
   "reasoning": "We identified all attack paths leading from the Internet to the crown-jewel data store (org_b:ds:00001). The critical internet-facing entry points and subsequent privilege escalations form the paths. Fixing the four public-facing findings completely disconnects the Internet from the crown jewels.",
@@ -142,16 +146,36 @@
     "turns": 3,
     "llm_calls": 3,
     "llm_failures": 0,
-    "tool_calls": 3,
+    "tool_calls": 7,
+    "model_tool_calls": 3,
     "cache_hits": 0,
     "refused": 0,
     "tokens_in": 15116,
     "tokens_out": 400,
     "usd": 0.005535,
-    "wall_s": 4.5,
+    "wall_s": 6.0,
     "waited_s": 0.0,
-    "active_s": 4.5,
-    "fix_tokens_dropped": []
+    "active_s": 6.0,
+    "fix_tokens_dropped": [],
+    "ranking": "graph",
+    "graph_ranked": 7,
+    "fix_set_source": "min_cut:fewest",
+    "fix_set_verified": true,
+    "fix_set_expanded": false,
+    "run_tool_calls": 4,
+    "model_head": [
+      "org_b:finding:06524",
+      "org_b:finding:06525",
+      "org_b:finding:06523",
+      "org_b:finding:06521",
+      "org_b:finding:06548"
+    ],
+    "model_fix_set": [
+      "org_b:finding:06524",
+      "org_b:finding:06523",
+      "org_b:finding:06521",
+      "org_b:finding:06548"
+    ]
   },
   "tool_log": [
     {
@@ -179,6 +203,52 @@
       },
       "ok": true,
       "cached": false,
+      "error": null
+    },
+    {
+      "tool": "scan_findings",
+      "input": {
+        "view": "ranked",
+        "limit": 20
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "fewest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "cheapest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "simulate_fix",
+      "input": {
+        "fix_tokens": [
+          "org_b:finding:06521",
+          "org_b:finding:06523",
+          "org_b:finding:06524",
+          "org_b:finding:06548"
+        ]
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
       "error": null
     }
   ]

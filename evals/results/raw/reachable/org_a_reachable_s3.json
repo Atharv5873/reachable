@@ -4,26 +4,26 @@
   "scan": "v1",
   "graph": "org_a",
   "seed": 3,
-  "created": "2026-10-16T03:54:49+00:00",
+  "created": "2026-10-16T04:35:54+00:00",
   "universe": {
     "open_findings": 6862,
     "sha": "56fb280b6b5f2f56"
   },
   "head": [
-    "org_a:finding:06846",
-    "org_a:finding:06857",
-    "org_a:finding:06852",
+    "org_a:finding:06856",
     "org_a:finding:06850",
     "org_a:finding:06851",
+    "org_a:finding:06846",
+    "org_a:finding:06855",
     "org_a:finding:06848",
     "org_a:finding:06853",
-    "org_a:finding:06858",
-    "org_a:finding:06855",
-    "org_a:finding:06859",
-    "org_a:finding:06849",
+    "org_a:finding:06852",
     "org_a:finding:06847",
-    "org_a:finding:06856",
+    "org_a:finding:06857",
+    "org_a:finding:06849",
     "org_a:finding:06854",
+    "org_a:finding:06858",
+    "org_a:finding:06859",
     "org_a:finding:05873",
     "org_a:finding:06554",
     "org_a:finding:05740",
@@ -112,22 +112,22 @@
     "org_a:finding:01815"
   ],
   "named": [
-    "org_a:finding:06846",
-    "org_a:finding:06857",
-    "org_a:finding:06852",
+    "org_a:finding:06856",
     "org_a:finding:06850",
     "org_a:finding:06851",
+    "org_a:finding:06846",
+    "org_a:finding:06855",
     "org_a:finding:06848",
     "org_a:finding:06853",
-    "org_a:finding:06858",
-    "org_a:finding:06855",
-    "org_a:finding:06859",
-    "org_a:finding:06849",
+    "org_a:finding:06852",
     "org_a:finding:06847",
-    "org_a:finding:06856",
-    "org_a:finding:06854"
+    "org_a:finding:06857",
+    "org_a:finding:06849",
+    "org_a:finding:06854",
+    "org_a:finding:06858",
+    "org_a:finding:06859"
   ],
-  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the graph's ranking step and the model's picks",
   "fix_set": [
     "org_a:finding:06846",
     "org_a:finding:06848",
@@ -138,41 +138,66 @@
     "step:usekey:org_a:secret:00008:org_a:ident:00006"
   ],
   "why": {
-    "org_a:finding:06846": "Enables direct remote exploitation from the internet on a critical attack path to the crown jewel storage.",
-    "org_a:finding:06857": "Enables high-likelihood remote code execution from the internet on a path leading to the crown jewels.",
-    "org_a:finding:06852": "Enables local privilege escalation on a host critical to the second attack path to the crown jewels.",
-    "org_a:finding:06850": "Provides an initial internet-facing entry point on the primary attack path to the crown jewel bucket.",
-    "org_a:finding:06851": "Serves as the public entry vulnerability for the second-ranked attack path from the internet.",
-    "org_a:finding:06848": "Acts as an initial internet-facing attack step on a valid path to the crown jewels.",
-    "org_a:finding:06853": "Forms an internet-facing entry vector on a multi-hop path leading to the crown jewel bucket.",
-    "org_a:finding:06858": "Provides an external entry vulnerability on a path targeting the crown jewels.",
-    "org_a:finding:06855": "Acts as an internet-exposed entry point on a cloud-based attack path to the crown jewels.",
-    "org_a:finding:06859": "Enables initial internet access on an alternate path to the crown jewels.",
-    "org_a:finding:06849": "Facilitates internal lateral movement on a path leading to the crown jewels.",
-    "org_a:finding:06847": "Enables internal service exploitation on a path toward the crown jewel bucket.",
-    "org_a:finding:06856": "Enables internal service exploitation on the cloud deployment attack path.",
-    "org_a:finding:06854": "Participates in internal attack steps along a path to the crown jewels."
+    "org_a:finding:06856": "Internal vulnerability on onyx-harbor-ci-221 lies directly on a multi-step path leading to the crown jewels.",
+    "org_a:finding:06850": "Internet-facing vulnerability on ember-basalt-edge-183 enables an active path to the crown jewel bucket via stored credentials.",
+    "org_a:finding:06851": "Internet-facing vulnerability on cobalt-sol-edge-184 enables a lateral movement path to the crown jewels.",
+    "org_a:finding:06846": "Internet-facing vulnerability on ember-sol-edge-181 directly enables an attack path to the crown jewel data store.",
+    "org_a:finding:06855": "Internet-facing vulnerability on ember-tessera-edge-186 enables an attack path utilizing cloud service accounts.",
+    "org_a:finding:06848": "Internet-facing vulnerability on larch-meadow-edge-182 enables an attack path to the crown jewels.",
+    "org_a:finding:06853": "Internet-facing vulnerability on fjord-basalt-edge-185 participates in attack paths toward the crown jewels.",
+    "org_a:finding:06852": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06847": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06857": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06849": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06854": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06858": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph.",
+    "org_a:finding:06859": "On 1 crown-jewel path(s) (path-criticality 1.0): ranked by the graph."
   },
   "invalid_ids": [],
-  "reasoning": "We prioritized findings that actively lie on the attack paths leading from the internet to the crown jewel bucket (org_a:ds:00001). Using attack path analysis and min-cut calculations, we identified the specific entry-point vulnerabilities and cloud keys that allow attackers to traverse the network. Remediating this minimal set of findings and revoking the exposed cloud credential fully disconnects all internet-based attack routes to the crown jewels.",
+  "reasoning": "We prioritized findings that are actively on attack paths leading from the internet to the crown jewel data store (org_a:ds:00001). Using attack path analysis and min-cut, we identified the specific entry points and lateral movement vulnerabilities that form complete attacker routes. Fixing these internet-facing entry points and revoking exposed cloud keys successfully disrupts all paths to the crown jewels.",
   "meta": {
     "model": "gemini/gemini-3.5-flash-lite",
     "seed": 3,
     "llm_answered": true,
     "stop": "final",
-    "turns": 3,
-    "llm_calls": 3,
+    "turns": 2,
+    "llm_calls": 2,
     "llm_failures": 0,
-    "tool_calls": 4,
+    "tool_calls": 7,
+    "model_tool_calls": 3,
     "cache_hits": 0,
     "refused": 0,
-    "tokens_in": 24571,
-    "tokens_out": 787,
-    "usd": 0.009339,
-    "wall_s": 37.9,
-    "waited_s": 32.6,
-    "active_s": 5.3,
-    "fix_tokens_dropped": []
+    "tokens_in": 11767,
+    "tokens_out": 569,
+    "usd": 0.004953,
+    "wall_s": 6.0,
+    "waited_s": 0.0,
+    "active_s": 6.0,
+    "fix_tokens_dropped": [],
+    "ranking": "graph",
+    "graph_ranked": 14,
+    "fix_set_source": "min_cut:cheapest",
+    "fix_set_verified": true,
+    "fix_set_expanded": false,
+    "run_tool_calls": 4,
+    "model_head": [
+      "org_a:finding:06846",
+      "org_a:finding:06850",
+      "org_a:finding:06851",
+      "org_a:finding:06853",
+      "org_a:finding:06855",
+      "org_a:finding:06856",
+      "org_a:finding:06848"
+    ],
+    "model_fix_set": [
+      "org_a:finding:06846",
+      "org_a:finding:06848",
+      "org_a:finding:06850",
+      "org_a:finding:06851",
+      "org_a:finding:06853",
+      "org_a:finding:06855",
+      "step:usekey:org_a:secret:00008:org_a:ident:00006"
+    ]
   },
   "tool_log": [
     {
@@ -202,10 +227,52 @@
       "error": null
     },
     {
-      "tool": "exposure_surface",
-      "input": {},
+      "tool": "scan_findings",
+      "input": {
+        "view": "ranked",
+        "limit": 20
+      },
       "ok": true,
       "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "fewest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "min_cut",
+      "input": {
+        "mode": "cheapest"
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
+      "error": null
+    },
+    {
+      "tool": "simulate_fix",
+      "input": {
+        "fix_tokens": [
+          "org_a:finding:06846",
+          "org_a:finding:06848",
+          "org_a:finding:06850",
+          "org_a:finding:06851",
+          "org_a:finding:06853",
+          "org_a:finding:06855",
+          "step:usekey:org_a:secret:00008:org_a:ident:00006"
+        ]
+      },
+      "ok": true,
+      "cached": false,
+      "by": "run",
       "error": null
     }
   ]
