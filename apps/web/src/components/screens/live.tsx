@@ -62,6 +62,20 @@ const STREAM_TYPES = [
   "run_failed",
 ];
 
+// The live stream's fallback (S10): poll /events this often once the stream is
+// given up on: after this many errors, or this long without an event.
+const POLL_MS = 2000;
+const STREAM_LABEL = {
+  idle: "",
+  connecting: "connecting…",
+  open: "streaming (SSE)",
+  reconnecting: "reconnecting with Last-Event-ID…",
+  polling: "polling the trace (stream unavailable)",
+  closed: "stream closed",
+} as const;
+const MAX_STREAM_ERRORS = 3;
+const STALL_MS = 25_000;
+
 type Item =
   | { kind: "event"; e: RunEvent; key: string }
   | { kind: "group"; type: "path_found" | "finding_ranked"; events: RunEvent[]; key: string };
@@ -461,7 +475,7 @@ function LiveView({ liveRun }: { liveRun: string | null }) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>("4");
   const [startErr, setStartErr] = useState<ApiError | null>(null);
-  const [streamState, setStreamState] = useState<"idle" | "connecting" | "open" | "reconnecting" | "closed">(
+  const [streamState, setStreamState] = useState<"idle" | "connecting" | "open" | "reconnecting" | "polling" | "closed">(
     liveRun ? "connecting" : "idle",
   );
   const [fake, setFake] = useState(false);
@@ -508,27 +522,92 @@ function LiveView({ liveRun }: { liveRun: string | null }) {
 
   // Live: the browser subscribes to OUR origin; the route handler adds the key
   // and relays the backend's text/event-stream (EventSource cannot send headers).
+  // The stream is best-effort: a serverless proxy may cut a long response
+  // (Vercel's function time limit) or buffer it. If it closes for good, keeps
+  // failing, or goes quiet, poll /events?after=<last seq> instead: the same
+  // events, deduplicated by the same key, ending in the same report_ready.
   useEffect(() => {
     if (!liveRun) return;
-    const es = new EventSource(`/api/r/runs/${encodeURIComponent(liveRun)}/stream`);
     const seen = new Set<string>();
-    const on = (m: MessageEvent) => {
-      const e = JSON.parse(m.data) as RunEvent;
+    let lastSeq = -1;
+    let finished = false;
+    let errors = 0;
+    let polling = false;
+    let es: EventSource | null = null;
+    let poll: ReturnType<typeof setTimeout> | null = null;
+    let quiet: ReturnType<typeof setTimeout> | null = null;
+
+    const stop = () => {
+      es?.close();
+      es = null;
+      if (poll) clearTimeout(poll);
+      if (quiet) clearTimeout(quiet);
+    };
+    const take = (e: RunEvent) => {
       const k = keyOf(e);
-      if (seen.has(k)) return;
+      if (finished || seen.has(k)) return;
       seen.add(k);
+      if (typeof e.seq === "number") lastSeq = Math.max(lastSeq, e.seq);
       if (e.type === "report_ready" || e.type === "run_failed") {
+        finished = true;
+        stop();
         setDone(e);
-        es.close();
         setStreamState("closed");
         invalidate("orgs");
         ws.reloadOrgs();
       } else setEvents((xs) => [...xs, e]);
     };
-    STREAM_TYPES.forEach((t) => es.addEventListener(t, on as EventListener));
-    es.onopen = () => setStreamState("open");
-    es.onerror = () => setStreamState(es.readyState === EventSource.CLOSED ? "closed" : "reconnecting");
-    return () => es.close();
+    const startPolling = () => {
+      if (finished || polling) return;
+      polling = true;
+      stop();
+      setStreamState("polling");
+      const tick = async () => {
+        try {
+          const batch = await api<RunEvent[]>(`runs/${encodeURIComponent(liveRun)}/events?after=${lastSeq}`);
+          batch.forEach(take);
+        } catch {
+          /* transient (a cold function, a blip): the next tick retries */
+        }
+        if (!finished) poll = setTimeout(tick, POLL_MS);
+      };
+      void tick();
+    };
+    // Nothing for STALL_MS (a model call can take a while, but this long
+    // usually means a buffering proxy): polling costs little and cannot miss.
+    const watch = () => {
+      if (quiet) clearTimeout(quiet);
+      quiet = setTimeout(startPolling, STALL_MS);
+    };
+
+    if (typeof EventSource === "undefined") {
+      startPolling();
+    } else {
+      const source = new EventSource(`/api/r/runs/${encodeURIComponent(liveRun)}/stream`);
+      es = source;
+      const on = (m: MessageEvent) => {
+        watch();
+        take(JSON.parse(m.data) as RunEvent);
+      };
+      STREAM_TYPES.forEach((t) => source.addEventListener(t, on as EventListener));
+      source.onopen = () => {
+        setStreamState("open");
+        watch();
+      };
+      // A cut stream reconnects by itself with Last-Event-ID; a refused one
+      // (non-200) is CLOSED for good. Either way, after a few tries, poll.
+      source.onerror = () => {
+        if (finished) return;
+        errors += 1;
+        if (source.readyState === EventSource.CLOSED || errors >= MAX_STREAM_ERRORS) startPolling();
+        else setStreamState("reconnecting");
+      };
+      watch();
+    }
+    return () => {
+      finished = true;
+      stop();
+    };
   }, [liveRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = async () => {
@@ -580,9 +659,9 @@ function LiveView({ liveRun }: { liveRun: string | null }) {
         ) : (
           <div className="flex items-center gap-3" data-testid="live-controls">
             {streamState !== "idle" && (
-              <span className="flex items-center gap-2 text-xs text-fg-2">
+              <span className="flex items-center gap-2 text-xs text-fg-2" data-testid="stream-state" data-state={streamState}>
                 <Radio className={cn("size-3.5", streamState === "open" && "text-ember")} />
-                {streamState === "connecting" ? "connecting…" : streamState === "open" ? "streaming (SSE)" : streamState === "reconnecting" ? "reconnecting with Last-Event-ID…" : "stream closed"}
+                {STREAM_LABEL[streamState]}
               </span>
             )}
             <Seg
