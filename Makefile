@@ -114,8 +114,9 @@ memory-lift: .env
 ## rank the same findings on every scan (v1 + held-out v2), scored against the oracle.
 ## Prints a cost estimate first and refuses to start above MAX_USD (default 5). Raw
 ## outputs land in evals/results/raw/ (a rerun skips what exists; FORCE=1 redoes it);
-## tables in evals/results/comparison.md (+ .json). DRY=1: estimate only. SEEDS=1 for one seed.
-SEEDS ?= 1 2 3
+## tables in evals/results/comparison.md (+ .json). DRY=1: estimate only. One provider seed by default
+## (the headline); SEEDS="1 2 3" for the three-seed spread (about 3x the cost).
+SEEDS ?= 1
 EVAL_FLAGS = --seeds $(SEEDS) $(if $(MAX_USD),--max-usd $(MAX_USD)) $(if $(DRY),--dry-run) $(if $(FORCE),--force)
 eval: .env
 	$(PY) -m reachable_eval run $(EVAL_FLAGS)

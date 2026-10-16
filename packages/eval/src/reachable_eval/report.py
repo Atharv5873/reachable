@@ -23,12 +23,21 @@ from .scoring import flat, ideal_order, load_truth, score_order, spread
 
 NOTES = REPO_ROOT / "evals" / "comparison_notes.md"
 ORDER = ("severity_sort", "smart_score", "vector_rag", "sql_agent", "reachable")
+# Structural metrics first (S9): they ask "did it find the paths, avoid the decoys,
+# pick a fix set that cuts them", which no prioritiser can satisfy by sharing the
+# oracle's definition of priority. NDCG / P@K (agreement with that priority) after.
 HEADLINE = (
-    ("ndcg@10", "NDCG@10", True),
-    ("p@10", "P@10", True),
     ("path_recall@10", "path recall@10", True),
     ("decoy_rate@10", "decoys@10", False),
     ("fix_paths_per_fix", "paths cut / fix", True),
+    ("ndcg@10", "NDCG@10", True),
+    ("p@10", "P@10", True),
+)
+NDCG_CAVEAT = (
+    "reachable's ranker and the ground truth both define importance as reachability to "
+    "the crown jewels (weighted by each target's sensitivity tier), so agreement between "
+    "them is expected, not a discovery. The informative comparison is reachable vs the "
+    "reachability-blind baselines, and the ablation isolates the graph's contribution."
 )
 COST = ("llm_calls", "tool_calls", "tokens_in", "tokens_out", "usd", "wall_s", "active_s")
 SPLITS = {"all": ("v1", "v2"), "v1": ("v1",), "v2": ("v2",)}
@@ -165,37 +174,125 @@ def comparison_md(doc: dict) -> str:
         "Scans: v1 of org_a / org_b / org_c (the scans the harness was developed against) and "
         "**held-out v2** of each (the week-later rescan, never looked at while building it).",
         "",
-        "## Overall (all six scans; mean ± sd over seeds)",
+        "## 1. Structural metrics (all six scans; mean ± sd over seeds)",
+        "",
+        "Did the top 10 cover the real attack paths, stay off the decoys, and come with a "
+        "fix set that cuts the paths? None of these depends on how the oracle weights "
+        "priority, so none can be won by sharing its definition.",
         "",
         _row(
             [
                 "prioritiser",
-                "NDCG@10",
-                "P@10",
                 "path recall@10",
                 "decoys@10 (lower better)",
                 "paths cut / fix",
-                "LLM calls / run",
-                "tokens in+out / run",
-                "$ / run",
-                "s / run (active)",
+                "fix set cuts (share of paths)",
             ]
         ),
-        _row(["---"] * 10),
+        _row(["---"] * 5),
     ]
+    ceil = list(agg["ceiling"].values())
+
+    def cmean(k: str) -> float:
+        return statistics.fmean(c[k] for c in ceil)
+
     for p in agg["prioritisers"]:
         o = agg["overall"].get(p, {}).get("all", {})
-        c = agg["cost"][p]
-        tok = (c["tokens_in"]["mean"] or 0) + (c["tokens_out"]["mean"] or 0)
+        L.append(
+            _row(
+                [
+                    f"**{p}**" if p == "reachable" else p,
+                    _fmt(o.get("path_recall@10"), pct=True),
+                    _fmt(o.get("decoy_rate@10"), pct=True),
+                    _fmt(o.get("fix_paths_per_fix")),
+                    _fmt(o.get("fix_cut_share"), pct=True),
+                ]
+            )
+        )
+    L.append(
+        _row(
+            [
+                "*oracle*",
+                f"{cmean('path_recall@10') * 100:.0f}%",
+                f"{cmean('decoy_rate@10') * 100:.0f}%",
+                f"{cmean('fix_paths_per_fix'):.2f}",
+                "100%",
+            ]
+        )
+    )
+    L += [
+        "",
+        "*path recall@10*: the share of planted attack paths with at least one of their "
+        "findings in the top 10. *decoys@10*: the share of the three planted decoys (a "
+        "critical KEV with no route, a WAF-mitigated critical, an exposed dead end) ranked "
+        "in the top 10. *paths cut / fix*: paths cut by the prioritiser's own fix set "
+        "(else its top M findings, M = the oracle min-cut size) per fix; the *oracle* row "
+        "is the oracle's min cut, which cuts every path with the fewest fixes. The oracle "
+        "row's path recall is its priority order's (not a ceiling: a list can cover every "
+        "path without following priority order).",
+    ]
+    abl = doc.get("ablation")
+    if abl:
+        on, off = abl["graph_on"], abl["graph_off"]
+        L += [
+            "",
+            f"**Ablation** ({abl['org']} {abl['scan']}, `evals/results/ablation.md`): the same "
+            'reachable agent with every graph tool answering "unavailable": path recall@10 '
+            f"{_fmt(on.get('path_recall@10'), pct=True)} -> "
+            f"{_fmt(off.get('path_recall@10'), pct=True)}, fix set cuts "
+            f"{_fmt(on.get('fix_cut_share'), pct=True)} -> "
+            f"{_fmt(off.get('fix_cut_share'), pct=True)}, NDCG@10 "
+            f"{_fmt(on.get('ndcg@10'))} -> {_fmt(off.get('ndcg@10'))}. "
+            "Same model, prompt and budget: the graph supplies the answer, not the model.",
+        ]
+    L += [
+        "",
+        "## 2. Agreement with the oracle's priority (secondary)",
+        "",
+        f"**Caveat.** {NDCG_CAVEAT}",
+        "",
+        _row(["prioritiser", "NDCG@10", "P@10", "NDCG@10 v1", "NDCG@10 v2 (held out)"]),
+        _row(["---"] * 5),
+    ]
+    for p in agg["prioritisers"]:
+        ov = agg["overall"].get(p, {})
+        o = ov.get("all", {})
         L.append(
             _row(
                 [
                     f"**{p}**" if p == "reachable" else p,
                     _fmt(o.get("ndcg@10")),
                     _fmt(o.get("p@10"), pct=True),
-                    _fmt(o.get("path_recall@10"), pct=True),
-                    _fmt(o.get("decoy_rate@10"), pct=True),
-                    _fmt(o.get("fix_paths_per_fix")),
+                    _fmt(ov.get("v1", {}).get("ndcg@10")),
+                    _fmt(ov.get("v2", {}).get("ndcg@10")),
+                ]
+            )
+        )
+    L += [
+        _row(
+            ["*oracle order*", f"{cmean('ndcg@10'):.2f}", f"{cmean('p@10') * 100:.0f}%", "-", "-"]
+        ),
+        "",
+        "Relevance is the oracle's priority: the sum, over the crown-jewel paths a finding "
+        "lies on, of the target's tier weight (critical 1.0, high 0.6, medium 0.3; S9), "
+        "normalised per scan. Every org has crown jewels of two or three tiers, so the "
+        "ideal order is a real gradient (not just on-path vs off-path). P@10's ceiling is "
+        "below 100% where a scan has fewer than 10 relevant findings (org_b has 7, org_c 9).",
+        "",
+        "## 3. Cost and latency",
+        "",
+        _row(
+            ["prioritiser", "LLM calls / run", "tokens in+out / run", "$ / run", "s / run (active)"]
+        ),
+        _row(["---"] * 5),
+    ]
+    for p in agg["prioritisers"]:
+        c = agg["cost"][p]
+        tok = (c["tokens_in"]["mean"] or 0) + (c["tokens_out"]["mean"] or 0)
+        L.append(
+            _row(
+                [
+                    f"**{p}**" if p == "reachable" else p,
                     _fmt(c["llm_calls"], n=1),
                     f"{tok:,.0f}",
                     _fmt(c["usd"], money=True),
@@ -203,46 +300,22 @@ def comparison_md(doc: dict) -> str:
                 ]
             )
         )
-    ceil = agg["ceiling"].values()
-    L.append(
-        _row(
-            [
-                "*oracle order*",
-                f"{statistics.fmean(c['ndcg@10'] for c in ceil):.2f}",
-                f"{statistics.fmean(c['p@10'] for c in ceil) * 100:.0f}%",
-                f"{statistics.fmean(c['path_recall@10'] for c in ceil) * 100:.0f}%",
-                f"{statistics.fmean(c['decoy_rate@10'] for c in ceil) * 100:.0f}%",
-                f"{statistics.fmean(c['fix_paths_per_fix'] for c in ceil):.2f}",
-                "-",
-                "-",
-                "-",
-                "-",
-            ]
-        )
-    )
     L += [
         "",
-        "*oracle order* ranks by the oracle's own priority: the ceiling for NDCG and P@10 "
-        "(P@10's is below 100% where a scan has fewer than 10 relevant findings: org_b has 7), "
-        "but not for path recall, which a list can max out without following priority "
-        "order (priority ties leave org_a's top 10 one path short). "
         "*s / run (active)* is wall time minus the seconds spent waiting on the Gemini "
-        "key's rate limit (raw files keep both). "
-        "*paths cut / fix* uses the prioritiser's own fix set when it gave one, "
-        "else its top M findings with M = the oracle min-cut size; the oracle row uses the "
-        "oracle's min cut.",
+        "key's rate limit (raw files keep both).",
         "",
-        "## Development scans (v1) vs held-out scans (v2)",
+        "## Development scans (v1) vs held-out scans (v2): structural",
         "",
         _row(
             [
                 "prioritiser",
-                "NDCG@10 v1",
-                "NDCG@10 v2",
                 "path recall@10 v1",
                 "path recall@10 v2",
                 "decoys@10 v1",
                 "decoys@10 v2",
+                "paths cut / fix v1",
+                "paths cut / fix v2",
             ]
         ),
         _row(["---"] * 7),
@@ -253,12 +326,12 @@ def comparison_md(doc: dict) -> str:
             _row(
                 [
                     p,
-                    _fmt(o.get("v1", {}).get("ndcg@10")),
-                    _fmt(o.get("v2", {}).get("ndcg@10")),
                     _fmt(o.get("v1", {}).get("path_recall@10"), pct=True),
                     _fmt(o.get("v2", {}).get("path_recall@10"), pct=True),
                     _fmt(o.get("v1", {}).get("decoy_rate@10"), pct=True),
                     _fmt(o.get("v2", {}).get("decoy_rate@10"), pct=True),
+                    _fmt(o.get("v1", {}).get("fix_paths_per_fix")),
+                    _fmt(o.get("v2", {}).get("fix_paths_per_fix")),
                 ]
             )
         )
@@ -270,11 +343,11 @@ def comparison_md(doc: dict) -> str:
             [
                 "scan",
                 "prioritiser",
-                "NDCG@10",
-                "P@10",
                 "path recall@10",
                 "decoys@10",
                 "fix: cut / size",
+                "NDCG@10",
+                "P@10",
             ]
         ),
         _row(["---"] * 7),
@@ -290,11 +363,11 @@ def comparison_md(doc: dict) -> str:
                     [
                         gid,
                         p,
-                        _fmt(s["ndcg@10"]),
-                        _fmt(s["p@10"], pct=True),
                         _fmt(s["path_recall@10"], pct=True),
                         _fmt(s["decoy_rate@10"], pct=True),
                         f"{_fmt(s['fix_cut_share'], pct=True)} / {_fmt(s['fix_size'], n=1)}",
+                        _fmt(s["ndcg@10"]),
+                        _fmt(s["p@10"], pct=True),
                     ]
                 )
             )
@@ -304,11 +377,11 @@ def comparison_md(doc: dict) -> str:
                 [
                     gid,
                     "*oracle order*",
-                    f"{c['ndcg@10']:.2f}",
-                    f"{c['p@10'] * 100:.0f}%",
                     f"{c['path_recall@10'] * 100:.0f}%",
                     f"{c['decoy_rate@10'] * 100:.0f}%",
                     f"{c['relevant']} relevant, {c['paths']} paths, cut {c['min_cut']}",
+                    f"{c['ndcg@10']:.2f}",
+                    f"{c['p@10'] * 100:.0f}%",
                 ]
             )
         )
@@ -382,7 +455,10 @@ def comparison_md(doc: dict) -> str:
         "differs (pgvector search / read-only SQL / FalkorDB tools over MCP).",
         "- Baselines read the eval views only (no company layer, no memory, no label or path "
         "field); `tests/test_eval_leakage.py` proves it.",
-        "- See `learning/S07.md` for what each metric measures and why.",
+        "- Baselines see which data stores are crown jewels, not their sensitivity tier "
+        "(S9: the views drop `datastores.sensitivity`; reachable reads it from the graph).",
+        "- See `learning/S07.md` for what each metric measures and why, `learning/S09.md` "
+        "for why the structural metrics lead.",
         "",
     ]
     return "\n".join(L)

@@ -65,20 +65,22 @@ def _score(seeds=None, model=None) -> None:
         raise SystemExit("no raw outputs under evals/results/raw/: run `make eval` first")
     scored = R.score_all(raws)
     build_path = R.RAW / "rag_build.json"
+    model = model or next((r["meta"].get("model") for r in raws if r["meta"].get("model")), "?")
+    abl = R.load_raws(ABL_GROUP)
+    abl_doc = _score_ablation(abl, model=model) if abl else None
     doc = build_comparison(
         scored,
-        model=model or next((r["meta"].get("model") for r in raws if r["meta"].get("model")), "?"),
+        model=model,
         seeds=seeds or sorted({r["seed"] for r in raws if r["seed"]}),
         dataset_seed=get_settings().seed,
         rag_build=json.loads(build_path.read_text("utf-8")) if build_path.exists() else {},
         runs=len(raws),
+        ablation=abl_doc
+        and {k: abl_doc[k] for k in ("org", "scan", "seeds", "graph_on", "graph_off", "drop")},
     )
     R.write_json(R.RESULTS / "comparison.json", doc)
     (R.RESULTS / "comparison.md").write_text(comparison_md(doc), encoding="utf-8")
     print(f"wrote {R.RESULTS / 'comparison.json'} and comparison.md ({len(raws)} runs)")
-    abl = R.load_raws(ABL_GROUP)
-    if abl:
-        _score_ablation(abl, model=doc["model"])
 
 
 def _score_ablation(raws: list[dict], *, model: str) -> dict:

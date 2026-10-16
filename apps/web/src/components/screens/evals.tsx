@@ -131,11 +131,11 @@ function Comparison({ d }: { d: any }) {
     const c = agg.cost?.[p] ?? {};
     return [
       <span key={p} className={cn(p === "reachable" && "font-medium text-fg")}>{p}</span>,
-      numSd(o["ndcg@10"]),
-      pctSd(o["p@10"]),
       pctSd(o["path_recall@10"]),
       pctSd(o["decoy_rate@10"]),
       num(mean(o.fix_paths_per_fix)),
+      numSd(o["ndcg@10"]),
+      pctSd(o["p@10"]),
       num(mean(c.llm_calls), 1),
       mean(c.usd) != null ? `$${mean(c.usd).toFixed(4)}` : "-",
       `${num(mean(c.active_s ?? c.wall_s), 1)} s`,
@@ -143,11 +143,11 @@ function Comparison({ d }: { d: any }) {
   });
   rows.push([
     <span key="ceil" className="text-fg-3 italic">oracle order</span>,
-    num(avg("ndcg@10")),
-    pct(avg("p@10")),
     pct(avg("path_recall@10")),
     pct(avg("decoy_rate@10")),
     num(avg("fix_paths_per_fix")),
+    num(avg("ndcg@10")),
+    pct(avg("p@10")),
     "-",
     "-",
     "-",
@@ -159,9 +159,15 @@ function Comparison({ d }: { d: any }) {
       sub={`${(agg.scans ?? []).length} scans (${held} held out) · ${d.model} · seeds ${(d.seeds ?? []).join(", ")} · K = ${d.k} · ${d.generated}`}
     >
       <Table
-        head={["prioritiser", "NDCG@10", "P@10", "path recall@10", "decoys@10", "paths cut / fix", "LLM calls / run", "$ / run", "active s / run"]}
+        head={["prioritiser", "path recall@10", "decoys@10", "paths cut / fix", "NDCG@10", "P@10", "LLM calls / run", "$ / run", "active s / run"]}
         rows={rows}
       />
+      <p className="border-t border-line px-5 py-3 text-xs text-fg-3" data-testid="ndcg-caveat">
+        Path recall, decoys and paths cut per fix lead: none depends on how the oracle weights priority. NDCG / P@10
+        are secondary: reachable&apos;s ranker and the ground truth both define importance as reachability to the
+        crown jewels, so the informative comparison is against the reachability-blind baselines, and the ablation
+        isolates the graph&apos;s contribution.
+      </p>
       <div className="border-t border-line px-5 py-4 text-xs text-fg-2">
         <p className="eyebrow mb-2">Where reachable does not win ({lost.length})</p>
         {lost.length ? (
