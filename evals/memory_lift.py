@@ -44,6 +44,7 @@ from reachable_agents.graph import run_agents
 from reachable_agents.llm import RouterLLM
 from reachable_core.db import connect, drop_graph
 from reachable_core.settings import REPO_ROOT, get_settings
+from reachable_eval.health import gate_verdict, run_health
 from reachable_graph.derive import derive
 from reachable_graph.memory import MemoryRepo
 from reachable_graph.tools import GraphTools
@@ -111,6 +112,8 @@ def measure(repo: MemoryRepo, tools: GraphTools, graph: str, res: dict, oracle: 
     return {
         "run_id": res["run_id"],
         "status": res["status"],
+        # S8: a degraded run (0 tokens, a model or tool outage) can't back a PASS
+        "health": run_health(res["status"], st, steps),
         "findings_investigated": len(tp["investigate"]),
         "investigated": [f["finding"] for f in tp["investigate"]],
         "skipped_by_memory": len(tp.get("carried", [])),
@@ -156,7 +159,12 @@ async def main_async(args) -> dict:
     # 1. The agents triage scan v1: this is the memory warm will have.
     print("v1 run (builds the memory warm starts from) ...")
     r1 = await run_agents(args.org, "v1", llm=llm, repo=repo, graph=v1)
-    runs["v1"] = {"run_id": r1["run_id"], "status": r1["status"], "stats": r1["stats"]}
+    runs["v1"] = {
+        "run_id": r1["run_id"],
+        "status": r1["status"],
+        "stats": r1["stats"],
+        "health": run_health(r1["status"], r1["stats"], repo.agent_run(v1, r1["run_id"])["steps"]),
+    }
     dump_run(repo, v1, r1["run_id"], REPO_ROOT / "runs")
 
     # 2. cold: v2 with a fresh memory namespace (starter playbooks only).
@@ -196,11 +204,15 @@ async def main_async(args) -> dict:
         and warm["llm_calls"] <= cold["llm_calls"]
         and warm["tool_calls"] <= cold["tool_calls"]
     )
-    result["gate_b"] = {
-        "warm_does_strictly_less_work": work_less and no_more,
-        "both_fix_sets_correct": cold["correct"] and warm["correct"],
-    }
-    result["gate_b"]["pass"] = all(result["gate_b"].values())
+    # PASS needs the criteria AND three healthy runs (S8: an outage once produced a
+    # degraded, 0-token run whose deterministic calls still made the criteria true).
+    result["gate_b"] = gate_verdict(
+        {
+            "warm_does_strictly_less_work": work_less and no_more,
+            "both_fix_sets_correct": cold["correct"] and warm["correct"],
+        },
+        {"v1": runs["v1"]["health"], "cold": cold["health"], "warm": warm["health"]},
+    )
     return result
 
 
@@ -218,6 +230,7 @@ ROWS = (
     ("simulate_fix disconnects every crown jewel", "eval_simulate_fix_disconnects"),
     ("fix-set size = oracle min cut", lambda r: r["fix_set_size"] == r["oracle_min_cut_size"]),
     ("run status", "status"),
+    ("healthy (S8: status, tokens, trace, tools)", lambda r: "yes" if not r["health"] else "NO"),
 )
 
 
@@ -245,9 +258,14 @@ def render(res: dict) -> str:
         "|---|---:|---:|",
         *(f"| {name} | {val(c, k)} | {val(w, k)} |" for name, k in ROWS),
         "",
-        f"**Gate B: {'PASS' if res['gate_b']['pass'] else 'FAIL'}**: "
+        f"**Gate B: {res['gate_b']['verdict']}**: "
         f"warm does strictly less work: {res['gate_b']['warm_does_strictly_less_work']}; "
-        f"both fix sets correct: {res['gate_b']['both_fix_sets_correct']}.",
+        f"both fix sets correct: {res['gate_b']['both_fix_sets_correct']}; "
+        f"all three runs healthy: {res['gate_b']['healthy']}.",
+        *(
+            f"* DEGRADED {name}: {'; '.join(why)}"
+            for name, why in res["gate_b"]["degraded"].items()
+        ),
         "",
         "## Where the work went (per agent: LLM calls / tool calls / tokens in)",
         "",

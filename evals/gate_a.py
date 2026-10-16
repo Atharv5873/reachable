@@ -120,6 +120,28 @@ def run_tools(org: str, tools: GraphTools, reps: int) -> dict:
     }
 
 
+def run_health(out: dict) -> list[str]:
+    """S8: why this org's tool run cannot back a PASS ([] when healthy). Gate A has
+    no model, so ill health is an empty or half-loaded graph, or a tool that came
+    back with nothing: a PASS must be about tools that answered."""
+    T = out["timed"]
+    why = []
+    if not sum(len(v) for v in T.lat.values()):
+        why.append("no tool call ran")
+    if not out["exposure"].data.get("assets"):
+        why.append("exposure_surface returned no asset (graph empty or not seeded?)")
+    if not out["internet"].data.get("paths"):
+        why.append("attack_paths returned no path")
+    for prefer, cut in out["cuts"].items():
+        if not cut.data.get("fix_tokens"):
+            why.append(f"min_cut ({prefer}) returned no fix")
+        if out["sims"][prefer].data.get("all_crown_jewels_disconnected") is None:
+            why.append(f"simulate_fix ({prefer}) gave no verdict")
+    if not any(ev.node_ids for _, ev in T.evidence):
+        why.append("no tool returned evidence")
+    return why
+
+
 # ----------------------------------------------------------------- SCORE
 def _seq(path: dict) -> tuple[str, ...]:
     return tuple(to_oracle_id(n["id"], n["labels"]) for n in path["nodes"])
@@ -340,7 +362,11 @@ def to_markdown(report: dict) -> str:
     ]
     for org, p in report["pass"].items():
         L.append(f"| {org} | " + " | ".join("PASS" if v else "FAIL" for v in p.values()) + " |")
-    L += ["", f"**Overall: {'PASS' if report['overall_pass'] else 'FAIL'}**", ""]
+    degraded = {o: w for o, w in report.get("health", {}).items() if w}
+    overall = "PASS" if report["overall_pass"] else "DEGRADED" if degraded else "FAIL"
+    L += ["", f"**Overall: {overall}**", ""]
+    L += [f"* DEGRADED {o}: {'; '.join(w)}" for o, w in degraded.items()]
+    L += [""] if degraded else []
 
     L += [
         "## Planted-path recall and decoys",
@@ -439,15 +465,21 @@ def main() -> None:
         "reps": args.reps,
         "orgs": {},
         "pass": {},
+        "health": {},
     }
     for org in settings.orgs:
         out = run_tools(org, tools, args.reps)  # label-free
+        report["health"][org] = run_health(out)
         labels = json.loads((settings.orgs_dir / org / "labels.json").read_text("utf-8"))
         s = score(org, out, labels, db)
         report["orgs"][org] = s
         report["pass"][org] = passes(s)
         print(org, json.dumps(report["pass"][org]))
-    report["overall_pass"] = all(all(p.values()) for p in report["pass"].values())
+    # S8: PASS needs every criterion AND every org's tool run healthy.
+    report["healthy"] = not any(report["health"].values())
+    report["overall_pass"] = report["healthy"] and all(
+        all(p.values()) for p in report["pass"].values()
+    )
     if args.scale:
         report["scale"] = scale_check(db, args.scale, max(5, args.reps // 2))
         print("scale", json.dumps({k: report["scale"][k] for k in ("memory_mb", "slowest_3")}))
@@ -455,7 +487,9 @@ def main() -> None:
     RESULTS.mkdir(parents=True, exist_ok=True)
     (RESULTS / "gate_a.json").write_text(json.dumps(report, indent=2, default=str), "utf-8")
     (RESULTS / "gate_a.md").write_text(to_markdown(report), "utf-8")
-    print(f"overall: {'PASS' if report['overall_pass'] else 'FAIL'} -> {RESULTS / 'gate_a.md'}")
+    verdict = "PASS" if report["overall_pass"] else "FAIL" if report["healthy"] else "DEGRADED"
+    print(f"overall: {verdict} -> {RESULTS / 'gate_a.md'}")
+    raise SystemExit(0 if report["overall_pass"] else 1)
 
 
 if __name__ == "__main__":

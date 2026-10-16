@@ -31,6 +31,7 @@ from reachable_core.settings import REPO_ROOT, get_settings
 
 from .agent import MAX_LLM_CALLS, eval_llm
 from .base import HEAD_KEEP, Ranking, SeveritySort, SmartScore
+from .health import ranking_health
 from .reachable import reachable
 from .scoring import load_truth, score_raw
 from .sql_agent import sql_agent
@@ -211,10 +212,17 @@ async def run_jobs(
             r = await make(p).rank(data[ref.key], seed=seed)
             r.meta.setdefault("wall_s", round(time.perf_counter() - t, 2))
             r.meta.setdefault("active_s", r.meta["wall_s"])
-            if r.meta.get("llm_failures"):
-                # The model was unavailable (a quota, an outage): this is not the
-                # prioritiser's answer. Keep nothing; a rerun retries the job.
-                raise RuntimeError(f"model unavailable during the run ({r.meta.get('stop')})")
+            sick = ranking_health(
+                r.meta,
+                r.tool_log,
+                expect_llm=p not in DETERMINISTIC,
+                graph_off=p.endswith("_graph_off"),
+            )
+            if sick:
+                # The model or the graph was unavailable (a quota, an outage, 0
+                # tokens): this is not the prioritiser's answer. Keep nothing; a
+                # rerun retries the job. (S8: also 0 tokens / a tool outage.)
+                raise RuntimeError(f"degraded run, not scored: {'; '.join(sick)}")
             raw = to_raw(r, data[ref.key], seed)
             write_json(path, raw)
             out.append(raw)
