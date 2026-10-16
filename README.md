@@ -15,7 +15,7 @@ patterns, versioned playbooks).
 
 > Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB).
 > **FalkorDB is the primary datastore and does the real work.** Postgres +
-> pgvector exists only as a baseline for later eval stages. All company
+> pgvector exists only as the baselines' store in the S7 comparison eval. All company
 > infrastructure, people and findings are **synthetic and fictional**; only the
 > threat intelligence is real public data (see
 > [`data/threatintel/ATTRIBUTION.md`](data/threatintel/ATTRIBUTION.md)).
@@ -25,7 +25,7 @@ patterns, versioned playbooks).
 - Python 3.12 + [uv](https://docs.astral.sh/uv/) workspace, ruff, pytest.
 - FalkorDB (`falkordb/falkordb:latest`) — primary graph store, Browser UI on
   `:3001`.
-- pgvector Postgres — baseline mirror only.
+- pgvector Postgres — baseline mirror only (S7: the SQL and vector-RAG baselines).
 - FastAPI backend: start a run, stream it live (SSE), read it back, drift, verdicts.
 - Next.js 16 web app (`apps/web`): TypeScript, Tailwind 4, shadcn/ui, Cytoscape.js
   (dagre layout); talks to the API only through its own server-side proxy.
@@ -52,6 +52,9 @@ make memory-lift ORG=org_a    # Gate B: cold vs warm on the rescan -> evals/resu
 make api                      # FastAPI + SSE on :8001 (or `docker compose up -d api`)
 make web-install && make web  # the UI on http://localhost:3000 (copy apps/web/.env.example to .env.local)
 make web-test && make e2e     # proxy tests, client-bundle key scan, Playwright smoke
+make eval                     # S7: five prioritisers x six scans vs the oracle -> evals/results/comparison.md
+make ablation                 # S7: the same agent with its graph tools on vs off -> evals/results/ablation.md
+make eval-score               # recompute both tables from evals/results/raw/ (no model, no keys)
 ```
 
 Then open the FalkorDB Browser at <http://localhost:3001> and try the queries in
@@ -77,12 +80,13 @@ reachable/
   packages/graph/      ATTACK_STEP derivation (derive.py), typed read-only tools (tools.py,
                        company_tools.py) and the agent memory repositories (memory.py)
   packages/agents/     LiteLLM router, MCP -> LLM tools, LangGraph agents, Sentinel, CLI
-  evals/               Gate A (no-LLM tool evaluation), Gate B (memory lift) + results/
+  packages/eval/       S7 comparison eval: five prioritisers, read-only baseline views, scoring
+  evals/               Gate A, Gate B (memory lift), S7 comparison + ablation: results/ (raw/ per run)
   scripts/             mcp_smoke.py
   data/threatintel/    committed filtered snapshot + ATTRIBUTION.md
   data/orgs/           generated (gitignored except a tiny sample)
   tests/               pytest (unit + integration + property)
-  learning/            teaching notes (S01.md ... S06.md)
+  learning/            teaching notes (S01.md ... S07.md)
   runs/                agent run dumps (gitignored; the run itself lives in the graph)
 ```
 
@@ -214,6 +218,26 @@ reachable/
     means "an attacker can get there", and nothing else is red. See
     [`learning/S06.md`](learning/S06.md).
 
+11. **Does the graph earn its place?** (S7, `packages/eval`, `make eval`). The same
+    labelled findings, ranked five ways and scored against the oracle: **severity_sort**
+    (CVSS), **smart_score** (CVSS + EPSS + KEV + Internet exposure, a WAF discount; no
+    graph), **vector_rag** and **sql_agent** (the same LLM, prompt, budgets and output
+    schema as reachable, with pgvector search or read-only SQL over the Postgres mirror
+    instead of graph tools), and **reachable** (the FalkorDB tools over MCP). Metrics:
+    NDCG@10, P@10, attack-path recall@10, decoys@10, paths cut per fix vs the oracle min
+    cut, cost and wall time, on the three v1 scans and the three held-out v2 scans, over
+    three provider seeds. The **ablation** (`make ablation`) runs the reachable agent with
+    its graph tools answering "unavailable": the cleanest test of "take FalkorDB out and
+    the product breaks". The baselines read only `eval_<scan>` views through a read-only
+    role (no company layer, no memory, no label or path field; a test proves it). Results:
+    [`evals/results/comparison.md`](evals/results/comparison.md),
+    [`evals/results/ablation.md`](evals/results/ablation.md); every number recomputes from
+    `evals/results/raw/` with `make eval-score`. See [`learning/S07.md`](learning/S07.md).
+    Headline (66 runs, $0.50): reachable NDCG@10 0.82, path recall@10 100% (held-out
+    v2: 0.81 / 100%); severity_sort and smart_score 0 / 0% (smart_score puts a decoy in
+    every top 10); vector_rag 0.04 / 3%; sql_agent 0.03 / 4%. Ablation: graph off drops
+    path recall@10 from 100% to 0%.
+
 ## API
 
 ```bash
@@ -255,7 +279,7 @@ HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is 
 
 See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md),
 [`learning/S03.md`](learning/S03.md), [`learning/S04.md`](learning/S04.md),
-[`learning/S05.md`](learning/S05.md) and [`learning/S06.md`](learning/S06.md) for the concepts, the Cypher, the
+[`learning/S05.md`](learning/S05.md), [`learning/S06.md`](learning/S06.md) and [`learning/S07.md`](learning/S07.md) for the concepts, the Cypher, the
 max-flow / min-cut idea, the company brain and agent memory, and Browser
 queries to run now.
 
