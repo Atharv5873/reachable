@@ -10,11 +10,12 @@ import { WhyStepPanel } from "@/components/evidence";
 import { AttackGraph, GraphLegend } from "@/components/graph/attack-graph";
 import { EmptyState, ErrorState, LoadingRows, Shimmer } from "@/components/states";
 import { useApi } from "@/lib/api";
+import { crownLabel, whyLine } from "@/lib/labels";
 import type { Board, GEdge, Subgraph } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 
-import { useBoard } from "./findings";
+import { useBoard, useOnPaths } from "./findings";
 
 export function useSubgraph(opts: { finding?: string | null; context?: boolean; run?: string | null } = {}) {
   const ws = useWorkspace();
@@ -133,7 +134,9 @@ function PathsView() {
 
   const row = ws.finding ? board.data?.findings[ws.finding] : undefined;
   const node = useSearchParams().get("node"); // from the company brain: an asset to point at
-  const crown = board.data?.crown_jewels.map((c) => c.name).join(", ") ?? "crown jewel";
+  const onPaths = useOnPaths();
+  const jewels = board.data?.crown_jewels ?? [];
+  const crown = crownLabel(jewels);
   const view = useMemo(
     () => ({ focusPaths: focus === null ? null : [focus], selectedEdge: edge, focusNode: node ?? row?.asset ?? null }),
     [focus, edge, row?.asset, node],
@@ -142,10 +145,12 @@ function PathsView() {
   if (!ws.runId) return <NoRunState />;
 
   const g = sub.data;
+  // Name only the crown jewels these paths reach (tier-disambiguated if names clash).
+  const reached = jewels.filter((c) => g?.paths.some((p) => p.target === c.id));
   const title =
     scope === "finding" && row
       ? row.status === "reachable"
-        ? `${g?.paths.length ?? "…"} path${g?.paths.length === 1 ? "" : "s"} through ${row.hostname} to the ${crown}`
+        ? `${g?.paths.length ?? "…"} path${g?.paths.length === 1 ? "" : "s"} through ${row.hostname} to the ${reached.length ? crownLabel(jewels, reached) : crown}`
         : `Nothing an attacker holds reaches ${row.hostname}`
       : `Every way in: ${g?.total_paths ?? "…"} attack paths from the Internet to the ${crown}`;
 
@@ -159,7 +164,7 @@ function PathsView() {
           </h1>
           {scope === "finding" && row && (
             <p className="mt-1 text-sm text-fg-2">
-              <span className="mono text-fg">{row.cve}</span> · CVSS {row.cvss?.toFixed(1)} · {row.why}
+              <span className="mono text-fg">{row.cve}</span> · CVSS {row.cvss?.toFixed(1)} · {whyLine(row, onPaths.get(row.finding))}
             </p>
           )}
         </div>

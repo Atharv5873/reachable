@@ -7,7 +7,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Cvss, Epss, Id, Kev, Seg, Stat, Tier, Verdict, shortRun } from "@/components/bits";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/states";
 import { useApi } from "@/lib/api";
-import type { Board, BoardRow } from "@/lib/types";
+import { crownLabel, onPathsByFinding, whyLine } from "@/lib/labels";
+import type { Board, BoardRow, RunDump } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 
@@ -23,6 +24,14 @@ export function useBoard() {
       ? `orgs/${ws.org}/findings?scan=${ws.scan}`
       : null;
   return useApi<Board>(q);
+}
+
+/** finding id -> how many attack paths its step lies on, from the run's own
+ *  ranking (the same cached GET /runs/{id} the Drift screen reads). */
+export function useOnPaths() {
+  const ws = useWorkspace();
+  const run = useApi<RunDump>(ws.runId ? `runs/${encodeURIComponent(ws.runId)}` : null);
+  return useMemo(() => onPathsByFinding(run.data), [run.data]);
 }
 
 function HeadlineCard({
@@ -152,6 +161,7 @@ function Row({
 export function FindingsScreen() {
   const ws = useWorkspace();
   const board = useBoard();
+  const onPaths = useOnPaths();
   const [order, setOrder] = useState<Order>("reachability");
   const rows = useRef(new Map<string, HTMLDivElement>());
   const tops = useRef(new Map<string, number>());
@@ -185,7 +195,8 @@ export function FindingsScreen() {
   const F = b.findings;
   const hiReach = Object.values(F).find((r) => r.headline === "reachable");
   const hiUnreach = Object.values(F).find((r) => r.headline === "unreachable");
-  const crown = [...new Set(b.crown_jewels.map((c) => c.name))].join(", ");
+  const crown = crownLabel(b.crown_jewels);
+  const shown = (r: BoardRow): BoardRow => ({ ...r, why: whyLine(r, onPaths.get(r.finding)) });
   const crownTiers = b.crown_jewels.map((c) => (c.tier ? `${c.name} (${c.tier})` : c.name)).join(", ");
 
   return (
@@ -212,12 +223,12 @@ export function FindingsScreen() {
 
       {hiReach && hiUnreach && (
         <div className="mt-8 flex items-stretch gap-4" data-testid="headline-pair">
-          <HeadlineCard row={hiUnreach} side="high" total={b.total_open} onPick={() => ws.set({ f: hiUnreach.finding })} />
+          <HeadlineCard row={shown(hiUnreach)} side="high" total={b.total_open} onPick={() => ws.set({ f: hiUnreach.finding })} />
           <div className="flex flex-col items-center justify-center gap-1 px-1 text-fg-3">
             <MoveRight className="size-5" />
             <span className="eyebrow">vs</span>
           </div>
-          <HeadlineCard row={hiReach} side="low" total={b.total_open} onPick={() => ws.set({ f: hiReach.finding })} />
+          <HeadlineCard row={shown(hiReach)} side="low" total={b.total_open} onPick={() => ws.set({ f: hiReach.finding })} />
         </div>
       )}
 
@@ -262,7 +273,7 @@ export function FindingsScreen() {
               return (
                 <Row
                   key={id}
-                  row={r}
+                  row={shown(r)}
                   rank={order === "severity" ? r.scanner_rank : (r.reach_rank ?? i + 1)}
                   other={other}
                   selected={ws.finding === id}
