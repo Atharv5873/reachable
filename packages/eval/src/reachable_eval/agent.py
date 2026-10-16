@@ -187,6 +187,10 @@ class LLMPrioritiser:
     tools: tuple[str, ...]
     llm_factory: Any = eval_llm  # (seed) -> ChatModel; tests pass a scripted one
     uses_llm: bool = True
+    # Optional ranking step after the model answers (S8, reachable only):
+    # async (box, data, head, fix_set) -> Finalised. It may only use the toolbox,
+    # so a toolbox that refuses every call (the ablation) leaves the model's answer.
+    finalise: Any = None
 
     async def rank(self, data: ScanData, *, seed: int = 0) -> Ranking:
         t0 = time.perf_counter()
@@ -205,17 +209,31 @@ class LLMPrioritiser:
             )
             outcome = await run_agent(prioritiser_spec(self.tools), ctx, build_context(data))
             extra = box.meta() if callable(getattr(box, "meta", None)) else {}
-        ans = outcome.final or {}
-        ranked = [r for r in ans.get("ranked") or [] if isinstance(r, dict)]
-        head = [str(r.get("finding")) for r in ranked if r.get("finding")][:MAX_RANKED]
+            ans = outcome.final or {}
+            ranked = [r for r in ans.get("ranked") or [] if isinstance(r, dict)]
+            head = [str(r.get("finding")) for r in ranked if r.get("finding")][:MAX_RANKED]
+            shown = "\n".join(json.dumps(r.result, default=str) for r in ctx.results)
+            fix_set, fix_dropped = [], []
+            for tok in ans.get("fix_set") or []:
+                tok = str(tok)
+                # A fix token must be an open finding or appear in a tool result.
+                (fix_set if tok in data.by_id or (tok and tok in shown) else fix_dropped).append(
+                    tok
+                )
+            fin = await self.finalise(box, data, head, fix_set) if self.finalise else None
+        why = {
+            str(r.get("finding")): str(r.get("why") or "")[:300]
+            for r in ranked
+            if r.get("finding") in data.by_id
+        }
+        if fin:
+            extra = {**extra, **fin.meta, "model_head": head, "model_fix_set": fix_set}
+            head = fin.head
+            fix_set = fin.fix_set if fin.fix_set is not None else fix_set
+            why = {**fin.why, **why}
+        head = head[:MAX_RANKED]
         order, invalid = complete(head, data, severity_order(data))
         valid_head = [f for f in dict.fromkeys(head) if f in data.by_id]
-        shown = "\n".join(json.dumps(r.result, default=str) for r in ctx.results)
-        fix_set, fix_dropped = [], []
-        for tok in ans.get("fix_set") or []:
-            tok = str(tok)
-            # A fix token must be an open finding or appear in a tool result.
-            (fix_set if tok in data.by_id or (tok and tok in shown) else fix_dropped).append(tok)
         model = next(iter(llm.models.values()), "?") if hasattr(llm, "models") else llm.model
         st = ctx.stats()
         cost = usd(model, st["tokens_in"], st["tokens_out"])
@@ -228,12 +246,9 @@ class LLMPrioritiser:
             order,
             fix_set=list(dict.fromkeys(fix_set)) or None,
             head=valid_head,
-            tail_rule="severity_sort (CVSS desc, hash tie-break) after the model's picks",
-            why={
-                str(r.get("finding")): str(r.get("why") or "")[:300]
-                for r in ranked
-                if r.get("finding") in data.by_id
-            },
+            tail_rule="severity_sort (CVSS desc, hash tie-break) after the "
+            + ("graph's ranking step and the model's picks" if fin else "model's picks"),
+            why={f: w for f, w in why.items() if f in data.by_id},
             invalid_ids=invalid,
             reasoning=str(ans.get("reasoning") or "")[:1500],
             meta={
@@ -244,7 +259,8 @@ class LLMPrioritiser:
                 "turns": outcome.turns,
                 "llm_calls": st["llm_calls"],
                 "llm_failures": st["llm_failures"],
-                "tool_calls": st["tool_calls"],
+                "tool_calls": st["tool_calls"] + (len(fin.log) if fin else 0),
+                "model_tool_calls": st["tool_calls"],
                 "cache_hits": st["cache_hits"],
                 "refused": st["refused"],
                 "tokens_in": st["tokens_in"],
@@ -266,7 +282,8 @@ class LLMPrioritiser:
                 }
                 for s in repo.steps
                 if s.get("kind") == "tool"
-            ],
+            ]
+            + (fin.log if fin else []),
         )
 
 

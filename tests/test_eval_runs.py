@@ -94,7 +94,14 @@ def test_ablation_graph_off_loses_path_recall(eval_env):
     off = asyncio.run(
         reachable(llm_factory=lambda s: Policy(FIRST_CALL["reachable"]), graph_off=True).rank(data)
     )
-    assert [t["error"] for t in off.tool_log] == [UNAVAILABLE]
+    assert [t["error"] for t in off.tool_log if t.get("by") != "run"] == [UNAVAILABLE]
+    # S8: the run's ranking step goes through the same toolbox: refused too, so the
+    # graph-off answer is the model's alone (its head and fix set unchanged).
+    run_calls = [t for t in off.tool_log if t.get("by") == "run"]
+    assert run_calls and all(t["error"] == UNAVAILABLE for t in run_calls)
+    assert off.meta["ranking"] == "model"
+    assert off.head == [f for f in off.meta["model_head"] if f in data.by_id]
+    assert on.meta["ranking"] == "graph"
     s_on, s_off = score_order(on.order, truth), score_order(off.order, truth)
     assert s_off["path_recall@10"] < s_on["path_recall@10"]
     assert s_off["ndcg@10"] < s_on["ndcg@10"]

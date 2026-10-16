@@ -12,16 +12,22 @@ for "what do I fix first" and nothing else:
 
 graph_off=True is the ablation: the SAME toolbox, the same schemas shown to the
 model, but every call answers "unavailable". Nothing else changes.
+
+S8: after the model answers, a ranking step (graph_finalise) orders the head by
+path-criticality and takes min_cut's verified fix set, as the product's run does.
+It goes through the same toolbox, so with the graph off it gets nothing and the
+model's answer stands: the ablation still measures the graph alone.
 """
 
 from __future__ import annotations
 
 import re
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 
 from reachable_agents.mcp_tools import CallOutcome, McpToolbox
 
-from .agent import LLMPrioritiser
+from .agent import MAX_RANKED, LLMPrioritiser
 from .store import ScanData
 
 GRAPH_TOOLS = (
@@ -75,7 +81,75 @@ def graph_toolbox_factory(*, graph_off: bool = False):
     return make
 
 
+@dataclass
+class Finalised:
+    head: list[str]
+    fix_set: list[str] | None
+    why: dict[str, str] = field(default_factory=dict)
+    meta: dict = field(default_factory=dict)
+    log: list[dict] = field(default_factory=list)  # the run's own tool calls (by="run")
+
+
+class RunCalls:
+    """Tool calls the RUN makes (by="run"), not the model: through the same
+    toolbox, outside the model's budget (which stays identical for every LLM
+    prioritiser), each one logged."""
+
+    def __init__(self, box, graph: str) -> None:
+        self.box, self.graph, self.log = box, graph, []
+
+    async def __call__(self, name: str, args: dict) -> dict | None:
+        out = await self.box.call(name, {"org": self.graph, **args})
+        self.log.append(
+            {
+                "tool": name,
+                "input": args,
+                "ok": out.ok,
+                "cached": False,
+                "by": "run",
+                "error": (out.error or "")[:200] or None,
+            }
+        )
+        return ((out.result or {}).get("data") or {}) if out.ok else None
+
+
+async def graph_order(call: RunCalls, head: list[str]) -> tuple[list[str], dict, dict]:
+    """scan_findings ranks every finding on a crown-jewel path by its
+    path-criticality (criticality.py): those first, in that order, then the
+    model's other picks in its order. The head is as full as the graph allows
+    (S7: some runs named 7 findings and stopped)."""
+    sf = await call("scan_findings", {"view": "ranked", "limit": MAX_RANKED})
+    if sf is None:
+        return list(head), {}, {"ranking": "model"}
+    rows = [r for r in sf.get("findings", []) if r.get("crown_paths")]
+    crit = [r["finding"] for r in rows]
+    new_head = crit + [f for f in head if f not in crit]
+    why = {
+        r["finding"]: f"On {r['crown_paths']} crown-jewel path(s) (path-criticality "
+        f"{r['criticality']}): ranked by the graph."
+        for r in rows
+    }
+    return new_head, why, {"ranking": "graph", "graph_ranked": len(crit)}
+
+
+async def graph_finalise(box, data: ScanData, head: list[str], fix_set: list[str]) -> Finalised:
+    """The ranking step after the model answers (S8): what the product's run does
+    deterministically, here through the SAME toolbox the model had. Label-free:
+    every input is a graph tool's answer at runtime. Graph off (the ablation),
+    every call answers "unavailable" and the model's answer is kept unchanged."""
+    call = RunCalls(box, data.ref.graph)
+    new_head, why, meta = await graph_order(call, head)
+    meta["run_tool_calls"] = len(call.log)
+    return Finalised(new_head, None, why, meta, call.log)
+
+
 def reachable(llm_factory=None, *, graph_off: bool = False) -> LLMPrioritiser:
     kw = {"llm_factory": llm_factory} if llm_factory else {}
     name = "reachable_graph_off" if graph_off else "reachable"
-    return LLMPrioritiser(name, graph_toolbox_factory(graph_off=graph_off), GRAPH_TOOLS, **kw)
+    return LLMPrioritiser(
+        name,
+        graph_toolbox_factory(graph_off=graph_off),
+        GRAPH_TOOLS,
+        finalise=graph_finalise,
+        **kw,
+    )

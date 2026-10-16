@@ -40,6 +40,8 @@ FORBIDDEN = (
     "planted",
     "decoy",
     "labels",
+    "crown_paths",  # S8: the ranking signal is the graph's, never handed over as text
+    "criticality",
 )
 
 
@@ -164,3 +166,64 @@ def test_baseline_code_never_touches_the_answer_key():
         for s in _code_strings(tree):
             low = s.lower()
             assert "labels" not in low and "finding_priority" not in low, (mod, s)
+
+
+# S8: the ranking and fix signals. Each must come from the graph at runtime.
+SIGNAL_MODULES = (
+    "reachable_graph.criticality",  # path-criticality
+    "reachable_graph.tools",  # scan_findings' order, min_cut, simulate_fix
+    "reachable_agents.agents",  # the product's Pathfinder and Fixer
+    "reachable_eval.reachable",  # the eval's ranking step
+)
+ANSWER_KEY = ("labels.json", "labels_v2", "finding_priority", "ground_truth", "oracle", "planted")
+
+
+def test_ranking_signals_never_touch_the_answer_key():
+    import importlib
+
+    for name in SIGNAL_MODULES:
+        path = Path(importlib.import_module(name).__file__)
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        imported = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.ImportFrom):
+                imported.add(("." * n.level) + (n.module or ""))
+            elif isinstance(n, ast.Import):
+                imported.update(a.name for a in n.names)
+        bad = [m for m in imported if any(x in m for x in ("scoring", "orggen", "oracle"))]
+        assert not bad, (name, bad)
+        for s in _code_strings(tree):
+            low = s.lower()
+            assert not any(k in low for k in ANSWER_KEY), (name, s)
+
+
+def test_ranking_step_runs_with_the_answer_key_unreadable(eval_env, monkeypatch):
+    """The reachable prioritiser, ranking step and fix set included, with every
+    labels file unreadable: it still ranks by path-criticality from the graph."""
+    import asyncio
+    import builtins
+
+    from test_eval_runs import FIRST_CALL, Policy
+
+    from reachable_eval.reachable import reachable
+
+    real_open, real_read = builtins.open, Path.read_text
+
+    def guard(p):
+        if "labels" in str(p).lower():
+            raise AssertionError(f"the ranking read the answer key: {p}")
+
+    def open_(file, *a, **k):
+        guard(file)
+        return real_open(file, *a, **k)
+
+    def read_text(self, *a, **k):
+        guard(self)
+        return real_read(self, *a, **k)
+
+    monkeypatch.setattr(builtins, "open", open_)
+    monkeypatch.setattr(Path, "read_text", read_text)
+    r = asyncio.run(
+        reachable(llm_factory=lambda s: Policy(FIRST_CALL["reachable"])).rank(eval_env["data"])
+    )
+    assert r.meta["ranking"] == "graph" and r.meta["graph_ranked"] > 0
