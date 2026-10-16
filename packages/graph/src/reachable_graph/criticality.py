@@ -29,8 +29,10 @@ import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
-# Per-target weight by DataStore.sensitivity (a crown jewel is "crown").
-SENSITIVITY_WEIGHT = {"crown": 1.0, "high": 0.7, "medium": 0.4, "low": 0.2}
+# Per-target weight by DataStore.sensitivity. S9: crown jewels carry a tier,
+# critical | high | medium ("crown" before S9). The product's own weights, set in S8;
+# the ground truth weights tiers independently (and differently: 1 / 0.6 / 0.3).
+SENSITIVITY_WEIGHT = {"critical": 1.0, "crown": 1.0, "high": 0.7, "medium": 0.4, "low": 0.2}
 
 
 def sensitivity_weight(sensitivity: str | None) -> float:

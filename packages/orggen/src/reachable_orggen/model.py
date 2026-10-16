@@ -83,12 +83,29 @@ class Secret:
     requires_priv: bool = False
 
 
+# Sensitivity tier -> weight, as the ground truth uses it (S9). A crown jewel is
+# critical (customer / payment data), high (internal credentials, source, deploy
+# secrets) or medium (ops / log stores); the oracle's finding priority sums the
+# weight over the crown paths a finding lies on. Ranking only: a tier never changes
+# what is reachable, the paths or the min cut. Every crown tier is > 0, so a finding
+# on any crown path outranks every decoy (priority 0). "crown" is the pre-S9 tier
+# (every crown jewel was one), "low" a non-crown store's.
+SENSITIVITY_WEIGHT = {
+    "critical": 1.0,
+    "crown": 1.0,
+    "high": 0.6,
+    "medium": 0.3,
+    "low": 0.1,
+}
+CROWN_TIERS = ("critical", "high", "medium")
+
+
 @dataclass
 class DataStore:
     id: str
     kind: str  # bucket | managed_db | warehouse | fileshare
     crown_jewel: bool
-    sensitivity: str  # low | medium | high | crown
+    sensitivity: str  # crown jewels: critical | high | medium; other stores: low | medium | high
 
 
 @dataclass

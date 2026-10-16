@@ -97,8 +97,8 @@ def drift_org(org: str, seed: int, cfg: GenConfig) -> tuple[OrgBuild, PlantedPat
         vuln = b.add_vuln(sw, rec)
         b.add_finding(asset, vuln)
 
-    # 3. ONE config change opens ONE new path: a fresh spine to the crown jewel.
-    crown = next(d for d in b.ds.datastores if d.crown_jewel)
+    # 3. ONE config change opens ONE new path: a fresh spine to the critical crown jewel.
+    crown = next(d for d in b.ds.datastores if d.crown_jewel and d.sensitivity == "critical")
     p = Planter(b, catalog)
     s = Spine("v2_new_path", "medium")
     web = p._asset(b.shape.exposed_zone, "web_server")

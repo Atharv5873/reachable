@@ -39,6 +39,32 @@ PRIVESC = [
 ]
 APP = ["vmware:spring_framework", "jenkins:jenkins", "atlassian:confluence_server"]
 
+# Crown jewels by sensitivity tier (S9). Each org's original crown jewel is its
+# customer / payment store (critical); a route listed below ends at a lower-tier
+# crown jewel instead. Only the target of a route's last hop changes, so the routes,
+# what they reach and the min cut are the same as with one crown jewel
+# (tests/test_sensitivity.py). Fixed from each route's story, before any eval ran:
+#   org_a  the machine roles (the k8s node's IMDS role, the CI deploy role) read the
+#          build-artifact / deploy-secret bucket: high.
+#   org_b  the stolen admin SSH key opens the internal source / credentials DB: high.
+#   org_c  the same for its SSH chain (high); the vendor's support routes through the
+#          VPN gateway land on the ops / log share: medium.
+# One constraint, from the eval's guardrails: org_a has 14 on-path findings for 9
+# routes, so a lower tier on a route with one or two findings would push all of
+# them below rank 10 of the oracle's OWN order (path recall@10 < 1 by definition).
+# Its lower tier therefore goes to the routes with the most findings.
+ROUTE_TIER: dict[str, dict[str, str]] = {
+    "org_a": {"hard_imds_bucket": "high", "shared_ci_runner": "high"},
+    "org_b": {"hard_ssh_chain": "high"},
+    "org_c": {"hard_ssh_chain": "high", "shared_vpn_gateway": "medium"},
+}
+# DataStore kind per tier: (cloud org, on-prem org).
+CROWN_KIND = {
+    "critical": ("bucket", "warehouse"),
+    "high": ("bucket", "managed_db"),
+    "medium": ("bucket", "fileshare"),
+}
+
 
 class Spine:
     """Accumulates a planted path's hops as the planter wires its edges."""
@@ -58,6 +84,7 @@ class Planter:
         self.rng = b.rng
         self.shape = b.shape
         self.gt = GroundTruth(org=b.org, seed=b.ds.seed, scale=b.ds.scale)
+        self._crowns: dict[str, DataStore] = {}
 
     # --- low-level node + hop helpers -------------------------------------
     def _asset(self, zone: str, kind: str, *, cloud: bool | None = None) -> Asset:
@@ -157,11 +184,20 @@ class Planter:
         )
 
     # --- crown jewels ------------------------------------------------------
-    def make_crown(self) -> DataStore:
-        kind = "bucket" if self.shape.cloud else "warehouse"
-        ds = self.b.datastore(kind, crown=True, sensitivity="crown")
-        self.gt.crown_jewels.append(f"ds:{ds.id}")
-        return ds
+    def crown(self, tier: str = "critical") -> DataStore:
+        """The org's crown jewel of `tier`, created on first use (one per tier). The
+        critical one is created first, so it keeps the single pre-S9 crown jewel's
+        id; no RNG is drawn, so every other node and edge is unchanged."""
+        if tier not in self._crowns:
+            kind = CROWN_KIND[tier][0 if self.shape.cloud else 1]
+            ds = self.b.datastore(kind, crown=True, sensitivity=tier)
+            self.gt.crown_jewels.append(f"ds:{ds.id}")
+            self.gt.crown_tiers[f"ds:{ds.id}"] = tier
+            self._crowns[tier] = ds
+        return self._crowns[tier]
+
+    def crown_for(self, route: str) -> DataStore:
+        return self.crown(ROUTE_TIER.get(self.b.org, {}).get(route, "critical"))
 
     # --- path templates ----------------------------------------------------
     def path_easy_web_db(self, crown: DataStore, medium: bool = False) -> PlantedPath:
@@ -420,30 +456,31 @@ def _iso_zonespec(org: str):
 
 def plant_org(b: Builder, catalog: Catalog) -> GroundTruth:
     p = Planter(b, catalog)
-    crown = p.make_crown()
+    crown = p.crown("critical")
 
     p.over_broad_roles()
 
     # Choose templates per org shape. Every org gets >=1 easy, >=1 medium-start,
-    # and >=2 hard with a non-network hop.
+    # and >=2 hard with a non-network hop. Each ends at its route's crown jewel.
+    to = p.crown_for
     paths: list[PlantedPath] = [
-        p.path_easy_web_db(crown),
-        p.path_easy_web_db(crown, medium=True),  # medium CVE on an internet asset
-        p.path_ssh_chain(crown),
-        p.path_privesc_root_secret(crown),
+        p.path_easy_web_db(to("easy_web_db")),
+        p.path_easy_web_db(to("medium_start_web_db"), medium=True),  # medium CVE, internet asset
+        p.path_ssh_chain(to("hard_ssh_chain")),
+        p.path_privesc_root_secret(to("hard_privesc_root_secret")),
     ]
     if b.shape.cloud:
-        paths.append(p.path_imds_bucket(crown))
-        paths.append(p.path_cloudkey_assume(crown))
+        paths.append(p.path_imds_bucket(to("hard_imds_bucket")))
+        paths.append(p.path_cloudkey_assume(to("hard_cloudkey_assume")))
 
     # Shared infrastructure: org_a and org_c get a real funnel (min-cut < path
     # count); org_b keeps independent paths for contrast (its funnel is blocked).
     if b.org == "org_a":
-        paths += p.paths_shared_ci_runner(crown)
+        paths += p.paths_shared_ci_runner(to("shared_ci_runner"))
     elif b.org == "org_b":
         p.shared_jump_host_blocked(crown, via=paths[:2])
     elif b.org == "org_c":
-        paths += p.paths_shared_vpn_gateway(crown)
+        paths += p.paths_shared_vpn_gateway(to("shared_vpn_gateway"))
     p.gt.paths = paths
 
     p.gt.decoys = [p.decoy_severity(), p.decoy_mitigated(), p.decoy_dead_end()]

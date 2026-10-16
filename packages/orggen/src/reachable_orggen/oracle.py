@@ -40,10 +40,9 @@ from reachable_core.attack_rules import (
 from reachable_core.effort import FIX_AT_SOURCE, finding_effort, step_effort
 from reachable_intel.products import PRODUCTS_BY_ID
 
-from .model import Dataset
+from .model import SENSITIVITY_WEIGHT, Dataset
 
 INF = 10**9
-SENSITIVITY_WEIGHT = {"crown": 1.0, "high": 0.6, "medium": 0.3, "low": 0.1}
 
 
 @dataclass

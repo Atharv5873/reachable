@@ -44,6 +44,7 @@ def labels_payload(ob: OrgBuild, *, scan: str = "v1", new_path: PlantedPath | No
         "scale": gt.scale,
         "scan": scan,
         "crown_jewels": gt.crown_jewels,
+        "crown_tiers": gt.crown_tiers,
         "paths": [_path_dict(p, g) for p in gt.paths],
         "new_path_v2": _path_dict(new_path, g) if new_path else None,
         "fixed_findings_v2": gt.fixed_findings,

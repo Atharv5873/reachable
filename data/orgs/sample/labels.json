@@ -4,8 +4,13 @@
   "scale": 0.02,
   "scan": "v1",
   "crown_jewels": [
-    "ds:org_a:ds:00001"
+    "ds:org_a:ds:00001",
+    "ds:org_a:ds:00004"
   ],
+  "crown_tiers": {
+    "ds:org_a:ds:00001": "critical",
+    "ds:org_a:ds:00004": "high"
+  },
   "paths": [
     {
       "name": "easy_web_db",
@@ -16,25 +21,29 @@
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00036"
+          "to": "asset:org_a:asset:00036",
+          "fix": "org_a:finding:00152"
         },
         {
           "rule": "exploit_remote_service",
           "technique": "T1210",
           "from": "asset:org_a:asset:00036",
-          "to": "asset:org_a:asset:00037"
+          "to": "asset:org_a:asset:00037",
+          "fix": "org_a:finding:00153"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00037",
-          "to": "secret:org_a:secret:00001"
+          "to": "secret:org_a:secret:00001",
+          "fix": "step:creds:org_a:asset:00037:org_a:secret:00001"
         },
         {
           "rule": "db_with_password",
           "technique": "T1078",
           "from": "secret:org_a:secret:00001",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00001",
+          "fix": "step:db:org_a:secret:00001:org_a:ds:00001"
         }
       ],
       "nodes": [
@@ -54,25 +63,29 @@
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00038"
+          "to": "asset:org_a:asset:00038",
+          "fix": "org_a:finding:00154"
         },
         {
           "rule": "exploit_remote_service",
           "technique": "T1210",
           "from": "asset:org_a:asset:00038",
-          "to": "asset:org_a:asset:00039"
+          "to": "asset:org_a:asset:00039",
+          "fix": "org_a:finding:00155"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00039",
-          "to": "secret:org_a:secret:00002"
+          "to": "secret:org_a:secret:00002",
+          "fix": "step:creds:org_a:asset:00039:org_a:secret:00002"
         },
         {
           "rule": "db_with_password",
           "technique": "T1078",
           "from": "secret:org_a:secret:00002",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00001",
+          "fix": "step:db:org_a:secret:00002:org_a:ds:00001"
         }
       ],
       "nodes": [
@@ -92,31 +105,36 @@
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00040"
+          "to": "asset:org_a:asset:00040",
+          "fix": "org_a:finding:00156"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00040",
-          "to": "secret:org_a:secret:00003"
+          "to": "secret:org_a:secret:00003",
+          "fix": "step:creds:org_a:asset:00040:org_a:secret:00003"
         },
         {
           "rule": "ssh_with_stolen_key",
           "technique": "T1021.004",
           "from": "secret:org_a:secret:00003",
-          "to": "asset:org_a:asset:00041"
+          "to": "asset:org_a:asset:00041",
+          "fix": "step:ssh:org_a:secret:00003:org_a:asset:00041"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00041",
-          "to": "secret:org_a:secret:00004"
+          "to": "secret:org_a:secret:00004",
+          "fix": "step:creds:org_a:asset:00041:org_a:secret:00004"
         },
         {
           "rule": "db_with_password",
           "technique": "T1078",
           "from": "secret:org_a:secret:00004",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00001",
+          "fix": "step:db:org_a:secret:00004:org_a:ds:00001"
         }
       ],
       "nodes": [
@@ -137,37 +155,43 @@
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00042"
+          "to": "asset:org_a:asset:00042",
+          "fix": "org_a:finding:00157"
         },
         {
           "rule": "local_privesc",
           "technique": "T1068",
           "from": "asset:org_a:asset:00042",
-          "to": "priv:org_a:asset:00042"
+          "to": "priv:org_a:asset:00042",
+          "fix": "org_a:finding:00158"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "priv:org_a:asset:00042",
-          "to": "secret:org_a:secret:00005"
+          "to": "secret:org_a:secret:00005",
+          "fix": "step:creds:org_a:asset:00042:org_a:secret:00005"
         },
         {
           "rule": "ssh_with_stolen_key",
           "technique": "T1021.004",
           "from": "secret:org_a:secret:00005",
-          "to": "asset:org_a:asset:00043"
+          "to": "asset:org_a:asset:00043",
+          "fix": "step:ssh:org_a:secret:00005:org_a:asset:00043"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00043",
-          "to": "secret:org_a:secret:00006"
+          "to": "secret:org_a:secret:00006",
+          "fix": "step:creds:org_a:asset:00043:org_a:secret:00006"
         },
         {
           "rule": "db_with_password",
           "technique": "T1078",
           "from": "secret:org_a:secret:00006",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00001",
+          "fix": "step:db:org_a:secret:00006:org_a:ds:00001"
         }
       ],
       "nodes": [
@@ -183,31 +207,35 @@
     {
       "name": "hard_imds_bucket",
       "difficulty": "hard",
-      "target": "ds:org_a:ds:00001",
+      "target": "ds:org_a:ds:00004",
       "hops": [
         {
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00044"
+          "to": "asset:org_a:asset:00044",
+          "fix": "org_a:finding:00159"
         },
         {
           "rule": "exploit_remote_service",
           "technique": "T1210",
           "from": "asset:org_a:asset:00044",
-          "to": "asset:org_a:asset:00045"
+          "to": "asset:org_a:asset:00045",
+          "fix": "org_a:finding:00160"
         },
         {
           "rule": "instance_metadata",
           "technique": "T1552.005",
           "from": "asset:org_a:asset:00045",
-          "to": "ident:org_a:ident:00003"
+          "to": "ident:org_a:ident:00003",
+          "fix": "step:imds:org_a:asset:00045:org_a:ident:00003"
         },
         {
           "rule": "read_cloud_storage",
           "technique": "T1530",
           "from": "ident:org_a:ident:00003",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00004",
+          "fix": "step:read:org_a:ident:00003:org_a:ds:00004"
         }
       ],
       "nodes": [
@@ -215,7 +243,7 @@
         "asset:org_a:asset:00044",
         "asset:org_a:asset:00045",
         "ident:org_a:ident:00003",
-        "ds:org_a:ds:00001"
+        "ds:org_a:ds:00004"
       ]
     },
     {
@@ -227,31 +255,36 @@
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00046"
+          "to": "asset:org_a:asset:00046",
+          "fix": "org_a:finding:00161"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00046",
-          "to": "secret:org_a:secret:00007"
+          "to": "secret:org_a:secret:00007",
+          "fix": "step:creds:org_a:asset:00046:org_a:secret:00007"
         },
         {
           "rule": "use_cloud_account",
           "technique": "T1078.004",
           "from": "secret:org_a:secret:00007",
-          "to": "ident:org_a:ident:00004"
+          "to": "ident:org_a:ident:00004",
+          "fix": "step:usekey:org_a:secret:00007:org_a:ident:00004"
         },
         {
           "rule": "use_cloud_account",
           "technique": "T1078.004",
           "from": "ident:org_a:ident:00004",
-          "to": "ident:org_a:ident:00005"
+          "to": "ident:org_a:ident:00005",
+          "fix": "step:assume:org_a:ident:00004:org_a:ident:00005"
         },
         {
           "rule": "read_cloud_storage",
           "technique": "T1530",
           "from": "ident:org_a:ident:00005",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00001",
+          "fix": "step:read:org_a:ident:00005:org_a:ds:00001"
         }
       ],
       "nodes": [
@@ -266,37 +299,42 @@
     {
       "name": "hard_shared_ci_runner_1",
       "difficulty": "hard",
-      "target": "ds:org_a:ds:00001",
+      "target": "ds:org_a:ds:00004",
       "hops": [
         {
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00048"
+          "to": "asset:org_a:asset:00048",
+          "fix": "org_a:finding:00163"
         },
         {
           "rule": "exploit_remote_service",
           "technique": "T1210",
           "from": "asset:org_a:asset:00048",
-          "to": "asset:org_a:asset:00047"
+          "to": "asset:org_a:asset:00047",
+          "fix": "org_a:finding:00162"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00047",
-          "to": "secret:org_a:secret:00008"
+          "to": "secret:org_a:secret:00008",
+          "fix": "step:creds:org_a:asset:00047:org_a:secret:00008"
         },
         {
           "rule": "use_cloud_account",
           "technique": "T1078.004",
           "from": "secret:org_a:secret:00008",
-          "to": "ident:org_a:ident:00006"
+          "to": "ident:org_a:ident:00006",
+          "fix": "step:usekey:org_a:secret:00008:org_a:ident:00006"
         },
         {
           "rule": "read_cloud_storage",
           "technique": "T1530",
           "from": "ident:org_a:ident:00006",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00004",
+          "fix": "step:read:org_a:ident:00006:org_a:ds:00004"
         }
       ],
       "nodes": [
@@ -305,43 +343,48 @@
         "asset:org_a:asset:00047",
         "secret:org_a:secret:00008",
         "ident:org_a:ident:00006",
-        "ds:org_a:ds:00001"
+        "ds:org_a:ds:00004"
       ]
     },
     {
       "name": "hard_shared_ci_runner_2",
       "difficulty": "hard",
-      "target": "ds:org_a:ds:00001",
+      "target": "ds:org_a:ds:00004",
       "hops": [
         {
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00049"
+          "to": "asset:org_a:asset:00049",
+          "fix": "org_a:finding:00164"
         },
         {
           "rule": "exploit_remote_service",
           "technique": "T1210",
           "from": "asset:org_a:asset:00049",
-          "to": "asset:org_a:asset:00047"
+          "to": "asset:org_a:asset:00047",
+          "fix": "org_a:finding:00162"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00047",
-          "to": "secret:org_a:secret:00008"
+          "to": "secret:org_a:secret:00008",
+          "fix": "step:creds:org_a:asset:00047:org_a:secret:00008"
         },
         {
           "rule": "use_cloud_account",
           "technique": "T1078.004",
           "from": "secret:org_a:secret:00008",
-          "to": "ident:org_a:ident:00006"
+          "to": "ident:org_a:ident:00006",
+          "fix": "step:usekey:org_a:secret:00008:org_a:ident:00006"
         },
         {
           "rule": "read_cloud_storage",
           "technique": "T1530",
           "from": "ident:org_a:ident:00006",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00004",
+          "fix": "step:read:org_a:ident:00006:org_a:ds:00004"
         }
       ],
       "nodes": [
@@ -350,43 +393,48 @@
         "asset:org_a:asset:00047",
         "secret:org_a:secret:00008",
         "ident:org_a:ident:00006",
-        "ds:org_a:ds:00001"
+        "ds:org_a:ds:00004"
       ]
     },
     {
       "name": "hard_shared_ci_runner_3",
       "difficulty": "hard",
-      "target": "ds:org_a:ds:00001",
+      "target": "ds:org_a:ds:00004",
       "hops": [
         {
           "rule": "exploit_public_facing",
           "technique": "T1190",
           "from": "internet",
-          "to": "asset:org_a:asset:00050"
+          "to": "asset:org_a:asset:00050",
+          "fix": "org_a:finding:00165"
         },
         {
           "rule": "exploit_remote_service",
           "technique": "T1210",
           "from": "asset:org_a:asset:00050",
-          "to": "asset:org_a:asset:00047"
+          "to": "asset:org_a:asset:00047",
+          "fix": "org_a:finding:00162"
         },
         {
           "rule": "creds_in_files",
           "technique": "T1552.001",
           "from": "asset:org_a:asset:00047",
-          "to": "secret:org_a:secret:00008"
+          "to": "secret:org_a:secret:00008",
+          "fix": "step:creds:org_a:asset:00047:org_a:secret:00008"
         },
         {
           "rule": "use_cloud_account",
           "technique": "T1078.004",
           "from": "secret:org_a:secret:00008",
-          "to": "ident:org_a:ident:00006"
+          "to": "ident:org_a:ident:00006",
+          "fix": "step:usekey:org_a:secret:00008:org_a:ident:00006"
         },
         {
           "rule": "read_cloud_storage",
           "technique": "T1530",
           "from": "ident:org_a:ident:00006",
-          "to": "ds:org_a:ds:00001"
+          "to": "ds:org_a:ds:00004",
+          "fix": "step:read:org_a:ident:00006:org_a:ds:00004"
         }
       ],
       "nodes": [
@@ -395,7 +443,7 @@
         "asset:org_a:asset:00047",
         "secret:org_a:secret:00008",
         "ident:org_a:ident:00006",
-        "ds:org_a:ds:00001"
+        "ds:org_a:ds:00004"
       ]
     }
   ],
@@ -455,9 +503,9 @@
     "step:db:org_a:secret:00002:org_a:ds:00001",
     "step:db:org_a:secret:00004:org_a:ds:00001",
     "step:db:org_a:secret:00006:org_a:ds:00001",
-    "step:read:org_a:ident:00003:org_a:ds:00001",
+    "step:read:org_a:ident:00003:org_a:ds:00004",
     "step:read:org_a:ident:00005:org_a:ds:00001",
-    "step:read:org_a:ident:00006:org_a:ds:00001"
+    "step:read:org_a:ident:00006:org_a:ds:00004"
   ],
   "min_cut_size": 7,
   "finding_priority": {
@@ -612,16 +660,16 @@
     "org_a:finding:00149": 0.0,
     "org_a:finding:00150": 0.0,
     "org_a:finding:00151": 0.0,
-    "org_a:finding:00152": 0.3333,
-    "org_a:finding:00153": 0.3333,
-    "org_a:finding:00154": 0.3333,
-    "org_a:finding:00155": 0.3333,
-    "org_a:finding:00156": 0.3333,
-    "org_a:finding:00157": 0.3333,
-    "org_a:finding:00158": 0.3333,
+    "org_a:finding:00152": 0.5556,
+    "org_a:finding:00153": 0.5556,
+    "org_a:finding:00154": 0.5556,
+    "org_a:finding:00155": 0.5556,
+    "org_a:finding:00156": 0.5556,
+    "org_a:finding:00157": 0.5556,
+    "org_a:finding:00158": 0.5556,
     "org_a:finding:00159": 0.3333,
     "org_a:finding:00160": 0.3333,
-    "org_a:finding:00161": 0.3333,
+    "org_a:finding:00161": 0.5556,
     "org_a:finding:00162": 1.0,
     "org_a:finding:00163": 0.3333,
     "org_a:finding:00164": 0.3333,

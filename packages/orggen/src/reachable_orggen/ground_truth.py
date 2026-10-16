@@ -65,6 +65,7 @@ class GroundTruth:
     paths: list[PlantedPath] = field(default_factory=list)
     decoys: list[Decoy] = field(default_factory=list)
     crown_jewels: list[str] = field(default_factory=list)  # ds node ids
+    crown_tiers: dict[str, str] = field(default_factory=dict)  # ds node id -> tier (S9)
     shared_infra: list[SharedInfra] = field(default_factory=list)
     # Filled in by the oracle after the graph is built:
     min_cut: list[str] = field(default_factory=list)
