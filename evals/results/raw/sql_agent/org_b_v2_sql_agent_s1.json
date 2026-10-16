@@ -1,0 +1,193 @@
+{
+  "prioritiser": "sql_agent",
+  "org": "org_b",
+  "scan": "v2",
+  "graph": "org_b_v2",
+  "seed": 1,
+  "created": "2026-10-16T05:33:15+00:00",
+  "universe": {
+    "open_findings": 6524,
+    "sha": "5fe1583bc11c9a8c"
+  },
+  "head": [
+    "org_b:finding:01050",
+    "org_b:finding:02499",
+    "org_b:finding:04102",
+    "org_b:finding:00802",
+    "org_b:finding:02642",
+    "org_b:finding:03808",
+    "org_b:finding:02140",
+    "org_b:finding:04006",
+    "org_b:finding:05223",
+    "org_b:finding:03006",
+    "org_b:finding:05033",
+    "org_b:finding:04235",
+    "org_b:finding:05942",
+    "org_b:finding:03715",
+    "org_b:finding:06047",
+    "org_b:finding:03208",
+    "org_b:finding:05528",
+    "org_b:finding:05373",
+    "org_b:finding:01124",
+    "org_b:finding:04204",
+    "org_b:finding:05338",
+    "org_b:finding:05683",
+    "org_b:finding:06176",
+    "org_b:finding:05831",
+    "org_b:finding:04046",
+    "org_b:finding:05067",
+    "org_b:finding:00794",
+    "org_b:finding:00616",
+    "org_b:finding:05177",
+    "org_b:finding:04875",
+    "org_b:finding:05427",
+    "org_b:finding:01339",
+    "org_b:finding:06083",
+    "org_b:finding:05110",
+    "org_b:finding:02505",
+    "org_b:finding:02624",
+    "org_b:finding:06400",
+    "org_b:finding:05878",
+    "org_b:finding:03360",
+    "org_b:finding:00287",
+    "org_b:finding:04498",
+    "org_b:finding:06191",
+    "org_b:finding:02602",
+    "org_b:finding:04157",
+    "org_b:finding:01484",
+    "org_b:finding:06344",
+    "org_b:finding:05443",
+    "org_b:finding:02417",
+    "org_b:finding:06252",
+    "org_b:finding:04612",
+    "org_b:finding:05469",
+    "org_b:finding:04951",
+    "org_b:finding:02128",
+    "org_b:finding:03741",
+    "org_b:finding:05637",
+    "org_b:finding:06004",
+    "org_b:finding:00547",
+    "org_b:finding:01004",
+    "org_b:finding:05809",
+    "org_b:finding:05801",
+    "org_b:finding:04815",
+    "org_b:finding:01771",
+    "org_b:finding:06145",
+    "org_b:finding:04986",
+    "org_b:finding:04819",
+    "org_b:finding:02535",
+    "org_b:finding:00011",
+    "org_b:finding:00320",
+    "org_b:finding:05945",
+    "org_b:finding:05995",
+    "org_b:finding:04291",
+    "org_b:finding:04327",
+    "org_b:finding:05729",
+    "org_b:finding:05098",
+    "org_b:finding:04856",
+    "org_b:finding:03691",
+    "org_b:finding:05273",
+    "org_b:finding:05587",
+    "org_b:finding:03068",
+    "org_b:finding:01821",
+    "org_b:finding:05760",
+    "org_b:finding:00855",
+    "org_b:finding:04366",
+    "org_b:finding:06177",
+    "org_b:finding:04277",
+    "org_b:finding:05036",
+    "org_b:finding:04807",
+    "org_b:finding:02017",
+    "org_b:finding:04497",
+    "org_b:finding:05649",
+    "org_b:finding:03848",
+    "org_b:finding:04730",
+    "org_b:finding:06025",
+    "org_b:finding:04553",
+    "org_b:finding:04099",
+    "org_b:finding:05584",
+    "org_b:finding:02015",
+    "org_b:finding:05903",
+    "org_b:finding:01829",
+    "org_b:finding:01168"
+  ],
+  "named": [
+    "org_b:finding:01050"
+  ],
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "fix_set": [
+    "org_b:finding:01050"
+  ],
+  "why": {
+    "org_b:finding:01050": "This is a critical Log4j Remote Code Execution vulnerability (CVE-2021-44228) with a CVSS of 10.0 and maximum EPSS, representing an immediate risk to the environment."
+  },
+  "invalid_ids": [],
+  "reasoning": "The critical CVE-2021-44228 finding on the app host represents a severe remote code execution vulnerability with maximum exploit probability. Fixing this key finding effectively mitigates the primary attack vector to protect the organization's crown jewels.",
+  "meta": {
+    "model": "gemini/gemini-3.5-flash-lite",
+    "seed": 1,
+    "llm_answered": true,
+    "stop": "final",
+    "turns": 6,
+    "llm_calls": 6,
+    "llm_failures": 0,
+    "tool_calls": 5,
+    "model_tool_calls": 5,
+    "cache_hits": 0,
+    "refused": 0,
+    "tokens_in": 22434,
+    "tokens_out": 1209,
+    "usd": 0.009753,
+    "wall_s": 118.3,
+    "waited_s": 102.1,
+    "active_s": 16.2,
+    "fix_tokens_dropped": []
+  },
+  "tool_log": [
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT f.id AS finding_id, v.cve, v.cvss, a.hostname, ds.id AS ds_id\nFROM findings f\nJOIN of ON of.id = f.id\nJOIN assets a ON of.dst = a.id\nJOIN runs r ON r.src = a.id\nJOIN software s ON r.dst = s.id\nJOIN has_vuln hv ON hv.src = s.id AND hv.dst = v.id\nJOIN edges e ON e.src = a.id\nJOIN datastores ds ON e.dst = ds.id\nWHERE f.status = 'open' AND ds.crown_jewel = true\nLIMIT 50;"
+      },
+      "ok": false,
+      "cached": false,
+      "error": "UndefinedTable: relation \"of\" does not exist\nLINE 3: JOIN of ON of.id = f.id\n             ^"
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT f.id AS finding_id, v.cve, v.cvss, a.hostname, ds.id AS ds_id\nFROM findings f\nJOIN edges e_on ON e_on.src = f.id AND e_on.type = 'ON'\nJOIN assets a ON e_on.dst = a.id\nJOIN edges e_of ON e_of.src = f.id AND e_of.type = 'OF'\nJOIN vuln v ON e_of.dst = v.id\nJOIN edges e_ds ON e_ds.src = a.id AND e_ds.type = 'CAN' -- wait, datastores are reached via CAN or HOLDS/UNLOCKS? Let's check edges to datastores.\nJOIN datastores ds ON e_ds.dst = ds.id\nWHERE f.status = 'open' AND ds.crown_jewel = true\nLIMIT 50;"
+      },
+      "ok": false,
+      "cached": false,
+      "error": "UndefinedTable: relation \"vuln\" does not exist\nLINE 6: JOIN vuln v ON e_of.dst = v.id\n             ^"
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT f.id AS finding_id, v.cve, v.cvss, a.hostname, ds.id AS ds_id\nFROM findings f\nJOIN edges e_on ON e_on.src = f.id AND e_on.type = 'ON'\nJOIN assets a ON e_on.dst = a.id\nJOIN edges e_of ON e_of.src = f.id AND e_of.type = 'OF'\nJOIN vulns v ON e_of.dst = v.id\nJOIN edges e_ds ON e_ds.src = a.id\nJOIN datastores ds ON e_ds.dst = ds.id\nWHERE f.status = 'open' AND ds.crown_jewel = true\nLIMIT 50;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT e.type, a.hostname, d.id as ds_id FROM edges e JOIN assets a ON e.src = a.id JOIN datastores d ON e.dst = d.id WHERE d.crown_jewel = true;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT e.type, i.name, d.id as ds_id FROM edges e JOIN identities i ON e.src = i.id JOIN datastores d ON e.dst = d.id WHERE d.crown_jewel = true;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    }
+  ]
+}

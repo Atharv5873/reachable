@@ -1,0 +1,193 @@
+{
+  "prioritiser": "sql_agent",
+  "org": "org_c",
+  "scan": "v1",
+  "graph": "org_c",
+  "seed": 1,
+  "created": "2026-10-16T05:33:12+00:00",
+  "universe": {
+    "open_findings": 6385,
+    "sha": "a6fce1ef5aa26440"
+  },
+  "head": [
+    "org_c:finding:04083",
+    "org_c:finding:05606",
+    "org_c:finding:02566",
+    "org_c:finding:00339",
+    "org_c:finding:03412",
+    "org_c:finding:04789",
+    "org_c:finding:03101",
+    "org_c:finding:02376",
+    "org_c:finding:04693",
+    "org_c:finding:04585",
+    "org_c:finding:02787",
+    "org_c:finding:01384",
+    "org_c:finding:02748",
+    "org_c:finding:02337",
+    "org_c:finding:05885",
+    "org_c:finding:04172",
+    "org_c:finding:01913",
+    "org_c:finding:01889",
+    "org_c:finding:05223",
+    "org_c:finding:05414",
+    "org_c:finding:00830",
+    "org_c:finding:03251",
+    "org_c:finding:03602",
+    "org_c:finding:03665",
+    "org_c:finding:03245",
+    "org_c:finding:01829",
+    "org_c:finding:04752",
+    "org_c:finding:05877",
+    "org_c:finding:01202",
+    "org_c:finding:00352",
+    "org_c:finding:04677",
+    "org_c:finding:05640",
+    "org_c:finding:05946",
+    "org_c:finding:00662",
+    "org_c:finding:05214",
+    "org_c:finding:01544",
+    "org_c:finding:01892",
+    "org_c:finding:03555",
+    "org_c:finding:06341",
+    "org_c:finding:02368",
+    "org_c:finding:01581",
+    "org_c:finding:00226",
+    "org_c:finding:05715",
+    "org_c:finding:04347",
+    "org_c:finding:04964",
+    "org_c:finding:01268",
+    "org_c:finding:00294",
+    "org_c:finding:00266",
+    "org_c:finding:06217",
+    "org_c:finding:02042",
+    "org_c:finding:05773",
+    "org_c:finding:01675",
+    "org_c:finding:01734",
+    "org_c:finding:05731",
+    "org_c:finding:00569",
+    "org_c:finding:03512",
+    "org_c:finding:03588",
+    "org_c:finding:04399",
+    "org_c:finding:02773",
+    "org_c:finding:06294",
+    "org_c:finding:01751",
+    "org_c:finding:01848",
+    "org_c:finding:04495",
+    "org_c:finding:03161",
+    "org_c:finding:02556",
+    "org_c:finding:01771",
+    "org_c:finding:00961",
+    "org_c:finding:03329",
+    "org_c:finding:05038",
+    "org_c:finding:01324",
+    "org_c:finding:05373",
+    "org_c:finding:05134",
+    "org_c:finding:06319",
+    "org_c:finding:00839",
+    "org_c:finding:04037",
+    "org_c:finding:02792",
+    "org_c:finding:02886",
+    "org_c:finding:05342",
+    "org_c:finding:02341",
+    "org_c:finding:02095",
+    "org_c:finding:03607",
+    "org_c:finding:06145",
+    "org_c:finding:02458",
+    "org_c:finding:02818",
+    "org_c:finding:03601",
+    "org_c:finding:00557",
+    "org_c:finding:05112",
+    "org_c:finding:00536",
+    "org_c:finding:03794",
+    "org_c:finding:06358",
+    "org_c:finding:05899",
+    "org_c:finding:06007",
+    "org_c:finding:03125",
+    "org_c:finding:04484",
+    "org_c:finding:04234",
+    "org_c:finding:00398",
+    "org_c:finding:06068",
+    "org_c:finding:02906",
+    "org_c:finding:04087",
+    "org_c:finding:05412"
+  ],
+  "named": [
+    "org_c:finding:04083"
+  ],
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "fix_set": [
+    "org_c:finding:04083"
+  ],
+  "why": {
+    "org_c:finding:04083": "This finding is on an internet-facing host, has an extremely high EPSS and CVSS score, and is a known exploited vulnerability (KEV)."
+  },
+  "invalid_ids": [],
+  "reasoning": "The scan contains numerous high-CVSS findings, but only a subset are directly exposed or on critical paths to the crown-jewel data stores. Fixing the top KEV and critical internet-facing vulnerability (org_c:finding:04083) effectively blocks the highest-risk vector to the organization's critical assets.",
+  "meta": {
+    "model": "gemini/gemini-3.5-flash-lite",
+    "seed": 1,
+    "llm_answered": true,
+    "stop": "final",
+    "turns": 6,
+    "llm_calls": 6,
+    "llm_failures": 0,
+    "tool_calls": 5,
+    "model_tool_calls": 5,
+    "cache_hits": 0,
+    "refused": 0,
+    "tokens_in": 24893,
+    "tokens_out": 1195,
+    "usd": 0.010455,
+    "wall_s": 177.6,
+    "waited_s": 158.9,
+    "active_s": 18.7,
+    "fix_tokens_dropped": []
+  },
+  "tool_log": [
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT f.id AS finding_id, v.cve, v.cvss, a.hostname, ds.id AS ds_id\nFROM edges e_exp\nJOIN assets a ON e_exp.dst = a.id\nJOIN edges e_runs ON e_runs.src = a.id\nJOIN software sw ON e_runs.dst = sw.id\nJOIN edges e_hv ON e_hv.src = sw.id\nJOIN vulns v ON e_hv.dst = v.id\nJOIN edges e_on ON e_on.dst = a.id\nJOIN findings f ON e_on.src = f.id AND f.of = v.id\nJOIN edges e_reach ON e_reach.src = a.id\nJOIN datastores ds ON e_reach.dst = ds.id\nWHERE e_exp.type = 'EXPOSES' AND f.status = 'open'\nLIMIT 30;\n"
+      },
+      "ok": false,
+      "cached": false,
+      "error": "UndefinedColumn: column f.of does not exist\nLINE 9: JOIN findings f ON e_on.src = f.id AND f.of = v.id\n                                               ^"
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT f.id AS finding, v.cve, v.cvss, a.hostname, ds.id AS ds_id, ds.kind\nFROM edges e_exp\nJOIN assets a ON e_exp.dst = a.id AND e_exp.type = 'EXPOSES'\nJOIN edges e_on ON e_on.dst = a.id AND e_on.type = 'ON'\nJOIN findings f ON e_on.src = f.id\nJOIN edges e_of ON e_of.src = f.id AND e_of.type = 'OF'\nJOIN vulns v ON e_of.dst = v.id\nJOIN edges e_reach ON e_reach.src = a.id AND e_reach.type = 'CAN_REACH'\nJOIN datastores ds ON e_reach.dst = ds.id\nWHERE f.status = 'open'\nLIMIT 30;\n"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT a.id, a.hostname, z.name AS zone_name, z.trust\nFROM edges e\nJOIN assets a ON e.dst = a.id\nJOIN zones z ON a.zone = z.id\nWHERE e.type = 'EXPOSES';\n"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "WITH RECURSIVE reach(src, dst, depth, path) AS (\n  SELECT e.src, e.dst, 1, ARRAY[e.src, e.dst]\n  FROM edges e\n  WHERE e.type = 'EXPOSES'\n  UNION\n  SELECT r.src, e.dst, r.depth + 1, r.path || e.dst\n  FROM reach r\n  JOIN edges e ON r.dst = e.src\n  WHERE e.type = 'CAN_REACH' AND NOT (e.dst = ANY(r.path)) AND r.depth < 5\n)\nSELECT DISTINCT r.path, ds.id AS ds_id, ds.kind\nFROM reach r\nJOIN datastores ds ON r.dst = ds.id\nWHERE ds.crown_jewel = true;\n"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT e.type, a.hostname, ds.id, ds.kind\nFROM edges e\nJOIN assets a ON e.src = a.id\nJOIN datastores ds ON e.dst = ds.id\nWHERE ds.crown_jewel = true;\n"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    }
+  ]
+}
