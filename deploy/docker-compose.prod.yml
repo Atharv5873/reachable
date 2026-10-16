@@ -1,0 +1,152 @@
+name: reachable-prod
+
+# Production stack on the VPS (S10). Run from this directory with the wrapper:
+#   ./prod.sh up          (= docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --wait)
+#
+# Only Caddy is public (80 -> 443 redirect, 443 TLS). FalkorDB, Postgres and the
+# API publish NO host ports: they are reachable only on the compose network.
+# This matters more than it looks: Docker writes its own iptables rules for a
+# published port, ahead of ufw, so "ufw allows only 22/80/443" does NOT protect
+# a `ports: 6379:6379`. The only safe database port is an unpublished one.
+#
+# Images are pinned to the digests the local stack was tested with (S1-S9).
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
+    environment:
+      # AOF, fsync every second: the graphs and the demo runs survive
+      # `docker compose down && up` and a reboot (the volume is kept).
+      REDIS_ARGS: "--requirepass ${FALKORDB_PASSWORD:?set FALKORDB_PASSWORD in .env.prod} --appendonly yes --appendfsync everysec"
+      FALKORDB_ARGS: "MAX_QUEUED_QUERIES 25 TIMEOUT_DEFAULT 30000 TIMEOUT_MAX 300000 RESULTSET_SIZE 10000"
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+    volumes:
+      # The image's data dir (FALKORDB_DATA_PATH); NOT /data.
+      - falkordb_data:/var/lib/falkordb/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${FALKORDB_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  postgres:
+    # Baseline-only mirror (S7 SQL comparison); FalkorDB is the primary store.
+    image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reachable}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-reachable}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    # No volume for evals/results: the image carries the S9 numbers (COPY in
+    # the Dockerfile), so the Evals screen shows exactly what was committed.
+    environment:
+      API_KEY: ${REACHABLE_API_KEY:?set REACHABLE_API_KEY in .env.prod}
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-reachable}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-reachable}
+      # The browser never calls the API directly (the Vercel route handler
+      # does, server to server), so no origin is allowed cross-origin.
+      API_CORS_ORIGINS: ""
+      API_MAX_RUNS: ${API_MAX_RUNS:-2}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-gemini/gemini-3.5-flash-lite}
+      LLM_RESERVE_MODEL: ${LLM_RESERVE_MODEL:-}
+      LLM_RESERVE_API_KEY: ${LLM_RESERVE_API_KEY:-}
+      # The limiter stays on in production: a judge clicking "Start" twenty
+      # times self-paces instead of burning the credit.
+      LLM_RPM: ${LLM_RPM:-20}
+      AGENT_MAX_LLM_CALLS: ${AGENT_MAX_LLM_CALLS:-20}
+      AGENT_MAX_TOOL_CALLS: ${AGENT_MAX_TOOL_CALLS:-45}
+    # Behind Caddy: trust its X-Forwarded-* so logs show the client, not Caddy.
+    command:
+      - uv
+      - run
+      - --no-sync
+      - uvicorn
+      - reachable_api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    depends_on:
+      falkordb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates: keep them, or every restart re-issues
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot seeding (make intel && make seed, inside the compose network):
+  #   ./prod.sh seed
+  # Not started by `up` (profile). Carries intel + orggen + the committed
+  # threat-intel snapshot, which the API image deliberately leaves out.
+  tools:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: deploy/tools.Dockerfile
+    environment:
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-reachable}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-reachable}
+      SEED: ${SEED:-42}
+    depends_on:
+      falkordb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  falkordb_data:
+  postgres_data:
+  caddy_data:
+  caddy_config:

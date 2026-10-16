@@ -9,3 +9,4 @@ tests
 .ruff_cache
 runs
 apps/web
+deploy/.env.prod

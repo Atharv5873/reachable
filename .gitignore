@@ -31,3 +31,6 @@ Thumbs.db
 
 # Eval caches (S7: embeddings by text hash; rebuilt on demand).
 evals/cache/
+
+# S10 production secrets (deploy/.env.prod.example is the template).
+deploy/.env.prod

@@ -1,0 +1,45 @@
+# The only public listener (S10). Caddy gets a Let's Encrypt certificate for
+# $API_DOMAIN on first start (needs the A/AAAA records pointing here and port
+# 80 open for the HTTP-01 challenge), renews it by itself, and redirects every
+# http:// request to https:// (automatic HTTPS).
+
+{
+	email {$ACME_EMAIL}
+	# No admin API on a public box.
+	admin off
+}
+
+{$API_DOMAIN} {
+	# Bodies are small JSON (a question, a verdict, a fix set).
+	request_body {
+		max_size 1MB
+	}
+
+	# Compress JSON only: the SSE stream must flow event by event, never sit
+	# in a compression buffer.
+	@json header Content-Type application/json*
+	encode @json zstd gzip
+
+	reverse_proxy api:8000 {
+		# The API sees the public host and scheme (Caddy sets X-Forwarded-For
+		# and -Proto itself). The Vercel route handler does its CSRF check on
+		# its own Host / X-Forwarded-Host, which Vercel's edge sets; this keeps
+		# the API side consistent if it ever checks too.
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		# Flush every write: SSE events reach the client as they happen.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

@@ -1,0 +1,17 @@
+# Used instead of the root .dockerignore when building deploy/tools.Dockerfile.
+# Same as the root one, except data/threatintel/snapshot is let in.
+.git
+.venv
+.env
+deploy/.env.prod
+data/*
+!data/threatintel
+data/threatintel/raw
+learning
+tests
+runs
+apps/web
+evals/cache
+**/__pycache__
+.pytest_cache
+.ruff_cache
