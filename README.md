@@ -42,7 +42,7 @@ All three:
 **Prerequisites:** Docker with Compose v2, [uv](https://docs.astral.sh/uv/) (it installs
 Python 3.12 for you), Node.js 20.9+ with npm, and GNU make (Windows: `winget install
 ezwinports.make`). Free host ports 6380, 3001, 5434, 8001, 8002 and 3000. On Windows,
-clone to a short path (e.g. `C:\srceachable`): LiteLLM downloads a tokenizer into
+clone to a short path (e.g. `C:\src\reachable`): LiteLLM downloads a tokenizer into
 `.venv`, and past 260 characters that write fails and a real-model run comes out
 `degraded` (0 tokens).
 
