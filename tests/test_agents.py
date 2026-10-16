@@ -76,8 +76,16 @@ def test_scan_findings_ranks_by_attack_layer(env, db):
     assert [c["id"] for c in d["crown_jewels"]] == [
         x.split(":", 1)[1] for x in ob.ground_truth.crown_jewels
     ]
-    flags = [(f["on_crown_path"], f["from_internet"]) for f in d["findings"]]
-    assert flags == sorted(flags, reverse=True)  # crown-path first, then internet-facing
+    rows = d["findings"]
+    crown = [f for f in rows if f["on_crown_path"]]
+    assert rows[: len(crown)] == crown  # crown-path first
+    # S8: those by path-criticality (the weighted number of crown paths through
+    # them), descending; Internet-facing only orders the findings off any path.
+    crit = [f["criticality"] for f in crown if f["crown_paths"]]
+    assert crit and crit == sorted(crit, reverse=True)
+    assert all(f["crown_paths"] >= 1 for f in crown[: len(crit)])
+    rest = [f["from_internet"] for f in rows[len(crown) :]]
+    assert rest == sorted(rest, reverse=True)
     entries = {p.hops[0].dst.split(":", 1)[1] for p in ob.ground_truth.paths}  # "asset:<id>"
     on_crown = {f["asset"] for f in d["findings"] if f["on_crown_path"] and f["from_internet"]}
     assert entries <= on_crown  # every planted path's way in is flagged
@@ -139,6 +147,20 @@ def test_fake_run_writes_a_wellformed_run(env):
     assert chain == [[1]]
     # memory writes never touched the infrastructure part of the graph
     assert infra_fingerprint(g) == before
+
+
+@pytest.mark.integration
+def test_pathfinder_orders_by_path_criticality(env):
+    """S8: the ranked list follows path-criticality (weighted crown paths through
+    the finding), whatever order the model named findings in."""
+    _, _, repo = env
+    res = run(repo)
+    pp = repo.read_output(GRAPH, res["run_id"], "PathAnalysis")["payload"]
+    crit = [r["criticality"] for r in pp["ranked"]]
+    assert crit and crit == sorted(crit, reverse=True)
+    assert all(r["on_paths"] >= 1 for r in pp["ranked"])
+    # the first finding lies on the most paths
+    assert pp["ranked"][0]["on_paths"] == max(r["on_paths"] for r in pp["ranked"])
 
 
 @pytest.mark.integration

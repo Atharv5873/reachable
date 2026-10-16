@@ -21,12 +21,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from reachable_graph.criticality import SENSITIVITY_WEIGHT, CrownPath, rank_by_criticality
 from reachable_graph.tools import label_of
 
 from .loop import AgentSpec, LoopOutcome, day, run_agent
 from .runtime import RunCtx
 
-SENSITIVITY_WEIGHT = {"crown": 1.0, "high": 0.7, "medium": 0.4, "low": 0.2}
 MAX_INVESTIGATE = 25
 MAX_RANKED = 25
 
@@ -464,8 +464,9 @@ exploit, any credential or role hop) so each claim is grounded; blast_radius on 
 asset of the most likely path only if it adds something. attack_paths again only for a \
 source or target CONTEXT does not cover. Spend why_step on the findings in \
 CONTEXT.investigate; CONTEXT.carried were explained by an earlier run (memory).
-- Rank findings (fix_tokens that are Finding ids) by: on a path to a crown jewel, path \
-likelihood, the target's sensitivity. A finding on no path does not rank, whatever its CVSS.""",
+- Rank findings (fix_tokens that are Finding ids) by: how many crown-jewel paths they lie \
+on (weighted by the target's sensitivity), then path likelihood. A finding on no path does \
+not rank, whatever its CVSS.""",
     schema="""{"ranked": [{"finding": "<finding id on a path>",
              "why": "<one sentence naming the path>"}],
  "key_steps": ["<ATTACK_STEP edge key you explained with why_step>"],
@@ -570,12 +571,32 @@ def finalise_paths(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
             e["targets"].add(p["target"])
             if score > e["score"]:
                 e["score"], e["best_path"], e["step_key"] = score, i, s["key"]
+    # S8: the order is path-criticality (criticality.py), from these paths alone:
+    # the weighted number of crown-jewel paths a finding lies on, a route not yet
+    # listed before a second finding of one that is, then path likelihood. The
+    # model's own order no longer sets it (it read Internet-facing steps first and
+    # put a three-path funnel ninth); its "why" is kept for every finding it named.
+    crit = {
+        c.token: c
+        for c in rank_by_criticality(
+            (
+                CrownPath(
+                    target=p["target"],
+                    weight=weight.get(p["target"], 1.0),
+                    likelihood=p["likelihood"],
+                    tokens=tuple(s["fix_token"] for s in p["steps"]),
+                    entry=p["steps"][0]["fix_token"] if p["steps"] else None,
+                )
+                for p in paths
+            ),
+            include=_is_finding,
+        )
+    }
     sup = {s["finding"] for s in tp.get("suppressed", [])}
     why_llm = {r.get("finding"): r.get("why") for r in ans.get("ranked", []) if isinstance(r, dict)}
     prior = {c["finding"]: c for c in tp.get("carried", [])}
-    order = [f for f in why_llm if f in on_path]
     dropped = [f for f in why_llm if f not in on_path]
-    order += sorted((f for f in on_path if f not in order), key=lambda f: -on_path[f]["score"])
+    order = sorted(on_path, key=lambda f: crit[f].rank)
     ranked = []
     for rank, f in enumerate(order[:MAX_RANKED], start=1):
         e = on_path[f]
@@ -589,6 +610,7 @@ def finalise_paths(ctx: RunCtx, outcome: LoopOutcome, tp: dict) -> dict:
                 "targets": sorted(e["targets"]),
                 "path_index": e["best_path"],
                 "on_paths": len(e["paths"]),
+                "criticality": round(crit[f].criticality, 4),
                 "step_key": e["step_key"],
                 "suppressed_by_live_acceptance": f in sup,
                 "why": why_llm.get(f)

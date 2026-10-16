@@ -39,6 +39,7 @@ from reachable_core.settings import get_settings
 
 from . import memory
 from .company_tools import CompanyToolsMixin, _day
+from .criticality import Criticality, CrownPath, dedupe, rank_by_criticality, sensitivity_weight
 from .models import (
     MAX_BFS_NODES,
     MAX_ROWS,
@@ -1075,9 +1076,12 @@ class GraphTools(CompanyToolsMixin):
 
         A finding matters to an attacker only if it is the fix_token of some
         ATTACK_STEP. So rank: on a crown-jewel path (both step endpoints are
-        :CrownPath), then reachable straight from the Internet, then KEV, step
-        likelihood, CVSS. Separately list the most severe open findings that
-        enable NO step: high scores, no way in (the classic false alarm).
+        :CrownPath) first, those by path-criticality (criticality.py: the weighted
+        number of crown-jewel paths through it, new routes before a second finding
+        of a route already listed, then path likelihood); then reachable straight
+        from the Internet, then KEV, step likelihood, CVSS. Separately list the most
+        severe open findings that enable NO step: high scores, no way in (the
+        classic false alarm).
 
         view="triage" is the lean form Triage starts from (S5): the aggregates
         (counts by technique, severity band and exposure) and per-finding detail
@@ -1126,6 +1130,10 @@ class GraphTools(CompanyToolsMixin):
         enabling = [
             (*row, *signals.get(row[0], (False, 0.0))) for row in enabling if row[0] in signals
         ]
+        # S8: a finding on a crown-jewel path ranks by its path-criticality (how
+        # many weighted routes to a crown jewel fixing it closes); the rest as before.
+        crit, crit_truncated = self._criticality(g, qlog)
+        no_rank = len(crit) + 1
         steps = {
             tok: {
                 "attack_steps": n,
@@ -1133,7 +1141,16 @@ class GraphTools(CompanyToolsMixin):
                 "best_likelihood": round(lk, 4),
                 "on_crown_path": bool(cp),
                 "from_internet": bool(inet),
-                "_rank": (-cp, -inet, -int(kev), -lk, -cvss, tok),
+                **(crit[tok].view() if tok in crit else {"crown_paths": 0}),
+                "_rank": (
+                    -cp,
+                    crit[tok].rank if tok in crit else no_rank,
+                    -inet,
+                    -int(kev),
+                    -lk,
+                    -cvss,
+                    tok,
+                ),
             }
             for tok, n, techs, lk, cp, inet, kev, cvss in enabling
         }
@@ -1221,7 +1238,7 @@ class GraphTools(CompanyToolsMixin):
         ev.node_ids = list(dict.fromkeys(ev.node_ids))
         if triage:  # the same facts, minus what triage never reads
             for f in findings + others_rows:
-                for k in ("epss", "from_internet", "attack_steps"):
+                for k in ("epss", "from_internet", "attack_steps", "best_path_score"):
                     f.pop(k, None)
             for f in unreachable:
                 for k in ("asset", "epss", "attack_steps"):
@@ -1259,6 +1276,8 @@ class GraphTools(CompanyToolsMixin):
         if triage:
             data["other_internet_facing"] = {"count": len(other_inet), "top": others_rows}
             data["previously_decided"] = [p["finding"] for p in decided]
+        if crit_truncated:
+            data["criticality_truncated"] = True  # more crown paths than were enumerated
         return ToolResult(
             summary=summary, data=data, evidence=ev, queries=qlog, truncated=truncated
         )
@@ -1417,6 +1436,37 @@ class GraphTools(CompanyToolsMixin):
         return ToolResult(
             summary=summary, data=data, evidence=ev, queries=qlog, truncated=truncated
         )
+
+    def _criticality(self, graph: str, qlog) -> tuple[dict[str, Criticality], bool]:
+        """Path-criticality of every open finding on a crown-jewel path (see
+        criticality.py), from every simple Internet -> crown-jewel ATTACK_STEP
+        path. Distinct paths are distinct step sequences: two findings that each
+        let an attacker make the same hop lie on two paths."""
+        rows = self._q(
+            graph,
+            f"""
+            MATCH p = (:Internet)-[:ATTACK_STEP*1..{HOP_CAP}]->(t:DataStore {{crown_jewel: true}})
+            RETURN t.id, t.sensitivity, [n IN nodes(p) | n.id],
+                   [e IN relationships(p) | [e.key, e.fix_token, e.cost]]
+            LIMIT {DRIFT_MAX_WALKS + 1}
+            """,
+            {},
+            qlog,
+        )
+        refs = []
+        for target, sens, nodes, steps in rows[:DRIFT_MAX_WALKS]:
+            if len(set(nodes)) != len(nodes):  # a walk that revisits a node
+                continue
+            p = CrownPath(
+                target=target,
+                weight=sensitivity_weight(sens),
+                likelihood=math.exp(-sum(c for *_, c in steps)),
+                tokens=tuple(tok for _, tok, _ in steps),
+                entry=steps[0][1],
+            )
+            refs.append((tuple(k for k, *_ in steps), p))
+        ranked = rank_by_criticality(dedupe(refs), include=lambda t: label_of(t) == "Finding")
+        return {c.token: c for c in ranked}, len(rows) > DRIFT_MAX_WALKS
 
     def _crown_paths(self, graph: str, qlog) -> tuple[dict[tuple, dict], bool]:
         """Every Internet -> crown-jewel ATTACK_STEP path (the same pattern derive
