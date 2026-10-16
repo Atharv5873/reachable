@@ -1,0 +1,192 @@
+{
+  "prioritiser": "sql_agent",
+  "org": "org_b",
+  "scan": "v1",
+  "graph": "org_b",
+  "seed": 1,
+  "created": "2026-10-15T19:04:53+00:00",
+  "universe": {
+    "open_findings": 6529,
+    "sha": "d61f6efd49dd3dfa"
+  },
+  "head": [
+    "org_b:finding:01050",
+    "org_b:finding:02499",
+    "org_b:finding:04102",
+    "org_b:finding:00802",
+    "org_b:finding:02642",
+    "org_b:finding:03808",
+    "org_b:finding:02140",
+    "org_b:finding:04006",
+    "org_b:finding:05223",
+    "org_b:finding:03006",
+    "org_b:finding:05033",
+    "org_b:finding:04235",
+    "org_b:finding:05942",
+    "org_b:finding:03715",
+    "org_b:finding:06047",
+    "org_b:finding:03208",
+    "org_b:finding:05528",
+    "org_b:finding:05373",
+    "org_b:finding:01124",
+    "org_b:finding:04204",
+    "org_b:finding:05338",
+    "org_b:finding:05683",
+    "org_b:finding:06176",
+    "org_b:finding:05831",
+    "org_b:finding:04046",
+    "org_b:finding:05067",
+    "org_b:finding:00794",
+    "org_b:finding:00616",
+    "org_b:finding:05177",
+    "org_b:finding:04875",
+    "org_b:finding:05427",
+    "org_b:finding:01339",
+    "org_b:finding:06083",
+    "org_b:finding:05110",
+    "org_b:finding:02505",
+    "org_b:finding:02624",
+    "org_b:finding:06400",
+    "org_b:finding:05878",
+    "org_b:finding:03360",
+    "org_b:finding:00287",
+    "org_b:finding:04498",
+    "org_b:finding:06191",
+    "org_b:finding:02602",
+    "org_b:finding:04157",
+    "org_b:finding:01484",
+    "org_b:finding:06344",
+    "org_b:finding:05443",
+    "org_b:finding:02417",
+    "org_b:finding:06252",
+    "org_b:finding:04612",
+    "org_b:finding:05469",
+    "org_b:finding:04951",
+    "org_b:finding:02128",
+    "org_b:finding:03741",
+    "org_b:finding:05637",
+    "org_b:finding:06004",
+    "org_b:finding:00547",
+    "org_b:finding:01004",
+    "org_b:finding:05809",
+    "org_b:finding:05801",
+    "org_b:finding:04815",
+    "org_b:finding:01771",
+    "org_b:finding:06145",
+    "org_b:finding:04986",
+    "org_b:finding:04819",
+    "org_b:finding:02535",
+    "org_b:finding:00011",
+    "org_b:finding:00320",
+    "org_b:finding:05945",
+    "org_b:finding:05995",
+    "org_b:finding:04291",
+    "org_b:finding:04327",
+    "org_b:finding:05729",
+    "org_b:finding:05098",
+    "org_b:finding:04856",
+    "org_b:finding:03691",
+    "org_b:finding:05273",
+    "org_b:finding:05587",
+    "org_b:finding:03068",
+    "org_b:finding:01821",
+    "org_b:finding:05760",
+    "org_b:finding:00855",
+    "org_b:finding:04366",
+    "org_b:finding:06177",
+    "org_b:finding:04277",
+    "org_b:finding:05036",
+    "org_b:finding:04807",
+    "org_b:finding:02017",
+    "org_b:finding:04497",
+    "org_b:finding:05649",
+    "org_b:finding:03848",
+    "org_b:finding:04730",
+    "org_b:finding:06025",
+    "org_b:finding:04553",
+    "org_b:finding:04099",
+    "org_b:finding:05584",
+    "org_b:finding:02015",
+    "org_b:finding:05903",
+    "org_b:finding:01829",
+    "org_b:finding:01168"
+  ],
+  "named": [
+    "org_b:finding:01050"
+  ],
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "fix_set": [
+    "org_b:finding:01050"
+  ],
+  "why": {
+    "org_b:finding:01050": "This is a critical KEV Log4j vulnerability with 10.0 CVSS on an internet-facing app asset, posing an immediate risk."
+  },
+  "invalid_ids": [],
+  "reasoning": "We identified critical internet-facing vulnerabilities pointing toward internal assets. The most urgent finding to remediate is the Log4j RCE vulnerability (org_b:finding:01050) as it is actively exploited and has a CVSS of 10.0.",
+  "meta": {
+    "model": "gemini/gemini-3.5-flash-lite",
+    "seed": 1,
+    "llm_answered": true,
+    "stop": "final",
+    "turns": 6,
+    "llm_calls": 6,
+    "llm_failures": 0,
+    "tool_calls": 5,
+    "cache_hits": 0,
+    "refused": 0,
+    "tokens_in": 18471,
+    "tokens_out": 869,
+    "usd": 0.007714,
+    "wall_s": 162.1,
+    "waited_s": 140.2,
+    "active_s": 21.9,
+    "fix_tokens_dropped": []
+  },
+  "tool_log": [
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT f.id as finding_id, a.hostname as asset, v.cve, v.cvss, v.kev, ds.id as ds_id \nFROM findings f \nJOIN edges o ON o.src = f.id AND o.type = 'ON'\nJOIN assets a ON a.id = o.dst\nJOIN edges r ON r.src = a.id AND r.type = 'RUNS'\nJOIN software s ON s.id = r.dst\nJOIN edges hv ON hv.src = s.id AND hv.type = 'HAS_VULN'\nJOIN vulns v ON v.id = hv.dst\nJOIN edges can ON can.src = a.id AND can.type = 'CAN'\nJOIN datastores ds ON ds.id = can.dst\nWHERE ds.crown_jewel = true AND f.status = 'open'\nORDER BY v.cvss DESC;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT * FROM datastores WHERE crown_jewel = true;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "-- Let's trace reachability from internet to crown jewel org_b:ds:00001\nWITH RECURSIVE reach(dst, path) AS (\n  SELECT dst, ARRAY[dst] FROM edges WHERE src = 'internet' AND type = 'EXPOSES'\n  UNION\n  SELECT e.dst, path || e.dst FROM reach r JOIN edges e ON r.dst = e.src WHERE e.type IN ('CAN_REACH', 'UNLOCKS', 'ASSUMES', 'CAN_ASSUME', 'RUNS', 'ON', 'OF') AND NOT(e.dst = ANY(path)) AND array_length(path, 1) < 5\n)\nSELECT * FROM reach WHERE dst = 'org_b:ds:00001';"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "-- Let's check how edges connect to the crown jewel datastore\nSELECT e.type, a.id as src_id, a.kind as src_kind FROM edges e JOIN assets a ON a.id = e.src WHERE e.dst = 'org_b:ds:00001'\nUNION\nSELECT e.type, i.id as src_id, i.kind as src_kind FROM edges e JOIN identities i ON i.id = e.src WHERE e.dst = 'org_b:ds:00001'\nUNION\nSELECT e.type, s.id as src_id, s.kind as src_kind FROM edges e JOIN secrets s ON s.id = e.src WHERE e.dst = 'org_b:ds:00001';"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "-- Let's see what unlocks the secrets, or what assets hold them\nSELECT * FROM edges WHERE dst IN ('org_b:secret:00001', 'org_b:secret:00002', 'org_b:secret:00004', 'org_b:secret:00006', 'org_b:secret:00007');"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+### Why, gap by gap (read from the raw outputs)
+
+Nothing beats reachable on a headline metric, so these are the places where it is **short of the oracle** or **loses on something else**, each with the reason found in `raw/`.
+
+- **Cost and latency (baselines win).** severity_sort and smart_score are free and instant. reachable is about $0.006 and 6 s a run (2.5 model calls, 3.3 tool calls). That is still the cheapest of the three LLM prioritisers (vector_rag $0.011, sql_agent $0.010), because one `attack_paths` + `min_cut` call answers what the other two spend every turn hunting for.
+- **NDCG@10 is 0.82, not 1.0.** The order inside the top 10 is off. org_a's highest-priority finding (`org_a:finding:06856`, the CI-runner funnel on 3 of 9 paths, priority 1.0) lands at rank 9 or 13, or outside the model's named list. `scan_findings` sorts Internet-facing steps first and the funnel sits on an internal host, so the model reads it late. The *set* is right (P@10 97%, every path represented); the *order* by priority is not. This is a tool-ordering issue, not missing reachability.
+- **P@10 on org_a_v2 is 80% ±14.** In seeds 2 and 3 the model named only 7 findings and stopped, and the remaining slots fall to the shared CVSS tail, which holds no relevant findings. The model under-fills, but no path is lost (path recall 100%).
+- **Fix efficiency is 1.09 paths per fix vs the oracle's 1.16.** On org_c (and org_b_v2 and org_c_v2 in some seeds) the model sometimes writes its own fix set of one finding per path (6–9 fixes) instead of adopting `min_cut`'s answer (5 fixes, four of them `step:db` credential rotations). Every fix set still cuts 100% of the paths; some are just larger than the minimum. The deterministic product run (S5) always uses `min_cut`'s set; the eval lets the model choose, and this is the cost.
+- **One hallucinated tool argument in 54 runs.** In org_b_v2 seed 3 the model invented an ATTACK_STEP key for `why_step`. The tool refused it (`no ATTACK_STEP with key ...`) and the run went on. No id it ranked was invalid (0 invalid ids across the matrix).
+
+### Why the baselines score what they score
+
+- **severity_sort: 0 everywhere.** Each scan has more than 3,000 open findings at CVSS 9.0+, and 12 of org_a's 14 relevant findings are 7.5 or lower, so none reach the top 10.
+- **smart_score: 0, plus a decoy in every top 10.** Its top ranks are Internet-facing load balancers with KEV 9.8 findings that lead nowhere. The planted dead-end decoy is one of them (decoys@10 = 1 of 3 = 33% on every scan). The best relevant finding sits at rank 13 (org_c) and 19 (org_a). Exposure is a property of one node; reachability is a property of paths.
+- **vector_rag: 3% path recall.** About 4.6 searches a run, 0 errors, but it names 1.7 findings a run, often copied from the scanner's top-25 list in the CONTEXT. Similar text is not connected text: each hop of a path is a fresh search among ~8,600 documents.
+- **sql_agent: 4% path recall.** The run is turn-bound: one query per turn, about 5 queries before the 6-turn cap forces an answer, 17 SQL errors across 18 runs, mostly spent learning the schema. Recursive SQL could walk the edges, but only by re-deriving the attack rules inside one query.
+- **A generator artefact helps the text baselines, not us.** Planted hosts have kinds that background hosts rarely have (`web_server`, `db_host`). A text baseline that searches or filters on those kinds gets a hint a real estate would not give. If anything, this inflates their few hits.
+- **The oracle order is not the path-recall ceiling.** On org_a, sorting by priority gives 89% path recall@10, while reachable gets 100%. Priority ties stack findings of the same paths, and reachable spreads its top 10 across all 9 paths.

@@ -1,0 +1,190 @@
+{
+  "prioritiser": "sql_agent",
+  "org": "org_a",
+  "scan": "v1",
+  "graph": "org_a",
+  "seed": 1,
+  "created": "2026-10-15T18:40:23+00:00",
+  "universe": {
+    "open_findings": 6862,
+    "sha": "56fb280b6b5f2f56"
+  },
+  "head": [
+    "org_a:finding:06846",
+    "org_a:finding:05873",
+    "org_a:finding:06554",
+    "org_a:finding:05740",
+    "org_a:finding:04063",
+    "org_a:finding:04021",
+    "org_a:finding:05798",
+    "org_a:finding:05106",
+    "org_a:finding:06008",
+    "org_a:finding:01379",
+    "org_a:finding:03130",
+    "org_a:finding:02133",
+    "org_a:finding:03603",
+    "org_a:finding:02282",
+    "org_a:finding:06383",
+    "org_a:finding:05256",
+    "org_a:finding:01233",
+    "org_a:finding:05687",
+    "org_a:finding:01065",
+    "org_a:finding:04167",
+    "org_a:finding:02475",
+    "org_a:finding:01157",
+    "org_a:finding:03990",
+    "org_a:finding:05789",
+    "org_a:finding:03908",
+    "org_a:finding:05270",
+    "org_a:finding:06150",
+    "org_a:finding:05567",
+    "org_a:finding:05401",
+    "org_a:finding:01271",
+    "org_a:finding:01183",
+    "org_a:finding:01119",
+    "org_a:finding:00396",
+    "org_a:finding:02664",
+    "org_a:finding:05871",
+    "org_a:finding:05727",
+    "org_a:finding:05788",
+    "org_a:finding:06194",
+    "org_a:finding:03697",
+    "org_a:finding:00097",
+    "org_a:finding:06178",
+    "org_a:finding:00285",
+    "org_a:finding:05510",
+    "org_a:finding:03085",
+    "org_a:finding:05202",
+    "org_a:finding:04994",
+    "org_a:finding:05416",
+    "org_a:finding:02940",
+    "org_a:finding:05255",
+    "org_a:finding:00259",
+    "org_a:finding:05892",
+    "org_a:finding:06398",
+    "org_a:finding:05918",
+    "org_a:finding:02774",
+    "org_a:finding:06412",
+    "org_a:finding:05556",
+    "org_a:finding:06348",
+    "org_a:finding:05287",
+    "org_a:finding:05289",
+    "org_a:finding:05969",
+    "org_a:finding:05840",
+    "org_a:finding:03493",
+    "org_a:finding:05220",
+    "org_a:finding:01718",
+    "org_a:finding:04224",
+    "org_a:finding:05245",
+    "org_a:finding:06569",
+    "org_a:finding:06492",
+    "org_a:finding:04278",
+    "org_a:finding:05446",
+    "org_a:finding:02086",
+    "org_a:finding:01863",
+    "org_a:finding:00185",
+    "org_a:finding:00515",
+    "org_a:finding:00626",
+    "org_a:finding:02643",
+    "org_a:finding:05652",
+    "org_a:finding:00050",
+    "org_a:finding:05419",
+    "org_a:finding:02641",
+    "org_a:finding:05345",
+    "org_a:finding:05333",
+    "org_a:finding:05723",
+    "org_a:finding:05275",
+    "org_a:finding:04937",
+    "org_a:finding:05729",
+    "org_a:finding:01815",
+    "org_a:finding:00198",
+    "org_a:finding:00051",
+    "org_a:finding:03261",
+    "org_a:finding:00491",
+    "org_a:finding:06540",
+    "org_a:finding:06665",
+    "org_a:finding:05239",
+    "org_a:finding:05505",
+    "org_a:finding:05342",
+    "org_a:finding:03170",
+    "org_a:finding:05645",
+    "org_a:finding:06121",
+    "org_a:finding:06024"
+  ],
+  "named": [
+    "org_a:finding:06846"
+  ],
+  "tail_rule": "severity_sort (CVSS desc, hash tie-break) after the model's picks",
+  "fix_set": [
+    "org_a:finding:06846"
+  ],
+  "why": {
+    "org_a:finding:06846": "This finding is on the internet-facing asset org_a:asset:01741 which has a direct path to the secret unlocking the crown jewel."
+  },
+  "invalid_ids": [],
+  "reasoning": "We identified paths from internet-facing assets through internal connections to the crown jewel datastore. Fixing finding org_a:finding:06846 neutralizes the primary entry point via asset org_a:asset:01741.",
+  "meta": {
+    "model": "gemini/gemini-3.5-flash-lite",
+    "seed": 1,
+    "llm_answered": true,
+    "stop": "final",
+    "turns": 6,
+    "llm_calls": 6,
+    "llm_failures": 0,
+    "tool_calls": 5,
+    "cache_hits": 0,
+    "refused": 0,
+    "tokens_in": 26231,
+    "tokens_out": 1408,
+    "usd": 0.011389,
+    "wall_s": 60.6,
+    "fix_tokens_dropped": []
+  },
+  "tool_log": [
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "SELECT * FROM datastores WHERE crown_jewel = true;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "WITH RECURSIVE reach(src, dst, depth, path) AS (\n  SELECT e.src, e.dst, 1, ARRAY[e.src, e.dst]\n  FROM edges e\n  WHERE e.src = 'org_a:ds:00001' OR e.dst = 'org_a:ds:00001'\n  UNION\n  SELECT e.src, e.dst, r.depth + 1, r.path || e.dst\n  FROM edges e\n  JOIN reach r ON e.dst = r.src\n  WHERE r.depth < 5 AND NOT (e.dst = ANY(r.path))\n)\nSELECT DISTINCT * FROM reach;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "WITH RECURSIVE reach(src, dst, depth, path) AS (\n  SELECT e.src, e.dst, 1, ARRAY[e.src, e.dst]\n  FROM edges e\n  WHERE e.dst IN ('org_a:ident:00003', 'org_a:ident:00005', 'org_a:ident:00006', 'org_a:secret:00001', 'org_a:secret:00002', 'org_a:secret:00004', 'org_a:secret:00006', 'org_a:ds:00001')\n  UNION\n  SELECT e.src, e.dst, r.depth + 1, r.path || e.src\n  FROM edges e\n  JOIN reach r ON e.dst = r.src\n  WHERE r.depth < 6 AND NOT (e.src = ANY(r.path))\n)\nSELECT DISTINCT src, dst, type, props FROM reach JOIN edges e ON (reach.src = e.src AND reach.dst = e.dst) OR (reach.dst = e.src AND reach.src = e.dst);"
+      },
+      "ok": false,
+      "cached": false,
+      "error": "AmbiguousColumn: column reference \"src\" is ambiguous\nLINE 11: SELECT DISTINCT src, dst, type, props FROM reach JOIN edges ...\n                         ^"
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "WITH RECURSIVE reach(src, dst, depth, path) AS (\n  SELECT e.src, e.dst, 1, ARRAY[e.src::text, e.dst::text]\n  FROM edges e\n  WHERE e.dst IN ('org_a:ident:00003', 'org_a:ident:00005', 'org_a:ident:00006', 'org_a:secret:00001', 'org_a:secret:00002', 'org_a:secret:00004', 'org_a:secret:00006', 'org_a:ds:00001')\n  UNION\n  SELECT e.src, e.dst, r.depth + 1, r.path || e.src::text\n  FROM edges e\n  JOIN reach r ON e.dst = r.src\n  WHERE r.depth < 6 AND NOT ((e.src::text) = ANY(r.path))\n)\nSELECT DISTINCT r.src, r.dst, e.type, e.props FROM reach r JOIN edges e ON r.src = e.src AND r.dst = e.dst;"
+      },
+      "ok": true,
+      "cached": false,
+      "error": null
+    },
+    {
+      "tool": "sql_query",
+      "input": {
+        "sql": "WITH RECURSIVE reach(src, dst, depth, path) AS (\n  SELECT e.src, e.dst, 1, ARRAY[e.src::text, e.dst::text]\n  FROM edges e\n  WHERE e.src = 'internet'\n  UNION\n  SELECT e.src, e.dst, r.depth + 1, r.path || e.dst::text\n  FROM edges e\n  JOIN reach r ON e.src = r.dst\n  WHERE r.depth < 5 AND NOT ((e.dst::text) = ANY(r.path))\n)\nSELECT DISTINCT r.dst as asset_id, f.id as finding_id, f.scanner, v.cve, v.cvss, v.eps, v.kev \nFROM reach r\nJOIN edges e_run ON e_run.src = r.dst AND e_run.type = 'RUNS'\nJOIN edges e_has ON e_has.src = e_run.dst AND e_has.type = 'HAS_VULN'\nJOIN vulns v ON v.id = e_has.dst\nJOIN findings f ON f.id IN (SELECT id FROM findings WHERE id IN (SELECT finding_id FROM ...))\nLIMIT 30;"
+      },
+      "ok": false,
+      "cached": false,
+      "error": "SyntaxError: syntax error at or near \"..\"\nLINE 16: ...T id FROM findings WHERE id IN (SELECT finding_id FROM ...))\n                                                                   ^"
+    }
+  ]
+}
