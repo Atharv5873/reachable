@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-16 10:08:44",
+  "generated": "2026-10-16 10:53:38",
   "reps": 20,
   "orgs": {
     "org_a": {
@@ -64,9 +64,9 @@
             "step:db:org_a:secret:00002:org_a:ds:00001",
             "step:db:org_a:secret:00004:org_a:ds:00001",
             "step:db:org_a:secret:00006:org_a:ds:00001",
-            "step:read:org_a:ident:00003:org_a:ds:00001",
+            "step:read:org_a:ident:00003:org_a:ds:00004",
             "step:read:org_a:ident:00005:org_a:ds:00001",
-            "step:read:org_a:ident:00006:org_a:ds:00001"
+            "step:read:org_a:ident:00006:org_a:ds:00004"
           ]
         }
       },
@@ -75,12 +75,12 @@
         "step:db:org_a:secret:00002:org_a:ds:00001",
         "step:db:org_a:secret:00004:org_a:ds:00001",
         "step:db:org_a:secret:00006:org_a:ds:00001",
-        "step:read:org_a:ident:00003:org_a:ds:00001",
+        "step:read:org_a:ident:00003:org_a:ds:00004",
         "step:read:org_a:ident:00005:org_a:ds:00001",
-        "step:read:org_a:ident:00006:org_a:ds:00001"
+        "step:read:org_a:ident:00006:org_a:ds:00004"
       ],
       "evidence": {
-        "nodes_checked": 341,
+        "nodes_checked": 342,
         "edges_checked": 237,
         "missing_nodes": [],
         "missing_edges": [],
@@ -89,53 +89,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 17.1,
-          "p95_ms": 18.84
+          "p50_ms": 31.74,
+          "p95_ms": 35.5
         },
         "attack_paths (from a seed asset)": {
           "n": 40,
-          "p50_ms": 0.61,
-          "p95_ms": 1.07
+          "p50_ms": 0.67,
+          "p95_ms": 1.02
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 2.47,
-          "p95_ms": 3.33
+          "p50_ms": 3.15,
+          "p95_ms": 4.5
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 4.5,
-          "p95_ms": 7.74
+          "p50_ms": 4.47,
+          "p95_ms": 5.56
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 4.94,
-          "p95_ms": 7.25
+          "p50_ms": 5.04,
+          "p95_ms": 6.14
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 23.33,
-          "p95_ms": 30.48
+          "p50_ms": 25.52,
+          "p95_ms": 31.19
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.62,
-          "p95_ms": 0.88
+          "p50_ms": 0.82,
+          "p95_ms": 1.04
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 332.29,
-          "p95_ms": 381.25
+          "p50_ms": 376.7,
+          "p95_ms": 401.43
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.08,
-          "p95_ms": 4.92
+          "p50_ms": 4.05,
+          "p95_ms": 6.16
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 6.65,
-          "p95_ms": 10.41
+          "p50_ms": 8.05,
+          "p95_ms": 9.95
         }
       },
       "seeds": 40,
@@ -206,7 +206,7 @@
           "fix_tokens": [
             "step:db:org_b:secret:00001:org_b:ds:00001",
             "step:db:org_b:secret:00002:org_b:ds:00001",
-            "step:db:org_b:secret:00004:org_b:ds:00001",
+            "step:db:org_b:secret:00004:org_b:ds:00004",
             "step:db:org_b:secret:00006:org_b:ds:00001"
           ]
         }
@@ -214,11 +214,11 @@
       "oracle_cut": [
         "step:db:org_b:secret:00001:org_b:ds:00001",
         "step:db:org_b:secret:00002:org_b:ds:00001",
-        "step:db:org_b:secret:00004:org_b:ds:00001",
+        "step:db:org_b:secret:00004:org_b:ds:00004",
         "step:db:org_b:secret:00006:org_b:ds:00001"
       ],
       "evidence": {
-        "nodes_checked": 423,
+        "nodes_checked": 424,
         "edges_checked": 299,
         "missing_nodes": [],
         "missing_edges": [],
@@ -227,53 +227,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 48.47,
-          "p95_ms": 51.51
+          "p50_ms": 94.82,
+          "p95_ms": 98.92
         },
         "attack_paths (from a seed asset)": {
           "n": 41,
-          "p50_ms": 0.46,
-          "p95_ms": 0.92
+          "p50_ms": 0.73,
+          "p95_ms": 1.37
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 5.0,
-          "p95_ms": 8.59
+          "p50_ms": 4.95,
+          "p95_ms": 8.64
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 3.55,
-          "p95_ms": 4.54
+          "p50_ms": 3.59,
+          "p95_ms": 4.68
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 5.38,
-          "p95_ms": 9.13
+          "p50_ms": 5.74,
+          "p95_ms": 7.16
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 17.07,
-          "p95_ms": 20.17
+          "p50_ms": 17.67,
+          "p95_ms": 19.87
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.73,
-          "p95_ms": 1.01
+          "p50_ms": 0.75,
+          "p95_ms": 1.16
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 213.78,
-          "p95_ms": 246.43
+          "p50_ms": 241.58,
+          "p95_ms": 245.85
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.64,
-          "p95_ms": 4.82
+          "p50_ms": 3.81,
+          "p95_ms": 5.06
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 7.79,
-          "p95_ms": 10.92
+          "p50_ms": 8.57,
+          "p95_ms": 11.53
         }
       },
       "seeds": 41,
@@ -346,7 +346,7 @@
             "org_c:finding:06381",
             "step:db:org_c:secret:00001:org_c:ds:00001",
             "step:db:org_c:secret:00002:org_c:ds:00001",
-            "step:db:org_c:secret:00004:org_c:ds:00001",
+            "step:db:org_c:secret:00004:org_c:ds:00004",
             "step:db:org_c:secret:00006:org_c:ds:00001"
           ]
         }
@@ -355,11 +355,11 @@
         "org_c:finding:06381",
         "step:db:org_c:secret:00001:org_c:ds:00001",
         "step:db:org_c:secret:00002:org_c:ds:00001",
-        "step:db:org_c:secret:00004:org_c:ds:00001",
+        "step:db:org_c:secret:00004:org_c:ds:00004",
         "step:db:org_c:secret:00006:org_c:ds:00001"
       ],
       "evidence": {
-        "nodes_checked": 202,
+        "nodes_checked": 204,
         "edges_checked": 186,
         "missing_nodes": [],
         "missing_edges": [],
@@ -368,53 +368,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 70.18,
-          "p95_ms": 75.89
+          "p50_ms": 209.5,
+          "p95_ms": 216.64
         },
         "attack_paths (from a seed asset)": {
           "n": 12,
-          "p50_ms": 1.03,
-          "p95_ms": 1.58
+          "p50_ms": 0.79,
+          "p95_ms": 1.37
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 5.68,
-          "p95_ms": 8.64
+          "p50_ms": 5.78,
+          "p95_ms": 8.76
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 3.53,
-          "p95_ms": 4.68
+          "p50_ms": 3.9,
+          "p95_ms": 6.99
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 2.16,
-          "p95_ms": 4.14
+          "p50_ms": 2.41,
+          "p95_ms": 3.09
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 17.18,
-          "p95_ms": 22.68
+          "p50_ms": 18.2,
+          "p95_ms": 23.46
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.72,
-          "p95_ms": 1.11
+          "p50_ms": 0.8,
+          "p95_ms": 1.17
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 238.42,
-          "p95_ms": 255.25
+          "p50_ms": 256.22,
+          "p95_ms": 303.41
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.25,
-          "p95_ms": 4.29
+          "p50_ms": 3.71,
+          "p95_ms": 6.19
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 6.56,
-          "p95_ms": 9.5
+          "p50_ms": 7.48,
+          "p95_ms": 11.58
         }
       },
       "seeds": 12,
