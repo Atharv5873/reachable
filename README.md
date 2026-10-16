@@ -233,10 +233,24 @@ reachable/
     [`evals/results/comparison.md`](evals/results/comparison.md),
     [`evals/results/ablation.md`](evals/results/ablation.md); every number recomputes from
     `evals/results/raw/` with `make eval-score`. See [`learning/S07.md`](learning/S07.md).
-    Headline (66 runs, $0.50): reachable NDCG@10 0.82, path recall@10 100% (held-out
-    v2: 0.81 / 100%); severity_sort and smart_score 0 / 0% (smart_score puts a decoy in
-    every top 10); vector_rag 0.04 / 3%; sql_agent 0.03 / 4%. Ablation: graph off drops
-    path recall@10 from 100% to 0%.
+    Headline (66 runs): reachable NDCG@10 1.00, path recall@10 100% (held-out v2:
+    1.00 / 100%; S7 was 0.82 / 0.81 before S8's ranking step); severity_sort and
+    smart_score 0 / 0% (smart_score puts a decoy in every top 10); vector_rag 0.04 / 3%;
+    sql_agent 0.03 / 4%. Ablation: graph off drops path recall@10 from 100% to 0%.
+
+12. **Polish, guarded by the eval** (S8). Findings rank by **path-criticality**: the
+    sensitivity-weighted number of distinct Internet -> crown-jewel paths their step
+    lies on, ties going to a route not yet covered
+    ([`criticality.py`](packages/graph/src/reachable_graph/criticality.py), computed
+    from the graph at runtime, never from labels; `scan_findings`, the Pathfinder and
+    the eval's ranking step all use it). The fix plan defaults to `min_cut`'s
+    `simulate_fix`-verified set. Gates and the eval only say PASS about a **healthy**
+    run (complete, traced, LLM tokens > 0, no tool outage): a 0-token outage run is
+    DEGRADED. The LLM rate limiter is on by default (`LLM_RPM=60`; 0 disables).
+    `test_mcp` runs on its own seeded graphs. Eval: NDCG@10 0.82 -> 1.00, P@10 78% ->
+    87% (the oracle's ceiling), paths cut per fix 1.09 -> 1.16 (the oracle's), path
+    recall 100%, held-out v2 0.81 -> 1.00. See [`learning/S08.md`](learning/S08.md)
+    for why that is not overfitting.
 
 ## API
 
@@ -279,7 +293,7 @@ HTTP requires `Authorization: Bearer $MCP_API_KEY` or `X-API-Key`; `/health` is 
 
 See [`learning/S01.md`](learning/S01.md), [`learning/S02.md`](learning/S02.md),
 [`learning/S03.md`](learning/S03.md), [`learning/S04.md`](learning/S04.md),
-[`learning/S05.md`](learning/S05.md), [`learning/S06.md`](learning/S06.md) and [`learning/S07.md`](learning/S07.md) for the concepts, the Cypher, the
+[`learning/S05.md`](learning/S05.md), [`learning/S06.md`](learning/S06.md), [`learning/S07.md`](learning/S07.md) and [`learning/S08.md`](learning/S08.md) for the concepts, the Cypher, the
 max-flow / min-cut idea, the company brain and agent memory, and Browser
 queries to run now.
 
