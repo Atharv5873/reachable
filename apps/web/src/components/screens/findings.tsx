@@ -163,7 +163,7 @@ export function FindingsScreen() {
   }, [board.data, order]);
 
   // FLIP: rows slide from their old place to their new one when the order
-  // flips, so you watch the 5.0 climb and the 9.8s sink.
+  // flips, so you watch the 7.5 climb and the 9.8s sink.
   useLayoutEffect(() => {
     rows.current.forEach((el, id) => {
       const prev = tops.current.get(id);
