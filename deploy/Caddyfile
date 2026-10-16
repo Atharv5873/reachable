@@ -4,9 +4,11 @@
 # http:// request to https:// (automatic HTTPS).
 
 {
-	email {$ACME_EMAIL}
 	# No admin API on a public box.
 	admin off
+	# Optional: a Let's Encrypt account email for expiry notices. Uncomment
+	# (an `email` line with an empty value is a parse error).
+	# email you@example.com
 }
 
 {$API_DOMAIN} {

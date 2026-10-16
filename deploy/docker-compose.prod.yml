@@ -110,7 +110,6 @@ services:
       - "443:443/udp" # HTTP/3
     environment:
       API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env.prod}
-      ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data # certificates: keep them, or every restart re-issues
