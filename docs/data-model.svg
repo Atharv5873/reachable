@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 840" width="1200" height="840" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="840" fill="#ffffff"/>
+  <text x="20" y="30" font-size="17" font-weight="700" fill="#0f172a">Reachable: graph data model</text>
+  <text x="20" y="52" font-size="12" fill="#475569">One FalkorDB graph per org and scan (org_a, org_a_v2, ...), plus one shared threatintel graph (CVE, CWE, Product, Technique, Tactic).</text>
+
+  <!-- edges first, nodes on top -->
+  <g stroke="#475569" stroke-width="1.5" fill="none">
+    <line x1="170" y1="170" x2="318" y2="170" marker-end="url(#a)"/>
+    <path d="M362 153 C 350 98, 410 98, 398 153" marker-end="url(#a)"/>
+    <line x1="340" y1="153" x2="252" y2="97" marker-end="url(#a)"/>
+    <line x1="440" y1="170" x2="588" y2="170" marker-end="url(#a)"/>
+    <line x1="710" y1="170" x2="858" y2="170" marker-end="url(#a)"/>
+    <line x1="920" y1="97" x2="920" y2="151" marker-end="url(#a)"/>
+    <line x1="600" y1="263" x2="430" y2="189" marker-end="url(#a)"/>
+    <line x1="700" y1="263" x2="870" y2="189" marker-end="url(#a)"/>
+    <line x1="380" y1="187" x2="380" y2="361" marker-end="url(#a)"/>
+    <line x1="440" y1="387" x2="588" y2="430" marker-end="url(#a)"/>
+    <line x1="440" y1="183" x2="606" y2="423" marker-end="url(#a)"/>
+    <path d="M592 450 C 540 475, 560 505, 615 459" marker-end="url(#a)"/>
+    <line x1="710" y1="440" x2="858" y2="440" marker-end="url(#a)"/>
+    <line x1="980" y1="170" x2="1018" y2="170" stroke-dasharray="4 3"/>
+  </g>
+  <g font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#334155">
+    <text x="196" y="162">EXPOSES</text>
+    <text x="336" y="94">CAN_REACH {port}</text>
+    <text x="232" y="132">IN_ZONE</text>
+    <text x="490" y="162">RUNS</text>
+    <text x="748" y="162">HAS_VULN</text>
+    <text x="928" y="128">MITIGATES {asset}</text>
+    <text x="488" y="236">ON</text>
+    <text x="796" y="236">OF</text>
+    <text x="330" y="280">HOLDS</text>
+    <text x="452" y="380">UNLOCKS</text>
+    <text x="300" y="416">(UNLOCKS also -> DataStore, Asset)</text>
+    <text x="520" y="318">ASSUMES</text>
+    <text x="470" y="500">CAN_ASSUME</text>
+    <text x="760" y="432">CAN {action}</text>
+  </g>
+
+  <g font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">
+    <rect x="50" y="153" width="120" height="34" rx="17" fill="#fff7ed" stroke="#c2410c"/><text x="110" y="175">Internet</text>
+    <rect x="320" y="153" width="120" height="34" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="380" y="175">Asset</text>
+    <rect x="140" y="63" width="110" height="34" rx="6" fill="#f8fafc" stroke="#94a3b8"/><text x="195" y="85">Zone</text>
+    <rect x="590" y="153" width="120" height="34" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="650" y="175">Software</text>
+    <rect x="860" y="153" width="120" height="34" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="920" y="175">Vuln</text>
+    <rect x="860" y="63" width="120" height="34" rx="6" fill="#f8fafc" stroke="#94a3b8"/><text x="920" y="85">Control</text>
+    <rect x="590" y="263" width="120" height="34" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="650" y="285">Finding</text>
+    <rect x="320" y="363" width="120" height="34" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="380" y="385">Secret</text>
+    <rect x="590" y="423" width="120" height="34" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="650" y="445">Identity</text>
+    <rect x="860" y="423" width="120" height="34" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-width="2"/><text x="920" y="445">DataStore</text>
+  </g>
+  <g font-size="11" fill="#475569" text-anchor="middle">
+    <text x="372" y="207" text-anchor="end">kind, internet_facing</text>
+    <text x="650" y="315">status, scanner</text>
+    <text x="645" y="414" text-anchor="start">User | Role | ServiceAccount</text>
+    <text x="920" y="475">crown_jewel, tier</text>
+  </g>
+  <rect x="1020" y="130" width="160" height="82" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-dasharray="4 3"/>
+  <g font-size="11" fill="#475569">
+    <text x="1030" y="149">CVE facts (CVSS, EPSS,</text>
+    <text x="1030" y="165">KEV, CWE, ATT&amp;CK) copied</text>
+    <text x="1030" y="181">from threatintel at load:</text>
+    <text x="1030" y="197">no cross-graph joins</text>
+  </g>
+
+  <!-- three panels -->
+  <g font-size="12">
+    <rect x="20" y="540" width="380" height="280" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+    <text x="36" y="564" font-weight="700" fill="#c2410c">Attack layer (derived, make derive)</text>
+    <rect x="410" y="540" width="380" height="280" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="426" y="564" font-weight="700" fill="#0f172a">Company layer (Track 03)</text>
+    <rect x="800" y="540" width="380" height="280" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="816" y="564" font-weight="700" fill="#0f172a">Agent memory (Track 02; memory.py writes)</text>
+  </g>
+  <g font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#334155">
+    <text x="36" y="590">(u)-[:ATTACK_STEP {rule, technique,</text>
+    <text x="36" y="606">&#160;&#160;&#160;&#160;&#160;&#160;likelihood, cost: -ln p,</text>
+    <text x="36" y="622">&#160;&#160;&#160;&#160;&#160;&#160;fix_token, because}]->(v)</text>
+    <text x="36" y="642">u, v in Internet | Asset | Secret</text>
+    <text x="36" y="658">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;| Identity | DataStore</text>
+    <text x="36" y="678">9 rules = 9 Cypher MATCH ... MERGE</text>
+    <text x="36" y="704">min-cut FLOW layer (node-split):</text>
+    <text x="36" y="720">(u)-[:FLOW]->(:FixIn {token})</text>
+    <text x="36" y="736">&#160;&#160;&#160;-[:FLOW {cap: 1, effort}]-></text>
+    <text x="36" y="752">&#160;&#160;&#160;(:FixOut)-[:FLOW]->(v)</text>
+    <text x="36" y="776">:CrownPath = node on some</text>
+    <text x="36" y="792">&#160;&#160;Internet -> crown-jewel path</text>
+
+    <text x="426" y="590">(:Team)-[:OWNS]->(:Asset|:DataStore)</text>
+    <text x="426" y="610">(:Person)-[:MEMBER_OF]->(:Team)</text>
+    <text x="426" y="630">(:Person)-[:ON_CALL]->(:OnCall)</text>
+    <text x="426" y="646">&#160;&#160;&#160;-[:FOR]->(:Team)</text>
+    <text x="426" y="666">(:ADR)-[:CHANGED]->(:Asset)</text>
+    <text x="426" y="686">(:ADR)-[:APPROVED_BY]->(:Person)</text>
+    <text x="426" y="706">(:Ticket)-[:FIXES]->(:Finding)</text>
+    <text x="426" y="736">(:Scan {version, time})</text>
+    <text x="426" y="752">&#160;&#160;a run reasons at the scan's time</text>
+    <text x="426" y="768">&#160;&#160;(as_of), never the wall clock</text>
+
+    <text x="816" y="590">(:Run)-[:HAS_STEP]->(:AgentStep)</text>
+    <text x="816" y="606">&#160;&#160;&#160;-[:NEXT]->(:AgentStep)</text>
+    <text x="816" y="622">(:AgentStep)-[:RESULT]->(:ToolOutput)</text>
+    <text x="816" y="642">(:Run)-[:HAS_OUTPUT]->(:Triage |</text>
+    <text x="816" y="658">&#160;&#160;&#160;:PathAnalysis | :FixPlan | :Report)</text>
+    <text x="816" y="674">&#160;&#160;&#160;each -[:BUILT_ON]-> the one before</text>
+    <text x="816" y="694">(:Triage)-[:HAS_VERDICT]->(:Verdict)</text>
+    <text x="816" y="710">&#160;&#160;&#160;-[:ON]->(:Finding)</text>
+    <text x="816" y="726">(:RiskAcceptance {expires})-[:ON]->(:Finding)</text>
+    <text x="816" y="742">(:Pattern)-[:ABOUT]->(:Software|:Vuln)</text>
+    <text x="816" y="758">(:Technique)-[:HANDLED_BY]->(:Playbook)</text>
+    <text x="816" y="774">(:Playbook)-[:SUPERSEDES]->(:Playbook)</text>
+    <text x="816" y="790">(:Verdict)-[:LED_TO]->(:Playbook)</text>
+    <text x="816" y="806">(:Run)-[:RAISED]->(:Alert); (:Drift)</text>
+  </g>
+</svg>

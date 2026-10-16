@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="670" fill="#ffffff"/>
+  <text x="20" y="30" font-size="17" font-weight="700" fill="#0f172a">Reachable: architecture</text>
+
+  <g font-size="12" fill="#334155">
+    <!-- inputs -->
+    <rect x="20" y="70" width="230" height="92" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="34" y="92" font-weight="700" fill="#0f172a">Public threat intel</text>
+    <text x="34" y="112">CISA KEV · FIRST EPSS · NVD</text>
+    <text x="34" y="130">MITRE ATT&amp;CK (committed snapshot)</text>
+    <text x="34" y="150" font-family="ui-monospace, Consolas, monospace" fill="#64748b">make intel</text>
+
+    <rect x="20" y="182" width="230" height="92" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="34" y="204" font-weight="700" fill="#0f172a">Synthetic org generator</text>
+    <text x="34" y="224">3 fictional orgs, scan v1 + v2,</text>
+    <text x="34" y="242">planted paths and decoys</text>
+    <text x="34" y="262" font-family="ui-monospace, Consolas, monospace" fill="#64748b">make seed</text>
+
+    <rect x="20" y="300" width="230" height="78" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-dasharray="5 4"/>
+    <text x="34" y="322" font-weight="700" fill="#0f172a">networkx oracle</text>
+    <text x="34" y="342">ground truth -> labels.json</text>
+    <text x="34" y="360">never loaded into FalkorDB</text>
+    <line x1="135" y1="274" x2="135" y2="298" stroke="#475569" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#a)"/>
+
+    <rect x="20" y="560" width="230" height="80" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-dasharray="5 4"/>
+    <text x="34" y="582" font-weight="700" fill="#0f172a">Postgres + pgvector</text>
+    <text x="34" y="602">same dataset, for the eval's</text>
+    <text x="34" y="620">SQL and vector-RAG baselines only</text>
+
+    <!-- FalkorDB -->
+    <rect x="290" y="50" width="380" height="470" rx="10" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+    <text x="310" y="78" font-size="15" font-weight="700" fill="#0f172a">FalkorDB</text>
+    <text x="384" y="78" fill="#475569">one graph per tenant and scan</text>
+    <g font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#475569">
+      <rect x="310" y="90" width="78" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1"/><text x="318" y="104">threatintel</text>
+      <rect x="394" y="90" width="48" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1"/><text x="402" y="104">org_a</text>
+      <rect x="448" y="90" width="48" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1"/><text x="456" y="104">org_b</text>
+      <rect x="502" y="90" width="48" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1"/><text x="510" y="104">org_c</text>
+      <rect x="556" y="90" width="94" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1"/><text x="564" y="104">org_*_v2 x3</text>
+    </g>
+    <rect x="310" y="124" width="340" height="80" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="324" y="146" font-weight="700" fill="#0f172a">Infrastructure (scanner + cloud)</text>
+    <text x="324" y="166">Asset · Software · Vuln · Finding · Zone</text>
+    <text x="324" y="184">Identity · Secret · DataStore · Control · Internet</text>
+
+    <rect x="310" y="214" width="340" height="100" rx="6" fill="#ffffff" stroke="#c2410c" stroke-width="1.5"/>
+    <text x="324" y="236" font-weight="700" fill="#c2410c">Attack layer (derived by Cypher)</text>
+    <text x="324" y="256">ATTACK_STEP edges: 9 rules, ATT&amp;CK technique,</text>
+    <text x="324" y="274">likelihood, cost = -ln p, fix_token, because</text>
+    <text x="324" y="292">node-split FLOW layer · :CrownPath label</text>
+
+    <rect x="310" y="324" width="340" height="66" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="324" y="346" font-weight="700" fill="#0f172a">Company layer (Track 03)</text>
+    <text x="324" y="366">Team · Person · OnCall · ADR · Ticket</text>
+
+    <rect x="310" y="400" width="340" height="104" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="324" y="422" font-weight="700" fill="#0f172a">Agent memory (Track 02)</text>
+    <text x="324" y="442">Run · AgentStep · ToolOutput · Triage</text>
+    <text x="324" y="460">PathAnalysis · FixPlan · Report · Verdict</text>
+    <text x="324" y="478">RiskAcceptance · Pattern · Playbook</text>
+    <text x="324" y="496">Drift · Alert</text>
+
+    <line x1="250" y1="116" x2="288" y2="116" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+    <line x1="250" y1="200" x2="308" y2="170" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <!-- tools + MCP -->
+    <rect x="710" y="130" width="200" height="130" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="724" y="152" font-weight="700" fill="#0f172a">16 typed graph tools</text>
+    <text x="724" y="172">read-only (GRAPH.RO_QUERY),</text>
+    <text x="724" y="190">capped; each returns its</text>
+    <text x="724" y="208">evidence and the Cypher it ran</text>
+    <text x="724" y="230" font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#c2410c">algo.SPpaths · algo.maxFlow</text>
+    <text x="724" y="246" font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#c2410c">algo.bfs · algo.betweenness</text>
+    <line x1="672" y1="200" x2="708" y2="200" stroke="#475569" stroke-width="1.5" marker-start="url(#a)" marker-end="url(#a)"/>
+
+    <rect x="710" y="300" width="200" height="72" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="724" y="322" font-weight="700" fill="#0f172a">MCP server</text>
+    <text x="724" y="342">stdio + streamable HTTP</text>
+    <text x="724" y="360">API key required</text>
+    <line x1="810" y1="260" x2="810" y2="298" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <rect x="710" y="420" width="200" height="70" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="724" y="442" font-weight="700" fill="#0f172a">memory.py</text>
+    <text x="724" y="462">the only runtime writer:</text>
+    <text x="724" y="480">fixed CREATE/MERGE queries</text>
+    <line x1="708" y1="455" x2="652" y2="455" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <!-- agents -->
+    <rect x="950" y="50" width="230" height="470" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="966" y="78" font-size="15" font-weight="700" fill="#0f172a">Agents (LangGraph)</text>
+    <g>
+      <rect x="975" y="96" width="180" height="44" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="989" y="116" font-weight="700" fill="#0f172a">Sentinel</text><text x="989" y="132" font-size="11">no LLM: carry memory, drift</text>
+      <rect x="975" y="160" width="180" height="44" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="989" y="180" font-weight="700" fill="#0f172a">Triage</text><text x="989" y="196" font-size="11">which findings matter</text>
+      <rect x="975" y="224" width="180" height="44" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="989" y="244" font-weight="700" fill="#0f172a">Pathfinder</text><text x="989" y="260" font-size="11">attack paths, ranking</text>
+      <rect x="975" y="288" width="180" height="44" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="989" y="308" font-weight="700" fill="#0f172a">Fixer</text><text x="989" y="324" font-size="11">min cut, owners, tickets</text>
+      <rect x="975" y="352" width="180" height="44" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="989" y="372" font-weight="700" fill="#0f172a">Reporter</text><text x="989" y="388" font-size="11">report, learned patterns</text>
+      <g stroke="#475569" stroke-width="1.5" marker-end="url(#a)">
+        <line x1="1065" y1="140" x2="1065" y2="158"/><line x1="1065" y1="204" x2="1065" y2="222"/>
+        <line x1="1065" y1="268" x2="1065" y2="286"/><line x1="1065" y1="332" x2="1065" y2="350"/>
+      </g>
+    </g>
+    <text x="966" y="428" font-size="11">each LLM agent picks its MCP tools;</text>
+    <text x="966" y="446" font-size="11">claims are checked against tool results</text>
+    <text x="966" y="464" font-size="11">LiteLLM -> Gemini 3.5 Flash-Lite</text>
+    <text x="966" y="482" font-size="11">(Groq fallback, per-run budgets)</text>
+    <text x="966" y="500" font-size="11">handoffs go through the Run node</text>
+    <line x1="912" y1="336" x2="948" y2="336" stroke="#475569" stroke-width="1.5" marker-start="url(#a)" marker-end="url(#a)"/>
+    <line x1="948" y1="470" x2="912" y2="470" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <!-- serving -->
+    <rect x="290" y="560" width="260" height="80" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="304" y="582" font-weight="700" fill="#0f172a">FastAPI</text>
+    <text x="304" y="602">starts runs, streams their trace</text>
+    <text x="304" y="620">(SSE), views over the same tools</text>
+    <line x1="420" y1="522" x2="420" y2="558" stroke="#475569" stroke-width="1.5" marker-start="url(#a)" marker-end="url(#a)"/>
+
+    <rect x="590" y="560" width="300" height="80" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="604" y="582" font-weight="700" fill="#0f172a">Next.js UI (Vercel)</text>
+    <text x="604" y="602">/api/r/* route handler adds the</text>
+    <text x="604" y="620">API key server-side; 7 screens</text>
+    <line x1="588" y1="600" x2="552" y2="600" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <rect x="930" y="560" width="250" height="80" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+    <text x="944" y="582" font-weight="700" fill="#0f172a">Browser</text>
+    <text x="944" y="602">replay a recorded run (default)</text>
+    <text x="944" y="620">or start a live one</text>
+    <line x1="928" y1="600" x2="892" y2="600" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+  </g>
+</svg>
