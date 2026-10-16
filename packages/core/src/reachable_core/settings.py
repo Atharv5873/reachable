@@ -60,11 +60,14 @@ class Settings(BaseSettings):
     llm_reserve_model: str | None = None
     llm_reserve_api_key: SecretStr | None = None
     llm_timeout_s: float = 60.0  # per call
-    # Client-side pacing: at most this many calls per minute. A call waits up to
-    # llm_max_wait_s for a slot rather than burn the fallback; 0 disables pacing.
-    # Off by default since billing is on (S6: 20 concurrent calls, no 429); set
-    # LLM_RPM=5 to protect a free-tier key (it answered 5 then 429'd).
-    llm_rpm: int = 0
+    # Client-side pacing: at most this many calls per minute (per run). A call
+    # waits up to llm_max_wait_s for a slot rather than burn the fallback.
+    # S8: on by default. A live run makes ~7 calls, so 60/min never slows a demo,
+    # but a runaway loop or a burst of runs self-paces instead of tripping the
+    # provider (S7: a burst hit 429s, then the prepaid credits ran dry). Well under
+    # the paid tier's per-minute cap. LLM_RPM=12 for a free-tier key (15/min);
+    # LLM_RPM=0 disables pacing.
+    llm_rpm: int = 60
     llm_max_wait_s: float = 30.0
     llm_patience_retries: int = 3  # per run: wait 35 s and retry on a short-lived 429
     llm_retries: int = 1  # Router retries per deployment before falling back

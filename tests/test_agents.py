@@ -305,6 +305,31 @@ def test_router_needs_a_key():
         RouterLLM(Settings(_env_file=None), deps=[])
 
 
+def test_rate_limiter_is_on_by_default_and_llm_rpm_0_disables_it(monkeypatch):
+    """S8: live runs self-pace by default; LLM_RPM=0 turns pacing off."""
+    from reachable_agents.llm import Pacer
+
+    monkeypatch.delenv("LLM_RPM", raising=False)
+    assert Settings(_env_file=None).llm_rpm > 0
+    assert _router("hi", "hi").pacer.rpm == Settings(_env_file=None).llm_rpm
+    monkeypatch.setenv("LLM_RPM", "0")
+    assert Settings(_env_file=None).llm_rpm == 0
+
+    async def calls(p: Pacer, n: int) -> float:
+        return sum([await p.slot() for _ in range(n)])
+
+    import reachable_agents.llm as llm_mod
+
+    slept: list[float] = []
+
+    async def fake_sleep(s: float) -> None:
+        slept.append(s)
+
+    monkeypatch.setattr(llm_mod.asyncio, "sleep", fake_sleep)
+    assert asyncio.run(calls(Pacer(0, max_wait=30), 50)) == 0.0 and not slept  # off
+    assert asyncio.run(calls(Pacer(2, max_wait=90), 3)) > 0 and len(slept) == 1  # on: 3rd waits
+
+
 # ------------------------------------------------ what the LLM sees (unit)
 def test_llm_schemas_hide_org_and_as_of_and_simplify():
     async def go():
