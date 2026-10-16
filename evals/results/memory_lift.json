@@ -7,7 +7,7 @@
   "fallback=groq/qwen/qwen3.8-27b"
  ],
  "v1_run": {
-  "run_id": "lift_org_a:run:736087b64b7b",
+  "run_id": "lift_org_a:run:ce51959db04e",
   "status": "complete",
   "stats": {
    "max_llm_calls": 30,
@@ -31,16 +31,17 @@
    "tool_results": 24,
    "fallbacks": 0,
    "llm_failures": 0,
-   "tokens_in": 22397,
-   "tokens_out": 2994,
+   "tokens_in": 22389,
+   "tokens_out": 3126,
    "models": {
     "primary=gemini/gemini-3.5-flash-lite": 6
    },
    "memory": {
     "patterns_learned": 1
    },
-   "wall_ms": 13881
-  }
+   "wall_ms": 15514
+  },
+  "health": []
  },
  "resets": {
   "before_cold": {
@@ -59,8 +60,8 @@
    "Playbook(learned)": 0
   },
   "before_warm": {
-   "AgentStep": 44.0,
-   "ToolOutput": 27.0,
+   "AgentStep": 46.0,
+   "ToolOutput": 28.0,
    "Report": 1.0,
    "FixPlan": 1.0,
    "PathAnalysis": 1.0,
@@ -85,32 +86,33 @@
   ]
  },
  "cold": {
-  "run_id": "lift_org_a_v2:run:54e2a3d9f5f0",
+  "run_id": "lift_org_a_v2:run:15bf291ed335",
   "status": "complete",
+  "health": [],
   "findings_investigated": 9,
   "investigated": [
    "org_a:finding:06879",
    "org_a:finding:06857",
-   "org_a:finding:06848",
    "org_a:finding:06850",
    "org_a:finding:06851",
+   "org_a:finding:06855",
+   "org_a:finding:06848",
    "org_a:finding:06853",
    "org_a:finding:06858",
-   "org_a:finding:06855",
    "org_a:finding:06859"
   ],
   "skipped_by_memory": 0,
   "carried": {},
   "flagged_on_arrival": [],
-  "alert": "lift_org_a_v2:alert:ec1c4777c9b9",
-  "llm_calls": 6,
-  "tool_calls": 27,
+  "alert": "lift_org_a_v2:alert:ce8cd1ecf549",
+  "llm_calls": 7,
+  "tool_calls": 28,
   "cache_hits": 0,
-  "tokens_in": 21979,
-  "tokens_out": 3096,
-  "wall_s": 14.1,
+  "tokens_in": 25349,
+  "tokens_out": 3000,
+  "wall_s": 16.5,
   "models": {
-   "primary=gemini/gemini-3.5-flash-lite": 6
+   "primary=gemini/gemini-3.5-flash-lite": 7
   },
   "memory_events": {
    "patterns_learned": 1
@@ -122,27 +124,27 @@
     "tokens_in": 0
    },
    "triage": {
-    "llm": 2,
-    "tool": 3,
-    "tokens_in": 5706
+    "llm": 3,
+    "tool": 4,
+    "tokens_in": 9026
    },
    "pathfinder": {
     "llm": 2,
     "tool": 4,
-    "tokens_in": 8736
+    "tokens_in": 8748
    },
    "fixer": {
     "llm": 1,
     "tool": 17,
-    "tokens_in": 4495
+    "tokens_in": 4515
    },
    "reporter": {
     "llm": 1,
     "tool": 0,
-    "tokens_in": 3042
+    "tokens_in": 3060
    }
   },
-  "usd": 0.01433,
+  "usd": 0.0151,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",
@@ -160,21 +162,22 @@
   "correct": true
  },
  "warm": {
-  "run_id": "lift_org_a_v2:run:248447cd97e9",
+  "run_id": "lift_org_a_v2:run:7f2ab450e786",
   "status": "complete",
+  "health": [],
   "findings_investigated": 1,
   "investigated": [
    "org_a:finding:06879"
   ],
   "skipped_by_memory": 8,
   "carried": {
-   "org_a:finding:06857": "schedule",
-   "org_a:finding:06848": "fix_now",
    "org_a:finding:06850": "fix_now",
    "org_a:finding:06851": "fix_now",
-   "org_a:finding:06853": "fix_now",
-   "org_a:finding:06858": "schedule",
    "org_a:finding:06855": "fix_now",
+   "org_a:finding:06848": "fix_now",
+   "org_a:finding:06853": "fix_now",
+   "org_a:finding:06857": "schedule",
+   "org_a:finding:06858": "schedule",
    "org_a:finding:06859": "schedule"
   },
   "flagged_on_arrival": [
@@ -183,13 +186,13 @@
    "org_a:finding:06876",
    "org_a:finding:06879"
   ],
-  "alert": "lift_org_a_v2:alert:c748b2990967",
+  "alert": "lift_org_a_v2:alert:3de8b3de7eed",
   "llm_calls": 6,
   "tool_calls": 15,
   "cache_hits": 0,
-  "tokens_in": 20291,
-  "tokens_out": 2291,
-  "wall_s": 13.3,
+  "tokens_in": 20293,
+  "tokens_out": 2031,
+  "wall_s": 13.1,
   "models": {
    "primary=gemini/gemini-3.5-flash-lite": 6
   },
@@ -214,12 +217,12 @@
    "pathfinder": {
     "llm": 2,
     "tool": 2,
-    "tokens_in": 7243
+    "tokens_in": 7255
    },
    "fixer": {
     "llm": 1,
     "tool": 7,
-    "tokens_in": 4549
+    "tokens_in": 4539
    },
    "reporter": {
     "llm": 1,
@@ -227,7 +230,7 @@
     "tokens_in": 3371
    }
   },
-  "usd": 0.01181,
+  "usd": 0.01117,
   "fix_tokens": [
    "org_a:finding:06848",
    "org_a:finding:06850",
@@ -247,6 +250,9 @@
  "gate_b": {
   "warm_does_strictly_less_work": true,
   "both_fix_sets_correct": true,
+  "healthy": true,
+  "degraded": {},
+  "verdict": "PASS",
   "pass": true
  }
 }

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-16 00:21:58",
+  "generated": "2026-10-16 10:08:44",
   "reps": 20,
   "orgs": {
     "org_a": {
@@ -89,53 +89,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 17.8,
-          "p95_ms": 20.07
+          "p50_ms": 17.1,
+          "p95_ms": 18.84
         },
         "attack_paths (from a seed asset)": {
           "n": 40,
-          "p50_ms": 0.91,
-          "p95_ms": 1.18
+          "p50_ms": 0.61,
+          "p95_ms": 1.07
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 2.8,
-          "p95_ms": 3.32
+          "p50_ms": 2.47,
+          "p95_ms": 3.33
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 4.66,
-          "p95_ms": 7.94
+          "p50_ms": 4.5,
+          "p95_ms": 7.74
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 5.17,
-          "p95_ms": 7.04
+          "p50_ms": 4.94,
+          "p95_ms": 7.25
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 24.49,
-          "p95_ms": 31.2
+          "p50_ms": 23.33,
+          "p95_ms": 30.48
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.69,
-          "p95_ms": 0.92
+          "p50_ms": 0.62,
+          "p95_ms": 0.88
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 392.59,
-          "p95_ms": 411.68
+          "p50_ms": 332.29,
+          "p95_ms": 381.25
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.86,
-          "p95_ms": 5.41
+          "p50_ms": 3.08,
+          "p95_ms": 4.92
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 7.4,
-          "p95_ms": 10.88
+          "p50_ms": 6.65,
+          "p95_ms": 10.41
         }
       },
       "seeds": 40,
@@ -227,53 +227,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 49.36,
-          "p95_ms": 51.54
+          "p50_ms": 48.47,
+          "p95_ms": 51.51
         },
         "attack_paths (from a seed asset)": {
           "n": 41,
-          "p50_ms": 0.49,
-          "p95_ms": 0.86
+          "p50_ms": 0.46,
+          "p95_ms": 0.92
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 4.5,
-          "p95_ms": 7.62
+          "p50_ms": 5.0,
+          "p95_ms": 8.59
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 3.67,
-          "p95_ms": 4.48
+          "p50_ms": 3.55,
+          "p95_ms": 4.54
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 5.37,
-          "p95_ms": 5.87
+          "p50_ms": 5.38,
+          "p95_ms": 9.13
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 17.62,
-          "p95_ms": 19.4
+          "p50_ms": 17.07,
+          "p95_ms": 20.17
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.82,
-          "p95_ms": 1.03
+          "p50_ms": 0.73,
+          "p95_ms": 1.01
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 236.76,
-          "p95_ms": 271.64
+          "p50_ms": 213.78,
+          "p95_ms": 246.43
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.99,
-          "p95_ms": 5.33
+          "p50_ms": 3.64,
+          "p95_ms": 4.82
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 7.63,
-          "p95_ms": 9.92
+          "p50_ms": 7.79,
+          "p95_ms": 10.92
         }
       },
       "seeds": 41,
@@ -368,53 +368,53 @@
       "latency": {
         "attack_paths": {
           "n": 20,
-          "p50_ms": 70.47,
-          "p95_ms": 73.21
+          "p50_ms": 70.18,
+          "p95_ms": 75.89
         },
         "attack_paths (from a seed asset)": {
           "n": 12,
-          "p50_ms": 0.81,
-          "p95_ms": 1.76
+          "p50_ms": 1.03,
+          "p95_ms": 1.58
         },
         "blast_radius": {
           "n": 20,
-          "p50_ms": 4.81,
-          "p95_ms": 5.58
+          "p50_ms": 5.68,
+          "p95_ms": 8.64
         },
         "choke_points": {
           "n": 20,
-          "p50_ms": 3.61,
-          "p95_ms": 5.08
+          "p50_ms": 3.53,
+          "p95_ms": 4.68
         },
         "exposure_surface": {
           "n": 20,
-          "p50_ms": 2.4,
-          "p95_ms": 2.9
+          "p50_ms": 2.16,
+          "p95_ms": 4.14
         },
         "min_cut": {
           "n": 21,
-          "p50_ms": 17.27,
-          "p95_ms": 19.45
+          "p50_ms": 17.18,
+          "p95_ms": 22.68
         },
         "run_cypher_readonly": {
           "n": 19,
-          "p50_ms": 0.76,
-          "p95_ms": 1.07
+          "p50_ms": 0.72,
+          "p95_ms": 1.11
         },
         "simulate_fix": {
           "n": 6,
-          "p50_ms": 272.24,
-          "p95_ms": 296.99
+          "p50_ms": 238.42,
+          "p95_ms": 255.25
         },
         "vuln_intel": {
           "n": 20,
-          "p50_ms": 3.82,
-          "p95_ms": 4.54
+          "p50_ms": 3.25,
+          "p95_ms": 4.29
         },
         "why_step": {
           "n": 24,
-          "p50_ms": 7.02,
-          "p95_ms": 9.44
+          "p50_ms": 6.56,
+          "p95_ms": 9.5
         }
       },
       "seeds": 12,
@@ -452,5 +452,11 @@
       "no_decoy_in_top_paths": true
     }
   },
+  "health": {
+    "org_a": [],
+    "org_b": [],
+    "org_c": []
+  },
+  "healthy": true,
   "overall_pass": true
 }

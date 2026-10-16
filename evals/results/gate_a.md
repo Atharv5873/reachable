@@ -1,6 +1,6 @@
 # Gate A - graph tools vs ground truth (no LLM)
 
-Generated 2026-10-16 00:21:58. attack_paths budget k=10. Latency reps per tool: 20.
+Generated 2026-10-16 10:08:44. attack_paths budget k=10. Latency reps per tool: 20.
 
 ## Verdict
 
@@ -43,13 +43,13 @@ Generated 2026-10-16 00:21:58. attack_paths budget k=10. Latency reps per tool: 
 
 | tool | org_a p50 / p95 | org_b p50 / p95 | org_c p50 / p95 |
 |---|---|---|---|
-| attack_paths | 17.8 / 20.07 | 49.36 / 51.54 | 70.47 / 73.21 |
-| attack_paths (from a seed asset) | 0.91 / 1.18 | 0.49 / 0.86 | 0.81 / 1.76 |
-| blast_radius | 2.8 / 3.32 | 4.5 / 7.62 | 4.81 / 5.58 |
-| choke_points | 4.66 / 7.94 | 3.67 / 4.48 | 3.61 / 5.08 |
-| exposure_surface | 5.17 / 7.04 | 5.37 / 5.87 | 2.4 / 2.9 |
-| min_cut | 24.49 / 31.2 | 17.62 / 19.4 | 17.27 / 19.45 |
-| run_cypher_readonly | 0.69 / 0.92 | 0.82 / 1.03 | 0.76 / 1.07 |
-| simulate_fix | 392.59 / 411.68 | 236.76 / 271.64 | 272.24 / 296.99 |
-| vuln_intel | 3.86 / 5.41 | 3.99 / 5.33 | 3.82 / 4.54 |
-| why_step | 7.4 / 10.88 | 7.63 / 9.92 | 7.02 / 9.44 |
+| attack_paths | 17.1 / 18.84 | 48.47 / 51.51 | 70.18 / 75.89 |
+| attack_paths (from a seed asset) | 0.61 / 1.07 | 0.46 / 0.92 | 1.03 / 1.58 |
+| blast_radius | 2.47 / 3.33 | 5.0 / 8.59 | 5.68 / 8.64 |
+| choke_points | 4.5 / 7.74 | 3.55 / 4.54 | 3.53 / 4.68 |
+| exposure_surface | 4.94 / 7.25 | 5.38 / 9.13 | 2.16 / 4.14 |
+| min_cut | 23.33 / 30.48 | 17.07 / 20.17 | 17.18 / 22.68 |
+| run_cypher_readonly | 0.62 / 0.88 | 0.73 / 1.01 | 0.72 / 1.11 |
+| simulate_fix | 332.29 / 381.25 | 213.78 / 246.43 | 238.42 / 255.25 |
+| vuln_intel | 3.08 / 4.92 | 3.64 / 4.82 | 3.25 / 4.29 |
+| why_step | 6.65 / 10.41 | 7.79 / 10.92 | 6.56 / 9.5 |
