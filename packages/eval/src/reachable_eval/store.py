@@ -48,6 +48,10 @@ INFRA_TABLES = (
     "datastores",
     "controls",
 )
+# Columns of those tables the views leave out (S9). A crown jewel's sensitivity tier
+# is a graph property reachable may use; no baseline sees it. Baselines still see
+# which data stores are crown jewels (datastores.crown_jewel).
+HIDDEN_COLUMNS = {"datastores": ("sensitivity",)}
 # Edge types that describe the infrastructure. NOT the company layer (OWNS,
 # MEMBER_OF, ON_CALL, APPROVED_BY, CHANGED, FOR, FIXES) nor memory (HAS_STEP,
 # NEXT, HAS_TRIAGE, HAS_VERDICT, ABOUT, SEEN_IN, HANDLED_BY, SUPERSEDES).
@@ -121,8 +125,17 @@ def ensure_eval_views(graph: str, settings: Settings | None = None) -> None:
         cur.execute(sql.SQL("CREATE SCHEMA {}").format(dst))
         for t in INFRA_TABLES:
             cur.execute(
-                sql.SQL("CREATE VIEW {}.{} AS SELECT * FROM {}.{}").format(
-                    dst, sql.Identifier(t), src, sql.Identifier(t)
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position",
+                (graph, t),
+            )
+            hidden = HIDDEN_COLUMNS.get(t, ())
+            cols = sql.SQL(", ").join(
+                sql.Identifier(c) for (c,) in cur.fetchall() if c not in hidden
+            )
+            cur.execute(
+                sql.SQL("CREATE VIEW {}.{} AS SELECT {} FROM {}.{}").format(
+                    dst, sql.Identifier(t), cols, src, sql.Identifier(t)
                 )
             )
         # ON edges come from Findings (scanner) and from memory nodes (Verdict,
@@ -262,8 +275,8 @@ def load_scan(ref: ScanRef, settings: Settings | None = None) -> ScanData:
                 internet_facing=aid in exposed,
                 mitigated_by=mitigated.get((vid, aid)),
             )
-        cur.execute("SELECT id, kind, sensitivity FROM datastores WHERE crown_jewel ORDER BY id")
-        crown = [{"id": i, "kind": k, "sensitivity": s} for i, k, s in cur.fetchall()]
+        cur.execute("SELECT id, kind FROM datastores WHERE crown_jewel ORDER BY id")
+        crown = [{"id": i, "kind": k} for i, k in cur.fetchall()]
         cur.execute("SELECT count(*) FROM assets")
         n_assets = cur.fetchone()[0]
     findings = sorted(rows.values(), key=lambda f: tiebreak(f.id))  # no id-order signal

@@ -19,7 +19,7 @@ import psycopg
 import pytest
 
 from reachable_eval.agent import build_context
-from reachable_eval.sql_agent import check_sql, run_sql
+from reachable_eval.sql_agent import SCHEMA_DOC, check_sql, run_sql
 from reachable_eval.store import INFRA_EDGES, INFRA_TABLES, eval_schema, ro_connect
 from reachable_eval.vector_rag import build_docs
 
@@ -42,6 +42,9 @@ FORBIDDEN = (
     "labels",
     "crown_paths",  # S8: the ranking signal is the graph's, never handed over as text
     "criticality",
+    # S9: a crown jewel's sensitivity tier weights the ground truth's priority. It is
+    # a graph property reachable may read; no baseline sees it.
+    "sensitivity",
 )
 
 
@@ -121,6 +124,25 @@ def test_sql_tool_cannot_reach_the_raw_mirror(eval_env):
         run_sql(g, f"SELECT * FROM {g}.adrs")
     out = run_sql(g, "SELECT id FROM findings ORDER BY id")
     assert out["truncated"] and len(out["data"]["rows"]) == 50  # rows are capped
+
+
+def test_baselines_cannot_see_crown_jewel_sensitivity(eval_env):
+    """S9: the views drop datastores.sensitivity, so no baseline query, document or
+    context can carry it; the raw mirror (and the graph) still have it."""
+    g = eval_env["ref"].graph
+    with (
+        ro_connect(g) as conn,
+        conn.cursor() as cur,
+        pytest.raises(psycopg.errors.UndefinedColumn),
+    ):
+        cur.execute("SELECT sensitivity FROM datastores")
+    out = run_sql(g, "SELECT * FROM datastores WHERE crown_jewel")
+    assert out["data"]["rows"] and not any("sensitiv" in c for c in out["data"]["columns"])
+    assert "sensitiv" not in SCHEMA_DOC.lower()
+    assert all(set(c) == {"id", "kind"} for c in eval_env["data"].crown_jewels)
+    with psycopg.connect(eval_env_dsn(), autocommit=True) as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT DISTINCT sensitivity FROM {g}.datastores WHERE crown_jewel")
+        assert {r[0] for r in cur.fetchall()} >= {"critical", "high"}
 
 
 def test_context_and_rag_documents_carry_no_label_or_path_field(eval_env):

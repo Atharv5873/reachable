@@ -35,7 +35,7 @@ Tables (PostgreSQL 17; the search_path is this org's mirror, use bare names):
   findings(id, scanner, first_seen, status)  status 'open' | 'fixed'
   identities(id, kind, name, over_broad)
   secrets(id, kind, requires_priv)
-  datastores(id, kind, crown_jewel, sensitivity)
+  datastores(id, kind, crown_jewel)
   controls(id, kind)
   edges(src, dst, type, props jsonb), type is one of:
     EXPOSES     'internet' -> asset  (props.port)       the asset faces the Internet

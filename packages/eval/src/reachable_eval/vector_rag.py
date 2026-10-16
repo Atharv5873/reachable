@@ -74,8 +74,8 @@ def build_docs(data: ScanData) -> list[tuple[str, str, str]]:
         secrets = {i: (k, rp) for i, k, rp in cur.fetchall()}
         cur.execute("SELECT id, kind, name, over_broad FROM identities")
         idents = {i: (k, n, ob) for i, k, n, ob in cur.fetchall()}
-        cur.execute("SELECT id, kind, crown_jewel, sensitivity FROM datastores")
-        stores = {i: (k, c, s) for i, k, c, s in cur.fetchall()}
+        cur.execute("SELECT id, kind, crown_jewel FROM datastores")
+        stores = {i: (k, c) for i, k, c in cur.fetchall()}
         cur.execute("SELECT src, dst, type, props FROM edges WHERE type <> 'ON' AND type <> 'OF'")
         edges = cur.fetchall()
 
@@ -159,15 +159,14 @@ def build_docs(data: ScanData) -> list[tuple[str, str, str]]:
                 + ".",
             )
         )
-    for d, (kind, crown, sens) in stores.items():
+    for d, (kind, crown) in stores.items():
         unl = [name(x) for x, _ in in_e[(d, "UNLOCKS")]]
         can = [f"{name(x)} ({p.get('action')})" for x, p in in_e[(d, "CAN")]]
         docs.append(
             (
                 d,
                 "datastore",
-                f"Data store {d}: {kind}, sensitivity {sens}"
-                f"{', CROWN JEWEL' if crown else ''}. Unlocked by "
+                f"Data store {d}: {kind}{', CROWN JEWEL' if crown else ''}. Unlocked by "
                 f"{', '.join(unl) or 'no secret listed'}; readable by {', '.join(can) or 'none'}.",
             )
         )
