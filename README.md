@@ -41,7 +41,10 @@ All three:
 
 **Prerequisites:** Docker with Compose v2, [uv](https://docs.astral.sh/uv/) (it installs
 Python 3.12 for you), Node.js 20.9+ with npm, and GNU make (Windows: `winget install
-ezwinports.make`). Free host ports 6380, 3001, 5434, 8001, 8002 and 3000.
+ezwinports.make`). Free host ports 6380, 3001, 5434, 8001, 8002 and 3000. On Windows,
+clone to a short path (e.g. `C:\srceachable`): LiteLLM downloads a tokenizer into
+`.venv`, and past 260 characters that write fails and a real-model run comes out
+`degraded` (0 tokens).
 
 **Keys:** `MCP_API_KEY` in `.env` protects the API and the MCP server (any random string
 of 16+ characters; the UI uses the same key). `GEMINI_API_KEY` is needed only for runs
@@ -56,10 +59,14 @@ cp .env.example .env    # set MCP_API_KEY and the two passwords; add GEMINI_API_
 | step | what it does | what you should see |
 |---|---|---|
 | `make up` | builds and starts FalkorDB (+ Browser), Postgres, the API and the MCP server; waits until healthy | four containers `Healthy` (first build: a few minutes) |
-| `make intel` | loads the committed threat-intel snapshot into graph `threatintel` (offline) | `{'cves': 3136, ... 'techniques': 9, 'tactics': 7}` |
-| `make seed` | generates the three synthetic orgs (v1 + v2 scans), writes the oracle's labels, loads FalkorDB + Postgres, derives the attack layer | per-org counts, then `derive` lines with `ATTACK_STEP` counts (about 1-2 min) |
-| `make triage FAKE=1` | the agents (Triage, Pathfinder, Fixer, Reporter) on org_a scan v1 with a deterministic stub model: no key, no network | a run id, then the report path `runs/<run_id>.md` |
-| `make triage ORG=org_a` | the same with the real model (needs `GEMINI_API_KEY`; about a cent) | a run id, a handful of model calls, the report |
+| `make intel` | loads the committed threat-intel snapshot into graph `threatintel` (offline, 2 s) | `threatintel loaded: cve: 3136 ... technique: 9, tactic: 7` |
+| `make seed` | generates the three synthetic orgs (v1 + v2 scans), writes the oracle's labels, loads FalkorDB + Postgres, derives the attack layer (about 35 s) | one line per org (`org_a ... "planted_paths": 9, "min_cut": 7`), then one `derive` line per graph (`org_a ... "attack_steps": 30629 ... "idempotent": true`) |
+| `make triage ORG=org_a` | the agents (Triage, Pathfinder, Fixer, Reporter) on org_a scan v1 with the real model (needs `GEMINI_API_KEY`; ~15 s, about a cent) | one line per agent, then `run_id: org_a:run:<id> (complete, ...)`, `served by: primary=gemini/...` and the report path `runs/<id>.md` |
+| *or* `make triage FAKE=1` | the same with a deterministic stub model: no key, no network | the same shape, `served by: fake=...`; the UI labels the run `stub model` |
+
+Runs remember: a second run on the same scan carries the first run's verdicts instead of
+re-investigating (that is the episodic memory). To give a real run a cold start after a
+stub run, `make reset-memory ORG=org_a SCAN=v1` first; `make seed` resets everything.
 
 Then the UI:
 
@@ -68,8 +75,12 @@ cp apps/web/.env.example apps/web/.env.local   # set REACHABLE_API_KEY to your M
 make web-install && make web                   # http://localhost:3000
 ```
 
-Open <http://localhost:3000/findings>. The screens are in demo order (01 Findings ...
-07 Evals). The FalkorDB Browser is at <http://localhost:3001> (password: `FALKORDB_PASSWORD`).
+Open <http://localhost:3000/findings>: the run you just made ranks the findings (the top
+bar's run picker lists every run). The screens are in demo order (01 Findings ... 07 Evals).
+Drift (06) shows the v1 -> v2 path diff straight away; its memory panel fills after a v2
+run (`make drift ORG=org_a && make triage ORG=org_a SCAN=v2`, or the analyst loop on that
+screen in Live mode). The FalkorDB Browser is at <http://localhost:3001> (password:
+`FALKORDB_PASSWORD`). npm's `install-scripts` warning during `web-install` is harmless.
 
 > **Try the live site instead.** https://reachable-web.vercel.app needs no setup. To
 > see exactly what the demo video shows, pin the recorded runs: org_a
@@ -80,9 +91,10 @@ Open <http://localhost:3000/findings>. The screens are in demo order (01 Finding
 > Best on a laptop screen.
 
 More: `make test` (185 tests; integration tests skip if FalkorDB is down), `make gate-a`
-(grades the graph tools against the oracle, no LLM), `make drift ORG=org_a` then
-`make triage ORG=org_a SCAN=v2` (the rescan with memory), `make eval-score` (recomputes
-every eval table from the committed raw outputs, no keys).
+(grades the graph tools against the oracle, no LLM), `make eval-score` (recomputes every
+eval table from the committed raw outputs, no keys), `make down` (stop; data kept).
+The compose project is named `reachable`, so a second checkout on the same machine shares
+its containers and volumes (`make seed` in one resets the other).
 
 ## The graph data model
 
