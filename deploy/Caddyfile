@@ -40,8 +40,15 @@
 		-Server
 	}
 
+	# Access log without the secret: Caddy redacts Authorization and Cookie
+	# by default, but not a custom header, and the Vercel proxy sends the key
+	# as X-API-Key (Go canonicalises it to X-Api-Key).
 	log {
 		output stdout
-		format console
+		format filter {
+			wrap console
+			request>headers>X-Api-Key delete
+			request>headers>Authorization delete
+		}
 	}
 }

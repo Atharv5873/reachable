@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 [ -f .env.prod ] || { echo "deploy/.env.prod is missing (cp .env.prod.example .env.prod)"; exit 1; }
 dc() { docker compose -f docker-compose.prod.yml --env-file .env.prod "$@"; }
 # Values for the helper scripts (no export of the whole file into the shell).
-val() { sed -n "s/^$1=//p" .env.prod | tail -1; }
+val() { sed -n "s/^$1=//p" .env.prod | tr -d '' | tail -1; }
 
 cmd="${1:-ps}"
 [ $# -gt 0 ] && shift

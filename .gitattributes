@@ -1,0 +1,3 @@
+# S10: files the Linux VPS reads (env files, the Caddyfile, compose, sh) must be LF:
+# a CRLF .env.prod put a  into the API URL. The rest of the tree is left as is.
+deploy/** text eol=lf
