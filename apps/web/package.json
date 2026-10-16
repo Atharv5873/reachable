@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:bundle": "next build && node scripts/check-client-bundle.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:bundle:live": "node scripts/check-live-bundle.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
