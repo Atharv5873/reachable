@@ -255,7 +255,7 @@ export function DriftScreen() {
   const flagged: Record<string, { description: string; pattern: string }[]> = tri?.flagged_on_arrival ?? dr?.flagged_on_arrival ?? {};
 
   return (
-    <div className="mx-auto max-w-[1560px] px-8 pt-6 pb-16">
+    <div className="mx-auto max-w-[1560px] px-4 pt-6 pb-16 md:px-8">
       <p className="eyebrow">06 · Drift · v1 → v2</p>
       <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-tight">
         A week later: what changed <span className="text-fg-3">for an attacker</span>?
@@ -277,7 +277,7 @@ export function DriftScreen() {
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-[minmax(0,1fr)_420px] gap-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
           <div className="panel relative h-[520px] overflow-hidden">
             <div className="absolute top-3 left-4 z-10 flex items-center gap-3">
