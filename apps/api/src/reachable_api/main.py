@@ -6,9 +6,10 @@
     GET  /runs/{run_id}             the run as written to the graph (outputs + trace)
     POST /runs/{run_id}/verdict     an analyst accepts / rejects a decision (procedural memory),
                                     optionally accepting the finding as a risk for N days
+                                    (403 under DEMO_READONLY, the public demo)
     GET  /runs/{run_id}/subgraph    the run's attack paths + both min cuts, for Cytoscape
     GET  /runs/{run_id}/fixplan     one fix set (fewest | cheapest): owners, ADRs, tickets
-    GET  /orgs                      orgs, their scans, recent runs and alerts
+    GET  /orgs                      orgs, their scans, recent runs, pinned demo runs and alerts
     GET  /orgs/{org}/drift          exposure_drift between two scans
     GET  /orgs/{org}/findings       the findings board: scanner order vs reachability order
     GET  /orgs/{org}/why_step       the evidence behind one attack step
@@ -69,6 +70,12 @@ KEEPALIVE_S = 10.0  # an SSE comment when nothing happened for this long
 MAX_RUNS = 2  # agent runs at once (API_MAX_RUNS); the next POST /runs gets a 429
 RETRY_AFTER_S = 30  # a real run takes ~30-70 s, a fake one a few
 EVALS_DIR = Path(os.environ.get("EVALS_DIR") or REPO_ROOT / "evals" / "results")
+# The pinned demo runs (deploy/populate_demo.py writes them): {"runs": {"org_a_v1": id}}.
+DEMO_RUNS_FILE = Path(os.environ.get("DEMO_RUNS_FILE") or REPO_ROOT / "deploy" / "demo_runs.json")
+
+
+def _flag(v: str | None) -> bool:
+    return (v or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 # ------------------------------------------------------------------ requests
@@ -283,11 +290,21 @@ def create_app(
     scan_graph=None,
     ask_llm=None,
     max_runs: int | None = None,
+    readonly: bool | None = None,
+    demo_runs_file: Path | None = None,
 ) -> FastAPI:
     """The app. Tests pass their own repo/tools (a throwaway graph's allowlist),
     llm_factory and ask_llm (() -> ChatModel | None); production uses the
-    shared settings."""
+    shared settings.
+
+    readonly (DEMO_READONLY, on in the production compose file): the public
+    demo. /orgs names each scan's pinned demo run, which replay opens instead of
+    the newest run, and POST /runs/{id}/verdict answers 403, so a visitor cannot
+    rewrite the memory the demo runs read. Live runs, simulate and ask still
+    work (live runs stay under the run cap)."""
     settings = get_settings()
+    readonly = _flag(os.environ.get("DEMO_READONLY")) if readonly is None else readonly
+    pins_file = demo_runs_file or DEMO_RUNS_FILE
     scan_graph = scan_graph or settings.scan_graph  # (org, scan) -> graph name
     key = api_key or os.environ.get("API_KEY") or os.environ.get("MCP_API_KEY") or ""
     if len(key) < 16:
@@ -497,6 +514,8 @@ def create_app(
         """An analyst's review. With accept_risk_days the finding is also accepted
         as a risk (a RiskAcceptance on the synthetic clock, like the verdict): the
         next scan's run carries it over and suppresses the finding."""
+        if readonly:
+            raise HTTPException(403, "read-only demo")
         graph = graph_of(run_id)
         repo = get_repo()
         try:
@@ -626,10 +645,22 @@ def create_app(
         return {"results": out}
 
     # ---------------------------------------------------------------- orgs
+    def demo_pins() -> dict[str, str]:
+        """{"<org>_<scan>": run id}; read per request, so a re-populate needs no restart."""
+        try:
+            runs = json.loads(pins_file.read_text(encoding="utf-8")).get("runs") or {}
+        except (OSError, ValueError, AttributeError):
+            return {}
+        return {k: v for k, v in runs.items() if isinstance(v, str)}
+
     @app.get("/orgs")
     def orgs() -> list[dict]:
+        """In readonly mode each scan names its pinned demo_run (None when it has
+        none, or the run is gone), and the pin stays in recent_runs however many
+        live runs came after it."""
         repo = get_repo()
         present = set(repo.db.list_graphs())
+        pins = demo_pins() if readonly else {}
         out = []
         for org in settings.orgs:
             scans = []
@@ -637,16 +668,23 @@ def create_app(
                 g = scan_graph(org, scan)
                 if g not in present or g not in repo.allowed:
                     continue
+                runs = repo.recent_runs(g, 5)
+                pin = pins.get(f"{org}_{scan}")
+                head = repo.run_head(g, pin) if pin and pin.startswith(f"{g}:run:") else None
+                if head and pin not in {r["id"] for r in runs}:
+                    keys = ("id", "kind", "scan", "status", "started", "as_of", "models")
+                    runs.append({k: head.get(k) for k in keys})
                 scans.append(
                     {
                         "scan": scan,
                         "graph": g,
                         "info": repo.scan_info(g),
-                        "recent_runs": repo.recent_runs(g, 5),
+                        "recent_runs": runs,
+                        "demo_run": pin if head else None,
                         "alerts": repo.alerts(g)[:5],
                     }
                 )
-            out.append({"org": org, "scans": scans})
+            out.append({"org": org, "readonly": readonly, "scans": scans})
         return out
 
     @app.get("/orgs/{org}/drift")

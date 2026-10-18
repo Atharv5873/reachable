@@ -15,10 +15,11 @@ export type ScanInfo = {
   graph: string;
   info: { id: string; version: string; ts: number } | null;
   recent_runs: RunHead[];
+  demo_run?: string | null; // the pinned run replay opens on the read-only demo
   alerts: { id: string; summary?: string }[];
 };
 
-export type OrgInfo = { org: string; scans: ScanInfo[] };
+export type OrgInfo = { org: string; readonly?: boolean; scans: ScanInfo[] };
 
 export type RowStatus =
   | "reachable"

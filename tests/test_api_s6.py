@@ -322,6 +322,59 @@ def test_verdict_can_accept_a_finding_as_a_risk(env):
     assert any(x.id == acc["id"] and x.live for x in live)
 
 
+def test_readonly_demo_pins_runs_and_refuses_verdicts(env, tmp_path):
+    db, repo, run = env["db"], env["repo"], env["run"]
+    pins = tmp_path / "demo_runs.json"
+    gone = f"{BASE}_v2:run:000000000000"
+    pins.write_text(json.dumps({"runs": {"org_a_v1": run, "org_a_v2": gone}}), encoding="utf-8")
+
+    # Off (the default): no pins, verdicts write.
+    c, _, _ = _app(db, demo_runs_file=pins)
+    org = c.get("/orgs", headers=H).json()[0]
+    assert org["readonly"] is False and all(s["demo_run"] is None for s in org["scans"])
+
+    c, _, _ = _app(db, readonly=True, demo_runs_file=pins)
+    org = c.get("/orgs", headers=H).json()[0]
+    assert org["readonly"] is True
+    scans = {s["scan"]: s for s in org["scans"]}
+    assert scans["v1"]["demo_run"] == run  # replay opens the pin, not the newest run
+    assert run in {r["id"] for r in scans["v1"]["recent_runs"]}
+    assert scans.get("v2", {}).get("demo_run") is None  # a pin whose run is gone is dropped
+
+    v = c.get(f"/runs/{run}", headers=H).json()["outputs"]["Report"]["payload"]["verdicts"][0]
+    before = repo.risk_acceptances(BASE, [v["finding"]], now=2**31)
+    r = c.post(
+        f"/runs/{run}/verdict",
+        json={
+            "finding": v["finding"],
+            "decision": "accept",
+            "reason": "demo",
+            "accept_risk_days": 30,
+        },
+        headers=H,
+    )
+    assert r.status_code == 403 and r.json()["detail"] == "read-only demo"
+    assert repo.risk_acceptances(BASE, [v["finding"]], now=2**31) == before
+
+    # Simulate, ask (rules) and live runs still work.
+    fp = c.get(f"/runs/{run}/fixplan", headers=H).json()
+    sim = c.post(
+        "/orgs/org_a/simulate", json={"scan": "v1", "fix_tokens": fp["fix_tokens"]}, headers=H
+    )
+    assert sim.status_code == 200 and sim.json()["data"]["all_crown_jewels_disconnected"]
+    ask = c.post(
+        "/orgs/org_a/ask",
+        json={"question": "who owns nosuch-host-edge-999?", "mode": "rules"},
+        headers=H,
+    )
+    assert ask.status_code == 200 and "No asset named" in ask.json()["error"]
+    live = c.post("/runs", json={"org": "org_a", "scan": "v1", "fake": True}, headers=H)
+    assert live.status_code == 202
+    _wait_final(repo, BASE, live.json()["run_id"])
+    org = c.get("/orgs", headers=H).json()[0]
+    assert {s["scan"]: s for s in org["scans"]}["v1"]["demo_run"] == run  # still the pin
+
+
 def test_evals_endpoint_reads_result_files(env, tmp_path, monkeypatch):
     (tmp_path / "gate_x.json").write_text(json.dumps({"pass": True, "n": 3}), encoding="utf-8")
     (tmp_path / "broken.json").write_text("{nope", encoding="utf-8")

@@ -40,7 +40,8 @@ type Workspace = {
   scan: Scan;
   mode: Mode;
   finding: string | null;
-  runId: string | null; // the run every screen reads (explicit, else the latest finished)
+  runId: string | null; // the run every screen reads (explicit, else defaultRun)
+  readonly: boolean; // the public demo: pinned runs, no verdicts
   runs: RunHead[]; // agent runs of this org + scan, newest first
   scanInfo: ScanInfo | undefined;
   orgs: OrgInfo[] | undefined;
@@ -55,6 +56,16 @@ const Ctx = createContext<Workspace | null>(null);
 
 export function isStub(r: RunHead): boolean {
   return !!r.models?.some((m) => m.includes("fake"));
+}
+
+/** The run replay opens for a scan: on the read-only demo its pinned run (never
+ *  whatever a visitor ran last), else the newest finished run made with a real
+ *  model, so a stub-model test run never silently becomes what the demo shows. */
+export function defaultRun(scan: ScanInfo | undefined, readonly: boolean): string | null {
+  if (readonly) return scan?.demo_run ?? null;
+  const done = (scan?.recent_runs ?? []).filter((r) => r.kind === "agent_triage" && r.status === "complete");
+  done.sort((a, b) => (b.started ?? 0) - (a.started ?? 0));
+  return (done.find((r) => !isStub(r)) ?? done[0])?.id ?? null;
 }
 
 export function useWorkspace(): Workspace {
@@ -102,11 +113,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .sort((a, b) => (b.started ?? 0) - (a.started ?? 0)),
     [scanInfo],
   );
-  const explicit = param(sp, "run");
-  // Replay defaults to the newest finished run made with a real model; a
-  // stub-model test run never silently becomes what the demo shows.
-  const finished = runs.filter((r) => r.status === "complete");
-  const runId = explicit || (finished.find((r) => !isStub(r)) ?? finished[0])?.id || null;
+  const readonly = !!orgsQ.data?.find((o) => o.org === org)?.readonly;
+  const runId = param(sp, "run") || defaultRun(scanInfo, readonly);
 
   const href = useCallback(
     (path: string, patch: Patch = {}) => {
@@ -130,6 +138,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     mode,
     finding,
     runId,
+    readonly,
     runs,
     scanInfo,
     orgs: orgsQ.data,

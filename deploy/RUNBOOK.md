@@ -68,10 +68,23 @@ The v2 run: Sentinel alert on the one new crown path
 (internet -> vireo-basalt-edge-192 -> ember-sol-data-405 -> db_password -> bucket),
 06859 **suppressed** by the acceptance, 7 findings carried from v1, 1 investigated.
 
-Replay picks the newest finished *real-model* run per org/scan. A live judge run
-(real model) becomes the newest and replay then shows it; to pin the demo, use the
-run picker or a URL with `&run=<id>` (the video should use these ids). A stub-model
-run never displaces them.
+The public demo runs with `DEMO_READONLY=1` (the default in
+`docker-compose.prod.yml`; the Vercel production deployment defaults to it too):
+
+* replay opens these pinned runs for each org/scan, never the newest run, so a
+  judge's live run never displaces them (it stays in the run picker); a scan
+  without a pin (org_b/org_c v2) opens no run until one is picked;
+* `POST /runs/{id}/verdict` answers 403 `read-only demo` (the API, and the Vercel
+  proxy before it), and the Drift screen shows "Read-only demo — run locally to
+  record verdicts" instead of the accept form;
+* simulate, ask and live runs still work, under the usual run cap.
+
+The API reads `demo_runs.json` per request (mounted read-only into the container),
+so `./prod.sh populate` re-pins without a restart. A fresh populate posts the 06859
+verdict, so lift the lock around it: `DEMO_READONLY=0 ./prod.sh up`, then
+`./prod.sh populate`, then `./prod.sh up` (the shell value overrides `.env.prod`). With `DEMO_READONLY=0` (and
+locally) replay picks the newest finished *real-model* run per org/scan instead; a
+stub-model run never displaces them.
 
 ## 3. Frontend (Vercel)
 

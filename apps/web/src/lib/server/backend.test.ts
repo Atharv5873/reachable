@@ -95,6 +95,32 @@ describe("the API proxy", () => {
     expect(res.headers.get("retry-after")).toBe("30");
   });
 
+  it("refuses verdicts on the read-only demo, and only verdicts", async () => {
+    const send = (env: Record<string, string | undefined>, segments: string[]) => {
+      const f = upstream("{}");
+      const req = new Request(`http://web/api/r/${segments.join("/")}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      return forward(req, segments, { fetchImpl: f, env: { ...ENV, ...env } as NodeJS.ProcessEnv }).then((res) => ({ res, f }));
+    };
+    const verdict = ["runs", "org_a:run:abc", "verdict"];
+    for (const env of [{ DEMO_READONLY: "1" }, { VERCEL_ENV: "production" }]) {
+      const { res, f } = await send(env, verdict);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ detail: "read-only demo" });
+      expect(f).not.toHaveBeenCalled();
+      // simulate, ask and live runs still go through
+      for (const s of [["orgs", "org_a", "simulate"], ["orgs", "org_a", "ask"], ["runs"]]) {
+        expect((await send(env, s)).res.status).toBe(200);
+      }
+    }
+    for (const env of [{}, { VERCEL_ENV: "preview" }, { VERCEL_ENV: "production", DEMO_READONLY: "0" }]) {
+      expect((await send(env, verdict)).res.status).toBe(200);
+    }
+  });
+
   it("refuses cross-site POSTs (CSRF) before calling the backend", async () => {
     const f = upstream("{}");
     const post = (headers: Record<string, string>) =>

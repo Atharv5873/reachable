@@ -9,9 +9,9 @@ import { Stat, Verdict, shortId, shortRun } from "@/components/bits";
 import { AttackGraph, GraphLegend } from "@/components/graph/attack-graph";
 import { EmptyState, ErrorState, LoadingRows, Shimmer } from "@/components/states";
 import { type ApiError, api, invalidate, useApi } from "@/lib/api";
-import type { RunDump, RunHead, Subgraph } from "@/lib/types";
+import type { RunDump, Subgraph } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { isStub, useWorkspace } from "@/lib/workspace";
+import { defaultRun, useWorkspace } from "@/lib/workspace";
 
 type DriftPath = { target: string; nodes: { id: string; name: string }[]; steps?: unknown[]; fixed_findings?: string[]; likelihood?: number };
 type Drift = {
@@ -33,11 +33,6 @@ type Drift = {
 
 type Lift = Record<string, number | string | boolean | null | object>;
 
-function latest(runs: RunHead[] | undefined): RunHead | undefined {
-  const done = (runs ?? []).filter((r) => r.kind === "agent_triage" && r.status === "complete");
-  done.sort((a, b) => (b.started ?? 0) - (a.started ?? 0));
-  return done.find((r) => !isStub(r)) ?? done[0];
-}
 
 function Hops({ p, struck }: { p: DriftPath; struck?: boolean }) {
   return (
@@ -104,7 +99,7 @@ function MemoryLift() {
   );
 }
 
-function AnalystLoop({ v1Run }: { v1Run: RunHead | undefined }) {
+function AnalystLoop({ v1Run }: { v1Run: { id: string } | undefined }) {
   const ws = useWorkspace();
   const router = useRouter();
   const dump = useApi<RunDump>(v1Run ? `runs/${encodeURIComponent(v1Run.id)}` : null);
@@ -158,6 +153,10 @@ function AnalystLoop({ v1Run }: { v1Run: RunHead | undefined }) {
           <p className="eyebrow mb-2">1 · Accept a finding as a risk (v1 run {shortRun(v1Run?.id)})</p>
           {!v1Run ? (
             <p className="text-xs text-fg-3">No finished v1 run.</p>
+          ) : ws.readonly ? (
+            <p data-testid="readonly-note" className="flex items-center gap-1.5 text-xs text-fg-3">
+              <ShieldOff className="size-3.5" /> Read-only demo — run locally to record verdicts.
+            </p>
           ) : (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -235,8 +234,10 @@ export function DriftScreen() {
   const ws = useWorkspace();
   const drift = useApi<Drift>(`orgs/${ws.org}/drift`);
   const scans = ws.orgs?.find((o) => o.org === ws.org)?.scans;
-  const v1Run = latest(scans?.find((s) => s.scan === "v1")?.recent_runs);
-  const v2Run = (ws.scan === "v2" && ws.runId ? { id: ws.runId } : undefined) ?? latest(scans?.find((s) => s.scan === "v2")?.recent_runs);
+  const v1Id = defaultRun(scans?.find((s) => s.scan === "v1"), ws.readonly);
+  const v1Run = v1Id ? { id: v1Id } : undefined;
+  const v2Id = (ws.scan === "v2" && ws.runId) || defaultRun(scans?.find((s) => s.scan === "v2"), ws.readonly);
+  const v2Run = v2Id ? { id: v2Id } : undefined;
   const v2 = useApi<RunDump>(v2Run ? `runs/${encodeURIComponent(v2Run.id)}` : null);
   const sub = useApi<Subgraph>(v2Run ? `runs/${encodeURIComponent(v2Run.id)}/subgraph` : null);
 

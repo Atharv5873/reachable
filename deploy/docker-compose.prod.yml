@@ -66,6 +66,10 @@ services:
       # does, server to server), so no origin is allowed cross-origin.
       API_CORS_ORIGINS: ""
       API_MAX_RUNS: ${API_MAX_RUNS:-2}
+      # The public demo: replay opens the pinned runs (demo_runs.json, mounted
+      # below so a re-populate needs no rebuild) and POST /verdict answers 403.
+      DEMO_READONLY: ${DEMO_READONLY:-1}
+      DEMO_RUNS_FILE: /app/deploy/demo_runs.json
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-gemini/gemini-3.5-flash-lite}
@@ -76,6 +80,8 @@ services:
       LLM_RPM: ${LLM_RPM:-20}
       AGENT_MAX_LLM_CALLS: ${AGENT_MAX_LLM_CALLS:-20}
       AGENT_MAX_TOOL_CALLS: ${AGENT_MAX_TOOL_CALLS:-45}
+    volumes:
+      - ./demo_runs.json:/app/deploy/demo_runs.json:ro
     # Behind Caddy: trust its X-Forwarded-* so logs show the client, not Caddy.
     command:
       - uv

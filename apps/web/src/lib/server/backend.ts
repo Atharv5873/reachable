@@ -49,6 +49,17 @@ export function backendConfig(env: NodeJS.ProcessEnv = process.env) {
   };
 }
 
+/** The public demo refuses verdicts here too, before the backend (which does
+ *  the same under its own DEMO_READONLY). On unless DEMO_READONLY says
+ *  otherwise in a Vercel production deployment, off elsewhere. */
+export function demoReadonly(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = env.DEMO_READONLY?.trim().toLowerCase();
+  if (v) return ["1", "true", "yes", "on"].includes(v);
+  return env.VERCEL_ENV === "production";
+}
+
+const VERDICT = new RegExp(`^runs/${SEG}/verdict$`);
+
 const PASS_HEADERS = ["content-type", "retry-after"];
 
 /**
@@ -92,6 +103,9 @@ export async function forward(
   }
   const refused = crossSiteRefusal(req);
   if (refused) return Response.json({ detail: refused }, { status: 403 });
+  if (method === "POST" && VERDICT.test(segments.join("/")) && demoReadonly(opts.env)) {
+    return Response.json({ detail: "read-only demo" }, { status: 403 });
+  }
   const { url, key } = backendConfig(opts.env);
   if (!key) {
     return Response.json(
