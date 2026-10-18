@@ -2,13 +2,13 @@
 
 import { ArrowRight, MoveRight } from "lucide-react";
 import Link from "next/link";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Cvss, Epss, Id, Kev, Seg, Stat, Tier, Verdict, shortRun } from "@/components/bits";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/states";
 import { useApi } from "@/lib/api";
-import { crownLabel, onPathsByFinding, whyLine } from "@/lib/labels";
-import type { Board, BoardRow, RunDump } from "@/lib/types";
+import { crownPhrase, placements, whyLine } from "@/lib/labels";
+import type { Board, BoardRow, Subgraph } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 
@@ -26,12 +26,13 @@ export function useBoard() {
   return useApi<Board>(q);
 }
 
-/** finding id -> how many attack paths its step lies on, from the run's own
- *  ranking (the same cached GET /runs/{id} the Drift screen reads). */
-export function useOnPaths() {
+/** A row's why-line with its path placements, from the run's whole subgraph
+ *  (the same cached GET /runs/{id}/subgraph the Paths screen opens on). */
+export function useWhyLine() {
   const ws = useWorkspace();
-  const run = useApi<RunDump>(ws.runId ? `runs/${encodeURIComponent(ws.runId)}` : null);
-  return useMemo(() => onPathsByFinding(run.data), [run.data]);
+  const sub = useApi<Subgraph>(ws.runId ? `runs/${encodeURIComponent(ws.runId)}/subgraph` : null);
+  const g = sub.data;
+  return useCallback((r: BoardRow) => whyLine(r, placements(g, r.finding), g?.total_paths), [g]);
 }
 
 function HeadlineCard({
@@ -161,7 +162,7 @@ function Row({
 export function FindingsScreen() {
   const ws = useWorkspace();
   const board = useBoard();
-  const onPaths = useOnPaths();
+  const why = useWhyLine();
   const [order, setOrder] = useState<Order>("reachability");
   const rows = useRef(new Map<string, HTMLDivElement>());
   const tops = useRef(new Map<string, number>());
@@ -195,15 +196,15 @@ export function FindingsScreen() {
   const F = b.findings;
   const hiReach = Object.values(F).find((r) => r.headline === "reachable");
   const hiUnreach = Object.values(F).find((r) => r.headline === "unreachable");
-  const crown = crownLabel(b.crown_jewels);
-  const shown = (r: BoardRow): BoardRow => ({ ...r, why: whyLine(r, onPaths.get(r.finding)) });
+  const crown = crownPhrase(b.crown_jewels);
+  const shown = (r: BoardRow): BoardRow => ({ ...r, why: why(r) });
   const crownTiers = b.crown_jewels.map((c) => (c.tier ? `${c.name} (${c.tier})` : c.name)).join(", ");
 
   return (
     <div className="mx-auto max-w-[1500px] px-8 pt-7 pb-16">
       <p className="eyebrow">01 · Findings, re-ranked</p>
       <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-tight">
-        {fmt(b.total_open)} open findings. <span className="text-ember">{b.on_crown_path}</span> lead to the {crown}.
+        {fmt(b.total_open)} open findings. <span className="text-ember">{b.on_crown_path}</span> lead to {crown}.
       </h1>
       <p className="mt-2 max-w-3xl text-base text-fg-2">
         Same findings, two orders. The scanner sorts by CVSS. Reachable sorts by what an attacker can actually reach:

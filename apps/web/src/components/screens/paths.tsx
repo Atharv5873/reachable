@@ -10,12 +10,12 @@ import { WhyStepPanel } from "@/components/evidence";
 import { AttackGraph, GraphLegend } from "@/components/graph/attack-graph";
 import { EmptyState, ErrorState, LoadingRows, Shimmer } from "@/components/states";
 import { useApi } from "@/lib/api";
-import { crownLabel, whyLine } from "@/lib/labels";
+import { crownPhrase, crownTargets, placements, whyLine } from "@/lib/labels";
 import type { Board, GEdge, Subgraph } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 
-import { useBoard, useOnPaths } from "./findings";
+import { useBoard } from "./findings";
 
 export function useSubgraph(opts: { finding?: string | null; context?: boolean; run?: string | null } = {}) {
   const ws = useWorkspace();
@@ -134,9 +134,8 @@ function PathsView() {
 
   const row = ws.finding ? board.data?.findings[ws.finding] : undefined;
   const node = useSearchParams().get("node"); // from the company brain: an asset to point at
-  const onPaths = useOnPaths();
   const jewels = board.data?.crown_jewels ?? [];
-  const crown = crownLabel(jewels);
+  const crown = crownPhrase(jewels);
   const view = useMemo(
     () => ({ focusPaths: focus === null ? null : [focus], selectedEdge: edge, focusNode: node ?? row?.asset ?? null }),
     [focus, edge, row?.asset, node],
@@ -145,14 +144,16 @@ function PathsView() {
   if (!ws.runId) return <NoRunState />;
 
   const g = sub.data;
-  // Name only the crown jewels these paths reach (tier-disambiguated if names clash).
-  const reached = jewels.filter((c) => g?.paths.some((p) => p.target === c.id));
+  // Name only the crown jewels these paths reach, by the tier the subgraph
+  // gives each target when names clash ("the critical bucket and the high-tier bucket").
+  const reached = crownTargets(g);
+  const to = reached.length ? crownPhrase(jewels, reached) : crown;
   const title =
     scope === "finding" && row
       ? row.status === "reachable"
-        ? `${g?.paths.length ?? "…"} path${g?.paths.length === 1 ? "" : "s"} through ${row.hostname} to the ${reached.length ? crownLabel(jewels, reached) : crown}`
+        ? `${g?.paths.length ?? "…"} path${g?.paths.length === 1 ? "" : "s"} through ${row.hostname} to ${to}`
         : `Nothing an attacker holds reaches ${row.hostname}`
-      : `Every way in: ${g?.total_paths ?? "…"} attack paths from the Internet to the ${crown}`;
+      : `Every way in: ${g?.total_paths ?? "…"} attack paths from the Internet to ${to}`;
 
   return (
     <div className="flex h-full min-h-[720px] flex-col px-8 pt-6 pb-6">
@@ -164,7 +165,7 @@ function PathsView() {
           </h1>
           {scope === "finding" && row && (
             <p className="mt-1 text-sm text-fg-2">
-              <span className="mono text-fg">{row.cve}</span> · CVSS {row.cvss?.toFixed(1)} · {whyLine(row, onPaths.get(row.finding))}
+              <span className="mono text-fg">{row.cve}</span> · CVSS {row.cvss?.toFixed(1)} · {whyLine(row, placements(g, row.finding), g?.total_paths)}
             </p>
           )}
         </div>
@@ -174,7 +175,7 @@ function PathsView() {
             onChange={(s) => setScope(s)}
             options={[
               { value: "finding", label: ws.finding ? `Selected: ${shortId(ws.finding)}` : "Selected finding" },
-              { value: "all", label: `All paths to the ${crown}` },
+              { value: "all", label: `All paths to ${crown}` },
             ]}
           />
           <label className="flex items-center gap-2 text-xs text-fg-2">
