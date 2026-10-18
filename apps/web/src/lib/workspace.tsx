@@ -78,14 +78,20 @@ function nextParams(current: URLSearchParams, patch: Patch): URLSearchParams {
   return p;
 }
 
+/** A URL param without the zero-width characters and whitespace a copied link
+ *  picks up (chat apps append U+200B), which would otherwise miss every id. */
+function param(sp: URLSearchParams, k: string): string | null {
+  return sp.get(k)?.replace(/[\s​-‍⁠﻿]/g, "") || null;
+}
+
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const org = sp.get("org") || "org_a";
-  const scan: Scan = sp.get("scan") === "v2" ? "v2" : "v1";
-  const mode: Mode = sp.get("mode") === "live" ? "live" : "replay";
-  const finding = sp.get("f");
+  const org = param(sp, "org") || "org_a";
+  const scan: Scan = param(sp, "scan") === "v2" ? "v2" : "v1";
+  const mode: Mode = param(sp, "mode") === "live" ? "live" : "replay";
+  const finding = param(sp, "f");
   const orgsQ = useApi<OrgInfo[]>("orgs");
 
   const scanInfo = orgsQ.data?.find((o) => o.org === org)?.scans.find((s) => s.scan === scan);
@@ -96,7 +102,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .sort((a, b) => (b.started ?? 0) - (a.started ?? 0)),
     [scanInfo],
   );
-  const explicit = sp.get("run");
+  const explicit = param(sp, "run");
   // Replay defaults to the newest finished run made with a real model; a
   // stub-model test run never silently becomes what the demo shows.
   const finished = runs.filter((r) => r.status === "complete");
