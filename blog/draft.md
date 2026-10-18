@@ -1,6 +1,6 @@
 # Severity is a number. Reachability is a graph.
 
-*First draft for the Graph Hacks "best blog post" prize. Repo: https://github.com/Atharv5873/reachable · Live: https://reachable-web-sand.vercel.app*
+*First draft for the Graph Hacks "best blog post" prize. Repo: https://github.com/Atharv5873/reachable · Live: https://reachable.devarv.dev*
 
 Every security team I've seen triages the same way: export the scanner's findings, sort by
 CVSS, patch from the top. It feels rigorous. It's a number, it comes from NIST, and a 9.8

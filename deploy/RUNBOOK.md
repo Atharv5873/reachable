@@ -1,6 +1,6 @@
 # Reachable: production runbook (S10)
 
-Live: **https://reachable-web-sand.vercel.app** (Vercel, region fra1), with the API at
+Live: **https://reachable.devarv.dev** (Vercel, region fra1), with the API at
 **https://reachable-api.devarv.dev** (Hetzner VPS `91.98.216.38`, Falkenstein,
 2 vCPU / 3.7 GB, Ubuntu 26.04, Docker 29 + Compose v5). Everything below was run
 on 2026-10-16. Commands are copy-paste.
@@ -75,6 +75,8 @@ run never displaces them.
 
 ## 3. Frontend (Vercel)
 
+Pushes to `main` deploy on their own (GitHub is connected; the project's Root Directory is `apps/web`). The production domain is `reachable.devarv.dev`. The one-time setup below is for a fresh project; with Root Directory set, run a manual `vercel deploy --prod` from the repo root, not from `apps/web`.
+
 ```sh
 cd apps/web
 vercel link --yes --project reachable-web            # once; writes .vercel/ (gitignored)
@@ -94,7 +96,7 @@ The key is never a `NEXT_PUBLIC_` var. Prove it after every deploy:
 ```sh
 cd apps/web
 REACHABLE_API_KEY=<key> npm run test:bundle                                        # local prod build
-REACHABLE_API_KEY=<key> npm run test:bundle:live -- https://reachable-web-sand.vercel.app  # what Vercel serves
+REACHABLE_API_KEY=<key> npm run test:bundle:live -- https://reachable.devarv.dev  # what Vercel serves
 ```
 
 ## 4. Checks (all passed 2026-10-16)
@@ -102,7 +104,7 @@ REACHABLE_API_KEY=<key> npm run test:bundle:live -- https://reachable-web-sand.v
 ```sh
 python deploy/portscan.py reachable-api.devarv.dev          # from OUTSIDE the VPS
 REACHABLE_API_KEY=<key> python deploy/smoke.py --url https://reachable-api.devarv.dev
-cd apps/web && E2E_BASE_URL=https://reachable-web-sand.vercel.app npx playwright test   # Gate C + smoke + replay
+cd apps/web && E2E_BASE_URL=https://reachable.devarv.dev npx playwright test   # Gate C + smoke + replay
 ```
 
 | check | result |
@@ -119,7 +121,7 @@ cd apps/web && E2E_BASE_URL=https://reachable-web-sand.vercel.app npx playwright
 
 ## 5. Gate C on a real phone (manual, on cellular, Wi-Fi off)
 
-Open https://reachable-web-sand.vercel.app and tick each:
+Open https://reachable.devarv.dev and tick each:
 
 1. Findings: the right-hand card says "Reachable ranks it #1" (CVSS 7.5, scanner #~4,000) with a tier badge.
 2. "See its attack path": the graph draws; tap a hop -> its evidence opens.
