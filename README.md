@@ -5,7 +5,7 @@ Reachable loads a company's infrastructure, identities, secrets and scanner find
 FalkorDB, derives every attacker step as a graph edge, and has agents find the real
 Internet -> crown-jewel attack paths and the smallest set of fixes that cuts all of them.
 
-**Live demo: https://reachable-web.vercel.app** (replay mode: plays recorded agent runs, no model call needed)
+**Live demo: https://reachable-web-sand.vercel.app** (replay mode: plays recorded agent runs, no model call needed)
 
 ![The findings screen: a CVSS 9.8 KEV the scanner ranks #1,488 is unreachable; a CVSS 7.5 the scanner ranks #4,175 is Reachable's #1](docs/findings.png)
 
@@ -82,12 +82,12 @@ run (`make drift ORG=org_a && make triage ORG=org_a SCAN=v2`, or the analyst loo
 screen in Live mode). The FalkorDB Browser is at <http://localhost:3001> (password:
 `FALKORDB_PASSWORD`). npm's `install-scripts` warning during `web-install` is harmless.
 
-> **Try the live site instead.** https://reachable-web.vercel.app needs no setup. To
+> **Try the live site instead.** https://reachable-web-sand.vercel.app needs no setup. To
 > see exactly what the demo video shows, pin the recorded runs: org_a
-> [findings](https://reachable-web.vercel.app/findings?org=org_a&scan=v1&run=org_a:run:d83515921bd8),
-> [attack paths](https://reachable-web.vercel.app/paths?org=org_a&scan=v1&run=org_a:run:d83515921bd8&f=org_a:finding:06856),
-> [fix plan](https://reachable-web.vercel.app/fixes?org=org_a&scan=v1&run=org_a:run:d83515921bd8),
-> [drift v1 -> v2](https://reachable-web.vercel.app/drift?org=org_a&scan=v2&run=org_a_v2:run:6fe91bc3bdbf).
+> [findings](https://reachable-web-sand.vercel.app/findings?org=org_a&scan=v1&run=org_a:run:d83515921bd8),
+> [attack paths](https://reachable-web-sand.vercel.app/paths?org=org_a&scan=v1&run=org_a:run:d83515921bd8&f=org_a:finding:06856),
+> [fix plan](https://reachable-web-sand.vercel.app/fixes?org=org_a&scan=v1&run=org_a:run:d83515921bd8),
+> [drift v1 -> v2](https://reachable-web-sand.vercel.app/drift?org=org_a&scan=v2&run=org_a_v2:run:6fe91bc3bdbf).
 > Best on a laptop screen.
 
 More: `make test` (185 tests; integration tests skip if FalkorDB is down), `make gate-a`

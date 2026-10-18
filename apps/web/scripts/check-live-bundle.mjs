@@ -1,6 +1,6 @@
 // S10: the same proof as check-client-bundle.mjs, against a DEPLOYED site.
 //
-//   REACHABLE_API_KEY=... node scripts/check-live-bundle.mjs https://reachable-web.vercel.app
+//   REACHABLE_API_KEY=... node scripts/check-live-bundle.mjs https://reachable-web-sand.vercel.app
 //
 // Fetches every screen's HTML, then every /_next/static asset it references,
 // following references inside the JS too (chunks load chunks), and searches

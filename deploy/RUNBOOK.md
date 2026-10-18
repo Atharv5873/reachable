@@ -1,6 +1,6 @@
 # Reachable: production runbook (S10)
 
-Live: **https://reachable-web.vercel.app** (Vercel, region fra1), with the API at
+Live: **https://reachable-web-sand.vercel.app** (Vercel, region fra1), with the API at
 **https://reachable-api.devarv.dev** (Hetzner VPS `91.98.216.38`, Falkenstein,
 2 vCPU / 3.7 GB, Ubuntu 26.04, Docker 29 + Compose v5). Everything below was run
 on 2026-10-16. Commands are copy-paste.
@@ -19,7 +19,7 @@ phone / laptop ──HTTPS──> Vercel (Next.js, fra1)                    VPS 
 |---|---|
 | SSH to the VPS | `ssh root@91.98.216.38` (key `~/.ssh/id_ed25519`) |
 | DNS | `reachable-api.devarv.dev` A -> `91.98.216.38`, AAAA -> `2a01:4f8:c012:699e::1` (both this box; Let's Encrypt tries IPv6 first) |
-| Vercel | CLI logged in, team `gka3`, project `reachable-web`, root `apps/web` |
+| Vercel | CLI logged in, team `atharv-sharmas-projects-77fdf735` (Atharv Sharma's projects), project `reachable-web`, root `apps/web` |
 | Secrets | `/opt/reachable/deploy/.env.prod` on the VPS (mode 600, never in git) |
 | Gemini credit | **keep ~$10** so a live judge run never answers 402. Replay needs none. |
 
@@ -94,7 +94,7 @@ The key is never a `NEXT_PUBLIC_` var. Prove it after every deploy:
 ```sh
 cd apps/web
 REACHABLE_API_KEY=<key> npm run test:bundle                                        # local prod build
-REACHABLE_API_KEY=<key> npm run test:bundle:live -- https://reachable-web.vercel.app  # what Vercel serves
+REACHABLE_API_KEY=<key> npm run test:bundle:live -- https://reachable-web-sand.vercel.app  # what Vercel serves
 ```
 
 ## 4. Checks (all passed 2026-10-16)
@@ -102,7 +102,7 @@ REACHABLE_API_KEY=<key> npm run test:bundle:live -- https://reachable-web.vercel
 ```sh
 python deploy/portscan.py reachable-api.devarv.dev          # from OUTSIDE the VPS
 REACHABLE_API_KEY=<key> python deploy/smoke.py --url https://reachable-api.devarv.dev
-cd apps/web && E2E_BASE_URL=https://reachable-web.vercel.app npx playwright test   # Gate C + smoke + replay
+cd apps/web && E2E_BASE_URL=https://reachable-web-sand.vercel.app npx playwright test   # Gate C + smoke + replay
 ```
 
 | check | result |
@@ -119,7 +119,7 @@ cd apps/web && E2E_BASE_URL=https://reachable-web.vercel.app npx playwright test
 
 ## 5. Gate C on a real phone (manual, on cellular, Wi-Fi off)
 
-Open https://reachable-web.vercel.app and tick each:
+Open https://reachable-web-sand.vercel.app and tick each:
 
 1. Findings: the right-hand card says "Reachable ranks it #1" (CVSS 7.5, scanner #~4,000) with a tier badge.
 2. "See its attack path": the graph draws; tap a hop -> its evidence opens.

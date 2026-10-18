@@ -2,7 +2,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 
 // S10 Gate C: the whole demo against the deployed stack, one test per step so
 // each passes or fails on its own. Run it against the live site:
-//   E2E_BASE_URL=https://reachable-web.vercel.app npx playwright test gate-c
+//   E2E_BASE_URL=https://reachable-web-sand.vercel.app npx playwright test gate-c
 // Twice: at the desktop size the UI is built for, and emulating a phone.
 // Everything is replay mode: no model is called (the Q&A uses the rules).
 

@@ -8,7 +8,7 @@ model call fires mid-recording. The top bar must say **Replay**.
 Before recording: open each URL once (warms Vercel), close other tabs, hide bookmarks, and
 set the replay speed on 04 to 4x.
 
-| # | URLs (base `https://reachable-web.vercel.app`) |
+| # | URLs (base `https://reachable-web-sand.vercel.app`) |
 |---|---|
 | A | `/findings?org=org_a&scan=v1&run=org_a:run:d83515921bd8` |
 | B | `/paths?org=org_a&scan=v1&run=org_a:run:d83515921bd8&f=org_a:finding:06856` |
@@ -101,7 +101,7 @@ Scroll to the structural table, then the ablation.
 
 > Reachable. Fix what an attacker can actually reach.
 
-End card: `reachable-web.vercel.app` · `github.com/Atharv5873/reachable` · FalkorDB · Graph Hacks 2026
+End card: `reachable-web-sand.vercel.app` · `github.com/Atharv5873/reachable` · FalkorDB · Graph Hacks 2026
 
 ---
 

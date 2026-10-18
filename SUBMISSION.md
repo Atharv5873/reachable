@@ -10,7 +10,7 @@ Paste-ready. Fill the video URL once it's uploaded.
 
 **Repository:** https://github.com/Atharv5873/reachable
 
-**Live deployment:** https://reachable-web.vercel.app
+**Live deployment:** https://reachable-web-sand.vercel.app
 
 **Demo video:** `<VIDEO URL>`
 
